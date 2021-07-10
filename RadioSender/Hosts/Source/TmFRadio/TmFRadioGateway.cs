@@ -1,0 +1,259 @@
+﻿using RadioSender.Helpers;
+using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Source.SportidentSerial;
+using RadioSender.Hubs.Devices;
+using Serilog;
+using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Ports;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace RadioSender.Hosts.Source.TmFRadio
+{
+  public class TmFRadioGateway : IDisposable
+  {
+    public const uint BROADCAST = 0xffffffff;
+
+    private readonly DispatcherService _dispatcherService;
+    private readonly DeviceService _deviceService;
+    private readonly Gateway _gateway;
+    private readonly SerialPort _port;
+    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+
+    private Task _readTask;
+    private byte _commandId = 0;
+    private Timer _timer;
+
+    public TmFRadioGateway(DispatcherService dispatcherService, DeviceService deviceService, Gateway gateway)
+    {
+      _dispatcherService = dispatcherService;
+      _deviceService = deviceService;
+      _gateway = gateway;
+      _port = new SerialPort();
+    }
+
+    public async Task Start(CancellationToken st)
+    {
+      try
+      {
+        if (_port.IsOpen)
+          _port.Close();
+
+        _port.PortName = _gateway.PortName;
+        _port.BaudRate = _gateway.Baudrate;
+        _port.Parity = Parity.None;
+        _port.StopBits = StopBits.One;
+        _port.Handshake = Handshake.None;
+        _port.DataBits = 8;
+        _port.WriteTimeout = 500;
+        _port.RtsEnable = true;
+        _port.DtrEnable = true;
+        _port.Open();
+
+        _readTask = ReadData();
+
+        _timer = new Timer(CheckStatus, null, 0, 5000);
+
+        //CheckStatus, null, 0, 5000);
+      }
+      catch (UnauthorizedAccessException)
+      {
+        Log.Error("Port {port} occupied by another program", _gateway.PortName);
+      }
+      catch (FileNotFoundException)
+      {
+        Log.Error("Port {port} doesn't exist", _gateway.PortName);
+      }
+      catch (IOException)
+      {
+        throw;
+      }
+      catch (Exception e)
+      {
+        Log.Error(e, "Error starting port {port}", _gateway.PortName);
+      }
+    }
+
+
+    public async Task Stop(CancellationToken st)
+    {
+      _timer?.Dispose();
+      _cts?.Cancel();
+
+      if (_port == null)
+        return;
+
+      _port.DtrEnable = false;
+
+      if (_port.IsOpen)
+        _port.Close();
+
+      if (_readTask != null)
+        await _readTask;
+
+      _port.Dispose();
+    }
+
+    public void Dispose()
+    {
+      Stop(default).Wait();
+    }
+
+    public async void CheckStatus(object state)
+    {
+
+      IEnumerable<byte> data = GenerateCommand(TmFCommand.GetStatus).Concat(GenerateCommand(TmFCommand.GetPacketPath));
+
+      await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
+      await Task.Delay(200);
+      await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
+    }
+
+    public byte[] GenerateCommand(TmFCommand command, uint address = BROADCAST, byte arg0 = 0x00, byte arg1 = 0x00)
+    {
+      byte[] b = new byte[4];
+
+      BinaryPrimitives.WriteUInt32LittleEndian(b, address);
+
+      byte[] data = { 10,           // fix
+                      b[3],         // 1 address
+                      b[2],         // 2 address
+                      b[1],         // 3 address
+                      b[0],         // 4 address
+                      ++_commandId, // Command Number
+                      0x03,         // Packet Type fix 3
+                      (byte)command,// Command Argument 17 = Get Status
+                      arg0,         // Data1
+                      arg1,         // Data2
+                      };
+      data[0] = (byte)data.Length;
+      return data;
+    }
+
+    public async Task SendData(byte[] data, CancellationToken ct)
+    {
+      if (!_port?.IsOpen ?? false)
+        return;
+
+      try
+      {
+        //_port.Write(data, 0, data.Length);
+        await _port.BaseStream.WriteAsync(data, 0, data.Length, ct);
+      }
+      catch (TimeoutException)
+      {
+      }
+      catch (Exception e)
+      {
+        Log.Error("Error sending command SportidentSerial {msg}", e.Message);
+      }
+    }
+
+    private async Task ReadData()
+    {
+      while (!_cts.Token.IsCancellationRequested)
+      {
+        if (!_port?.IsOpen ?? false)
+        {
+          await Task.Delay(5000);
+          // TODO try to reopen
+          continue;
+        }
+
+        try
+        {
+          var length = (int)await _port.ReadByteAsync(_cts.Token).ConfigureAwait(false);
+
+          if (_port.BytesToRead < length - 1)
+          {
+            await Task.Delay(50);
+            if (_port.BytesToRead < length - 1)
+            {
+              length = _port.BytesToRead;
+            }
+          }
+
+          if (length <= 0)
+            continue;
+
+          var buffer = await _port.ReadAsync(length - 1, _cts.Token).ConfigureAwait(false);
+
+          var data = new byte[length];
+          data[0] = (byte)Math.Min(byte.MaxValue, length);
+          Buffer.BlockCopy(buffer, 0, data, 1, buffer.Length);
+
+          Log.Verbose(BitConverter.ToString(data));
+
+          if (length < 18)
+          {
+            Log.Error("Received broken message of {count} bytes", length);
+            continue;
+          }
+
+          var header = new RxHeader(data);
+
+
+          RxMsg packet = null;
+
+          if (header.PacketType == PacketType.Event)
+          {
+            if (data[17] == 0x09)
+            {
+              packet = new RxGetStatus(header, data);
+              UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus).Voltage_V);
+            }
+            else if (data[17] == 0x20)
+            {
+              packet = new RxGetPath(header, data);
+              var from = header.OrigID;
+              var hop = header.HopCounter == 0 ? 1 : header.HopCounter;
+              foreach (var jump in (packet as RxGetPath).Jumps)
+              {
+                UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
+                from = jump.ReceiverId;
+              }
+            }
+            else
+            {
+
+            }
+          }
+          else
+          {
+            packet = new RxData(header, data);
+
+            var punch = SportidentSerialPort.MessageToPunch((packet as RxData).RxSerData);
+            _dispatcherService.PushPunch(punch);
+          }
+
+          Log.Verbose(packet?.ToString());
+
+
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception e)
+        {
+          Log.Error(e, "Exeption reading data from serial port");
+        }
+      }
+
+    }
+
+    public void UpdateNode(uint address, int signal, double battery)
+    {
+      _deviceService.UpdateNode(new Node("TmF" + address, "TmF" + address, signal / 10, $"Battery: {battery:0.00}V", DateTimeOffset.UtcNow));
+
+    }
+
+    public void UpdateEdge(uint from, uint to, int signal, int latency)
+    {
+      _deviceService.UpdateEdge(new Edge("TmF" + from, "TmF" + to, signal / 10, latency * 2, signal + "%", "", DateTimeOffset.UtcNow));
+    }
+  }
+}

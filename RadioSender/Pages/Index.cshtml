@@ -1,0 +1,31 @@
+﻿@page
+<html>
+
+<head>
+
+  <link rel="stylesheet" href="~/lib/vis/vis-network.min.css">
+  <script src="~/js/signalr/dist/browser/signalr.js"></script>
+  <script src="~/lib/vis/vis-network.min.js"></script>
+
+</head>
+
+<body>
+  <h1>Hello, world!</h1>
+  <h2>The time on the server is @DateTime.Now</h2>
+
+
+  <div id="mynetwork"></div>
+
+  <style>
+    #mynetwork {
+      width: 600px;
+      height: 400px;
+      border: 1px solid lightgray;
+    }
+  </style>
+
+  <ul id="messagesList"></ul>
+
+  <script src="~/js/deviceHub.js"></script>
+</body>
+</html>
