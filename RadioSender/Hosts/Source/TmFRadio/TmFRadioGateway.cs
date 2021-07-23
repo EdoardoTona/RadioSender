@@ -1,20 +1,19 @@
-﻿using RadioSender.Helpers;
+﻿using Microsoft.Extensions.Hosting;
+using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Source.SportidentSerial;
 using RadioSender.Hubs.Devices;
 using Serilog;
 using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public class TmFRadioGateway : IDisposable
+  public class TmFRadioGateway : IHostedService, IDisposable
   {
     public const uint BROADCAST = 0xffffffff;
 
@@ -36,7 +35,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       _port = new SerialPort();
     }
 
-    public async Task Start(CancellationToken st)
+    public Task StartAsync(CancellationToken st)
     {
       try
       {
@@ -59,14 +58,17 @@ namespace RadioSender.Hosts.Source.TmFRadio
         _timer = new Timer(CheckStatus, null, 0, 5000);
 
         //CheckStatus, null, 0, 5000);
+        return Task.CompletedTask;
       }
-      catch (UnauthorizedAccessException)
+      catch (UnauthorizedAccessException e)
       {
         Log.Error("Port {port} occupied by another program", _gateway.PortName);
+        return Task.FromException(e);
       }
-      catch (FileNotFoundException)
+      catch (FileNotFoundException e)
       {
         Log.Error("Port {port} doesn't exist", _gateway.PortName);
+        return Task.FromException(e);
       }
       catch (IOException)
       {
@@ -75,11 +77,12 @@ namespace RadioSender.Hosts.Source.TmFRadio
       catch (Exception e)
       {
         Log.Error(e, "Error starting port {port}", _gateway.PortName);
+        return Task.FromException(e);
       }
     }
 
 
-    public async Task Stop(CancellationToken st)
+    public async Task StopAsync(CancellationToken st)
     {
       _timer?.Dispose();
       _cts?.Cancel();
@@ -100,41 +103,37 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     public void Dispose()
     {
-      Stop(default).Wait();
+      StopAsync(default).Wait();
     }
 
     public async void CheckStatus(object state)
     {
-
-      IEnumerable<byte> data = GenerateCommand(TmFCommand.GetStatus).Concat(GenerateCommand(TmFCommand.GetPacketPath));
-
       await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
       await Task.Delay(200);
       await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
     }
 
-    public byte[] GenerateCommand(TmFCommand command, uint address = BROADCAST, byte arg0 = 0x00, byte arg1 = 0x00)
+    public ReadOnlyMemory<byte> GenerateCommand(TmFCommand command, uint address = BROADCAST, byte arg0 = 0x00, byte arg1 = 0x00)
     {
-      byte[] b = new byte[4];
+      Span<byte> b = stackalloc byte[4];
 
       BinaryPrimitives.WriteUInt32LittleEndian(b, address);
 
-      byte[] data = { 10,           // fix
-                      b[3],         // 1 address
-                      b[2],         // 2 address
-                      b[1],         // 3 address
-                      b[0],         // 4 address
-                      ++_commandId, // Command Number
-                      0x03,         // Packet Type fix 3
-                      (byte)command,// Command Argument 17 = Get Status
-                      arg0,         // Data1
-                      arg1,         // Data2
-                      };
-      data[0] = (byte)data.Length;
+      ReadOnlyMemory<byte> data = new byte[] { 10,           // length of the command
+                                               b[3],         // 1 address
+                                               b[2],         // 2 address
+                                               b[1],         // 3 address
+                                               b[0],         // 4 address
+                                               ++_commandId, // Command Number
+                                               0x03,         // Packet Type fix 3
+                                               (byte)command,// Command Argument 17 = Get Status
+                                               arg0,         // Data1
+                                               arg1,         // Data2
+                                               };
       return data;
     }
 
-    public async Task SendData(byte[] data, CancellationToken ct)
+    public async Task SendData(ReadOnlyMemory<byte> data, CancellationToken ct)
     {
       if (!_port?.IsOpen ?? false)
         return;
@@ -142,7 +141,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       try
       {
         //_port.Write(data, 0, data.Length);
-        await _port.BaseStream.WriteAsync(data, 0, data.Length, ct);
+        await _port.BaseStream.WriteAsync(data, ct);
       }
       catch (TimeoutException)
       {
@@ -184,7 +183,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
           var data = new byte[length];
           data[0] = (byte)Math.Min(byte.MaxValue, length);
-          Buffer.BlockCopy(buffer, 0, data, 1, buffer.Length);
+          Buffer.BlockCopy(buffer, 0, data, 1, buffer.Length); // TODO optimize this part (using a memorystream?)
 
           Log.Verbose(BitConverter.ToString(data));
 

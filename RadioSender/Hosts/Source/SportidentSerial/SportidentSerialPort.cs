@@ -1,4 +1,5 @@
-﻿using RadioSender.Helpers;
+﻿using Microsoft.Extensions.Hosting;
+using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using Serilog;
 using System;
@@ -11,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
-  public class SportidentSerialPort : IDisposable
+  public class SportidentSerialPort : IHostedService, IDisposable
   {
     private const byte WAKEUP = 0xFF;
     private const byte STX = 0x02;
@@ -42,7 +43,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       _port = new SerialPort();
     }
 
-    public async Task Start(CancellationToken st)
+    public async Task StartAsync(CancellationToken st)
     {
       try
       {
@@ -106,7 +107,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       }
     }
 
-    public async Task Stop(CancellationToken st)
+    public async Task StopAsync(CancellationToken st)
     {
       _cts.Cancel();
 
@@ -127,7 +128,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     public void Dispose()
     {
-      Stop(default).Wait();
+      StopAsync(default).Wait();
     }
 
 
@@ -166,7 +167,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
         var etx = ms.ReadByte(); // should be ETX
 
-        return await SportidentStationInfo.GetSportidentProductInfo(data);
+        return SportidentStationInfo.GetSportidentProductInfo(data);
       }
 
       return null;

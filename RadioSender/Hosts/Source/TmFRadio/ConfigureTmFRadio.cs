@@ -9,11 +9,7 @@ using System.Collections.Generic;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public record Gateway
-  {
-    public string PortName { get; set; }
-    public int Baudrate { get; set; } = 19200;
-  }
+  public record Gateway(string PortName, int Baudrate = 19200);
 
   public static class ConfigureTmFRadio
   {
@@ -24,11 +20,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
         if (!context.Configuration.GetValue("Source:TmFRadio:Enable", false))
           return;
 
-        var gateways = context.Configuration.GetSection("Source:TmFRadio:Gateways").Get<IEnumerable<Gateway>>();
+        foreach (var gateway in context.Configuration.GetSection("Source:TmFRadio:Gateways").Get<IEnumerable<Gateway>>())
+        {
+          services.AddHostedService(sp => new TmFRadioGateway(sp.GetRequiredService<DispatcherService>(), sp.GetRequiredService<DeviceService>(), gateway));
+        }
 
-        services.AddHostedService(sp =>
-          new TmFRadioService(sp.GetRequiredService<DispatcherService>(), sp.GetRequiredService<DeviceService>(), gateways)
-        );
       });
 
       return builder;

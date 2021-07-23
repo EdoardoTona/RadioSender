@@ -8,7 +8,6 @@ using RadioSender.Hosts.Source.SportidentCenter;
 using RadioSender.Hosts.Source.SportidentSerial;
 using RadioSender.Hosts.Source.TmFRadio;
 using RadioSender.Hosts.Target.Oribos;
-using RadioSender.SerialInterceptor;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -64,7 +63,6 @@ namespace RadioSender
             .UseSportidentCenter()
             .UseSportidentSerial()
             .UseTmFRadio()
-            //.UseInterceptor()
             .ConfigureServices(services => services.AddHostedService<Launcher>())
             .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
 

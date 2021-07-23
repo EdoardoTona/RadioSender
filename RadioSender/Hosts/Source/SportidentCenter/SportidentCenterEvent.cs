@@ -1,5 +1,6 @@
 ﻿using CsvHelper;
 using CsvHelper.Configuration;
+using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using Serilog;
 using System;
@@ -10,25 +11,26 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentCenter
 {
-  public class SportidentCenterEvent
+  public class SportidentCenterEvent : BackgroundService
   {
+    public const string HTTPCLIENT_NAME = "sportident";
     private readonly HttpClient _httpClient;
     private readonly Event _siEvent;
     private readonly DispatcherService _dispatcherService;
+    private readonly int _refreshInterval_ms;
 
     private long _lastReceivedId = 0;
 
     private CsvConfiguration _csvReaderConfiguration;
 
-    public SportidentCenterEvent(HttpClient httpClient, DispatcherService dispatcherService, Event siEvent)
+    public SportidentCenterEvent(IHttpClientFactory clientFactory, DispatcherService dispatcherService, Event siEvent)
     {
-      _httpClient = httpClient;
+      _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
       _siEvent = siEvent;
       _dispatcherService = dispatcherService;
 
@@ -36,9 +38,35 @@ namespace RadioSender.Hosts.Source.SportidentCenter
       {
         PrepareHeaderForMatch = args => args.Header.ToLower()
       };
+      _refreshInterval_ms = siEvent.RefreshMs;
     }
 
-    public async Task GetData(CancellationToken ct)
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+      await Task.Yield();
+
+      while (!ct.IsCancellationRequested)
+      {
+        try
+        {
+          await GetData(ct);
+        }
+        catch (OperationCanceledException)
+        {
+
+        }
+        catch (Exception e)
+        {
+          Log.Error("Error getting data from SportidentCenter: {message}", e.Message);
+        }
+        finally
+        {
+          await Task.Delay(_refreshInterval_ms, ct);
+        }
+      }
+    }
+
+    private async Task GetData(CancellationToken ct)
     {
       try
       {
@@ -97,6 +125,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         Log.Error("Error getting data from SportidentCenter (event {event}): {message}", _siEvent, e.Message);
       }
     }
+
 
     private static PunchControlType MapControlType(string controlType)
     {

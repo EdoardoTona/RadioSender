@@ -13,6 +13,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     public int EventId { get; set; }
     public string ApiKey { get; set; }
     public TimeSpan IgnoreOlderThan { get; set; }
+    public int RefreshMs { get; set; } = 1000;
   }
 
   public static class ConfigureSportidentCenter
@@ -24,20 +25,23 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         if (!context.Configuration.GetValue("Source:SportidentCenter:Enable", false))
           return;
 
-        var events = context.Configuration.GetSection("Source:SportidentCenter:Events").Get<IEnumerable<Event>>();
-
-        services.AddHttpClient(SportidentCenterService.HTTPCLIENT_NAME, c =>
+        services.AddHttpClient(SportidentCenterEvent.HTTPCLIENT_NAME, c =>
         {
           c.BaseAddress = new Uri("https://center.sportident.com/");
         });
-        services.AddHostedService(sp =>
-          new SportidentCenterService(
-            sp.GetRequiredService<IHttpClientFactory>(),
-            sp.GetRequiredService<DispatcherService>(),
-            context.Configuration.GetValue("Source:SportidentCenter:Refresh", TimeSpan.FromSeconds(5)),
-            events
-            )
-        );
+
+        var events = context.Configuration.GetSection("Source:SportidentCenter:Events").Get<IEnumerable<Event>>();
+
+        foreach (var ev in events)
+        {
+          services.AddHostedService(sp =>
+           new SportidentCenterEvent(
+             sp.GetRequiredService<IHttpClientFactory>(),
+             sp.GetRequiredService<DispatcherService>(),
+             ev)
+         );
+        }
+
       });
 
       return builder;

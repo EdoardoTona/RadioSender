@@ -1,5 +1,6 @@
 ﻿using Hangfire;
 using Microsoft.AspNetCore.SignalR;
+using RadioSender.Hosts.Target;
 using RadioSender.Hosts.Target.Oribos;
 using RadioSender.Hubs;
 using Serilog;
@@ -11,19 +12,17 @@ namespace RadioSender.Hosts.Common
   public class DispatcherService
   {
     private readonly IBackgroundJobClient _backgroundJobClient;
-    private readonly OribosService _oribosService;
     private readonly IHubContext<PunchHub> _hubContext;
+    private readonly IEnumerable<ITarget> _targets;
     public DispatcherService(
       IBackgroundJobClient backgroundJobClient,
       IHubContext<PunchHub> hubContext,
-      OribosService oribosService)
+      IEnumerable<ITarget> targets)
     {
       _backgroundJobClient = backgroundJobClient;
       _hubContext = hubContext;
-      _oribosService = oribosService;
+      _targets = targets;
     }
-
-    private readonly ConcurrentQueue<Punch> queue = new();
 
     public void PushPunch(Punch punch)
     {
@@ -31,9 +30,12 @@ namespace RadioSender.Hosts.Common
         return;
 
       Log.Information("Received punch " + punch);
-
-      _hubContext.Clients.All.SendAsync("Punch", punch).Wait();
-      _backgroundJobClient.Enqueue(() => _oribosService.SendPunch(punch, default));
+      // TODO handle duplicate punches
+      _hubContext.Clients.All.SendAsync("Punch", punch).Wait(); // TODO treats as target
+      foreach (var target in _targets)
+      {
+        _backgroundJobClient.Enqueue(() => target.SendPunch(punch, default));
+      }
     }
 
     public void PushPunches(IEnumerable<Punch> punches)

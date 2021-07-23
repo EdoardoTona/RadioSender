@@ -6,76 +6,35 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.Oribos
 {
-  public class OribosService
+  public class OribosService : ITarget
   {
-    public const string HTTPCLIENT_NAME = "oribos";
+    private readonly OribosServer _server;
     private readonly HttpClient _httpClient;
-    public OribosService(IHttpClientFactory httpClientFactory)
+    public OribosService(IHttpClientFactory httpClientFactory, OribosServer server)
     {
-      _httpClient = httpClientFactory.CreateClient(HTTPCLIENT_NAME);
+      _server = server;
+      _httpClient = httpClientFactory.CreateClient(_server.Host);
     }
 
-    public PunchControlType SafeType(Punch punch)
-    {
-      if (punch.ControlType == PunchControlType.Unknown)
-      {
-        if (punch.Control == 999 || (punch.Control >= 25 && punch.Control <= 30) || (punch.Control >= 2 && punch.Control <= 10))
-        {
-          // 999 for OE2010
-          // 10 for OLA
-          // 2-9 are unknown... fallback on finish
-          return PunchControlType.Finish;
-        }
-        else if (punch.Control >= 21 && punch.Control <= 24)
-        {
-          return PunchControlType.Start;
-        }
-        else if (punch.Control == 1 || (punch.Control >= 16 && punch.Control <= 20))
-        {
-          // 1 is suggested by Sportident to avoid flashing on card (model 11, SIAC)
-          return PunchControlType.Clear;
-        }
-        else if (punch.Control >= 11 && punch.Control <= 15)
-        {
-          return PunchControlType.Check;
-        }
-        else
-          return PunchControlType.Control;
-      }
-      else
-      {
-        return punch.ControlType;
-      }
-    }
-
-    public async Task SendPunch(Punch punch, CancellationToken ct)
+    public async Task SendPunch(Punch punch, CancellationToken ct = default)
     {
       if (punch == null)
         return;
 
-      string url;
-      switch (SafeType(punch))
+      string url = punch.ControlType switch
       {
-        case PunchControlType.Finish:
-          url = $"/finish.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}";
-          break;
-        case PunchControlType.Start:
-          url = $"/start.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}";
-          break;
-        case PunchControlType.Clear:
-          url = $"/clear.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}";
-          break;
-        case PunchControlType.Check:
-          url = $"/check.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}";
-          break;
-        default:
-          url = $"/radiotime.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}";
-          break;
-      }
+        PunchControlType.Finish => $"/finish.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
+        PunchControlType.Start => $"/start.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        PunchControlType.Clear => $"/clear.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        PunchControlType.Check => $"/check.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        _ => $"/radiotime.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+      };
 
       var response = await _httpClient.GetAsync(url, ct);
 
-      var text = await response.Content.ReadAsStringAsync();
+      response.EnsureSuccessStatusCode();
+
+      var text = await response.Content.ReadAsStringAsync(ct);
 
       if (text.Contains("Ok"))
       {

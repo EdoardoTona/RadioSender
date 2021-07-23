@@ -1,5 +1,6 @@
 ﻿using CsvHelper;
 using CsvHelper.Configuration;
+using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using Serilog;
 using System;
@@ -8,27 +9,27 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.ROC
 {
-  public class ROCEvent
+  public class ROCEvent : BackgroundService
   {
+    public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;
     private readonly Event _rocEvent;
     private readonly DispatcherService _dispatcherService;
+    private readonly int _refreshInterval_ms;
 
     private long _lastReceivedId = 0;
 
     private CsvConfiguration _csvReaderConfiguration;
 
-    public ROCEvent(HttpClient httpClient, DispatcherService dispatcherService, Event rocEvent)
+    public ROCEvent(IHttpClientFactory clientFactory, DispatcherService dispatcherService, Event rocEvent)
     {
-      _httpClient = httpClient;
+      _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
       _rocEvent = rocEvent;
       _dispatcherService = dispatcherService;
 
@@ -37,6 +38,33 @@ namespace RadioSender.Hosts.Source.ROC
         HasHeaderRecord = false,
         Delimiter = ";"
       };
+      _refreshInterval_ms = rocEvent.RefreshMs;
+    }
+
+
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+      await Task.Yield();
+
+      while (!ct.IsCancellationRequested)
+      {
+        try
+        {
+          await GetData(ct);
+        }
+        catch (OperationCanceledException)
+        {
+
+        }
+        catch (Exception e)
+        {
+          Log.Error("Error getting data from ROC: {message}", e.Message);
+        }
+        finally
+        {
+          await Task.Delay(_refreshInterval_ms, ct);
+        }
+      }
     }
 
     public async Task GetData(CancellationToken ct)

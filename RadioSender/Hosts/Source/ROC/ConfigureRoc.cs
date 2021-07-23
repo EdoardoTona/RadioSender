@@ -4,9 +4,7 @@ using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.ROC
 {
@@ -14,6 +12,7 @@ namespace RadioSender.Hosts.Source.ROC
   {
     public int EventId { get; set; }
     public TimeSpan IgnoreOlderThan { get; set; }
+    public int RefreshMs { get; set; } = 1000;
   }
 
   public static class ConfigureRoc
@@ -27,18 +26,22 @@ namespace RadioSender.Hosts.Source.ROC
 
         var events = context.Configuration.GetSection("Source:ROC:Events").Get<IEnumerable<Event>>();
 
-        services.AddHttpClient(ROCService.HTTPCLIENT_NAME, c =>
+        services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME, c =>
         {
           c.BaseAddress = new Uri("https://roc.olresultat.se/");
         });
-        services.AddHostedService(sp =>
-          new ROCService(
-            sp.GetRequiredService<IHttpClientFactory>(),
-            sp.GetRequiredService<DispatcherService>(),
-            context.Configuration.GetValue("Source:ROC:Refresh", TimeSpan.FromSeconds(5)),
-            events
-            )
-        );
+
+        foreach (var ev in events)
+        {
+          services.AddHostedService(sp =>
+            new ROCEvent(
+              sp.GetRequiredService<IHttpClientFactory>(),
+              sp.GetRequiredService<DispatcherService>(),
+              ev
+              )
+          );
+        }
+
       });
 
       return builder;

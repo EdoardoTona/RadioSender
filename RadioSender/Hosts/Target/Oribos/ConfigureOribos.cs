@@ -1,11 +1,14 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using RadioSender.Hosts.Common;
 using System;
+using System.Collections.Generic;
+using System.Net.Http;
 
 namespace RadioSender.Hosts.Target.Oribos
 {
+  public record OribosServer(string Host);
+
   public static class ConfigureOribos
   {
     public static IHostBuilder UseOribos(this IHostBuilder builder)
@@ -15,14 +18,16 @@ namespace RadioSender.Hosts.Target.Oribos
         if (!context.Configuration.GetValue("Target:Oribos:Enable", false))
           return;
 
-        var host = context.Configuration.GetValue<string>("Target:Oribos:Host");
-        host = host.Replace("localhost", "127.0.0.1"); // skip dns resolution
+        var servers = context.Configuration.GetSection("Target:Oribos:Servers").Get<IEnumerable<OribosServer>>();
 
-        services.AddHttpClient(OribosService.HTTPCLIENT_NAME, c =>
+        foreach (var server in servers)
         {
-          c.BaseAddress = new Uri(host);
-        });
-        services.AddSingleton<OribosService>();
+          var host = context.Configuration.GetValue<string>("Target:Oribos:Host");
+          host = host.Replace("localhost", "127.0.0.1"); // optimization to skip the dns resolution
+
+          services.AddHttpClient(host, c => { c.BaseAddress = new Uri(host); });
+          services.AddSingleton(s => new OribosService(s.GetRequiredService<IHttpClientFactory>(), server));
+        }
 
       });
 

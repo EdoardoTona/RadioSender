@@ -101,7 +101,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         "303253",
         "303310"
       });
-    public static async Task<SportidentProduct> GetSportidentProductInfo(byte[] data)
+    public static SportidentProduct GetSportidentProductInfo(byte[] data)
     {
       var controlCode = BinaryPrimitives.ReadUInt16BigEndian(new byte[] { (byte)(data[0] & 0b_0111_1111), data[1] });
 
