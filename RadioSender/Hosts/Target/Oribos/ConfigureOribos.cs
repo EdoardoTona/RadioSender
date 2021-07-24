@@ -11,7 +11,7 @@ namespace RadioSender.Hosts.Target.Oribos
 {
   public record OribosServer : FilterableConfiguration
   {
-    public string Host { get; set; }
+    public string Host { get; init; }
   }
 
   public static class ConfigureOribos
@@ -25,9 +25,11 @@ namespace RadioSender.Hosts.Target.Oribos
 
         var servers = context.Configuration.GetSection("Target:Oribos:Servers").Get<IEnumerable<OribosServer>>();
 
-        foreach (var server in servers)
+        foreach (var s in servers)
         {
-          server.Host = server.Host.Replace("localhost", "127.0.0.1"); // optimization to skip the dns resolution
+          var server = s;
+          if (s.Host.Contains("localhost"))
+            server = s with { Host = server.Host.Replace("localhost", "127.0.0.1") }; // optimization to skip the dns resolution
 
           services.AddHttpClient(server.Host, c => { c.BaseAddress = new Uri(server.Host); });
           services.AddSingleton<ITarget>(s => new OribosService(

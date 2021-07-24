@@ -69,7 +69,7 @@ namespace RadioSender.Hosts.Common.Filters
   {
     public static IFilter GetFilter(this IEnumerable<IFilter> filters, string name)
     {
-      if (!string.IsNullOrEmpty(name) && filters.Any(f => f.Name == name))
+      if (!string.IsNullOrWhiteSpace(name) && filters.Any(f => f.Name == name))
         return filters.Where(f => f.Name == name).First();
 
       return Filter.Invariant;

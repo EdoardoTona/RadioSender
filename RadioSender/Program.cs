@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
@@ -60,21 +59,21 @@ namespace RadioSender
         Host.CreateDefaultBuilder(args)
             .UseSerilog()
             .UseHangfire()
+            .UseFilters()
 
+            // Sources
             .FromRoc()
             .FromSportidentCenter()
             .FromSportidentSerial()
             .FromTmFRadio()
 
-            .UseFilters()
+            // Middleware
             .ThroughDispatcher()
 
+            // Targets
             .ToOribos()
             .ToUI()
-            .ToFile()
-
-            .ConfigureServices(services => services.AddHostedService<Launcher>())
-            .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
+            .ToFile();
 
   }
 }

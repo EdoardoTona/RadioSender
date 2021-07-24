@@ -6,13 +6,13 @@ namespace RadioSender.Hosts.Source.SIRAP
 {
   public record Listner
   {
-    public int Port { get; set; }
-    public int Version { get; set; }
+    public int Port { get; init; }
+    public int Version { get; init; }
   }
 
   public static class ConfigureSIRAP
   {
-    public static IHostBuilder UseSirap(this IHostBuilder builder)
+    public static IHostBuilder FromSirap(this IHostBuilder builder)
     {
       builder.ConfigureServices((context, services) =>
       {

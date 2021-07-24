@@ -44,8 +44,7 @@ namespace RadioSender.Hosts.Target.File
         switch (_fileInfo.Extension.ToLowerInvariant().Trim().Trim('.'))
         {
           case "csv": _format = FileFormat.Csv; break;
-          case "json": _format = FileFormat.Json; break;
-          case "xml": _format = FileFormat.Xml; break;
+          default: throw new NotImplementedException();
         }
       }
       // TODO: handle network files (with broken connection)

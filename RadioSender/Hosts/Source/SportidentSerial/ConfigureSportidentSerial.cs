@@ -9,8 +9,8 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 {
   public record Port : FilterableConfiguration
   {
-    public string PortName { get; set; }
-    public int Baudrate { get; set; } = 38400;
+    public string PortName { get; init; }
+    public int Baudrate { get; init; } = 38400;
   }
 
   public static class ConfigureSportidentSerial

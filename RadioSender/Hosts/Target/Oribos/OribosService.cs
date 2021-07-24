@@ -29,7 +29,7 @@ namespace RadioSender.Hosts.Target.Oribos
 
     public Task SendPunch(Punch punch, CancellationToken ct = default)
     {
-      _backgroundJobClient.Enqueue(() => SendPunchAction(_filter, _httpClient, punch, default));
+      _backgroundJobClient.Enqueue(() => SendPunchAction(_filter as Filter, _httpClient, punch, default));
       return Task.CompletedTask;
     }
 
@@ -41,7 +41,7 @@ namespace RadioSender.Hosts.Target.Oribos
       return Task.CompletedTask;
     }
 
-    public static async Task SendPunchAction(IFilter filter, HttpClient httpClient, Punch punch, CancellationToken ct = default)
+    public static async Task SendPunchAction(Filter filter, HttpClient httpClient, Punch punch, CancellationToken ct = default)
     {
       punch = filter.Transform(punch);
 

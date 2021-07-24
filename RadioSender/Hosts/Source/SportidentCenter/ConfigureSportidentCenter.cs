@@ -11,10 +11,10 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 {
   public record Event : FilterableConfiguration
   {
-    public int EventId { get; set; }
-    public string ApiKey { get; set; }
-    public TimeSpan IgnoreOlderThan { get; set; }
-    public int RefreshMs { get; set; } = 1000;
+    public int EventId { get; init; }
+    public string ApiKey { get; init; }
+    public TimeSpan IgnoreOlderThan { get; init; }
+    public int RefreshMs { get; init; } = 1000;
   }
 
   public static class ConfigureSportidentCenter
