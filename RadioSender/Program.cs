@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Source.ROC;
 using RadioSender.Hosts.Source.SportidentCenter;
 using RadioSender.Hosts.Source.SportidentSerial;
@@ -58,15 +59,20 @@ namespace RadioSender
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
             .UseSerilog()
+            .UseHangfire()
+
+            .FromRoc()
+            .FromSportidentCenter()
+            .FromSportidentSerial()
+            .FromTmFRadio()
+
+            .UseFilters()
+            .ThroughDispatcher()
+
             .ToOribos()
             .ToUI()
             .ToFile()
-            .UseDispatcher()
-            .UseRoc()
-            .UseSportidentCenter()
-            .UseSportidentSerial()
-            .UseTmFRadio()
-            .UseHangfire()
+
             .ConfigureServices(services => services.AddHostedService<Launcher>())
             .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
 

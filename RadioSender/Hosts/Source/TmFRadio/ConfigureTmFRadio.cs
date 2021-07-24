@@ -2,12 +2,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hubs.Devices;
 using System.Collections.Generic;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public record Gateway
+  public record Gateway : FilterableConfiguration
   {
     public string PortName { get; set; }
     public int Baudrate { get; set; } = 19200;
@@ -15,7 +16,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
   public static class ConfigureTmFRadio
   {
-    public static IHostBuilder UseTmFRadio(this IHostBuilder builder)
+    public static IHostBuilder FromTmFRadio(this IHostBuilder builder)
     {
       builder.ConfigureServices((context, services) =>
       {
@@ -24,7 +25,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         foreach (var gateway in context.Configuration.GetSection("Source:TmFRadio:Gateways").Get<IEnumerable<Gateway>>())
         {
-          services.AddHostedService(sp => new TmFRadioGateway(sp.GetRequiredService<DispatcherService>(), sp.GetRequiredService<DeviceService>(), gateway));
+          services.AddHostedService(sp => new TmFRadioGateway(
+            sp.GetServices<IFilter>(),
+            sp.GetRequiredService<DispatcherService>(),
+            sp.GetRequiredService<DeviceService>(),
+            gateway));
         }
 
       });

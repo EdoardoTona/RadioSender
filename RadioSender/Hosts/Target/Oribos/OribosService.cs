@@ -1,5 +1,6 @@
 ﻿using Hangfire;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System.Collections.Generic;
 using System.Net.Http;
@@ -11,18 +12,24 @@ namespace RadioSender.Hosts.Target.Oribos
   public class OribosService : ITarget
   {
     private readonly IBackgroundJobClient _backgroundJobClient;
-    private readonly OribosServer _server;
+    private readonly OribosServer _configuration;
     private readonly HttpClient _httpClient;
-    public OribosService(IBackgroundJobClient backgroundJobClient, IHttpClientFactory httpClientFactory, OribosServer server)
+    private readonly IFilter _filter;
+    public OribosService(
+      IEnumerable<IFilter> filters,
+      IBackgroundJobClient backgroundJobClient,
+      IHttpClientFactory httpClientFactory,
+      OribosServer server)
     {
       _backgroundJobClient = backgroundJobClient;
-      _server = server;
-      _httpClient = httpClientFactory.CreateClient(_server.Host);
+      _configuration = server;
+      _httpClient = httpClientFactory.CreateClient(_configuration.Host);
+      _filter = filters.GetFilter(_configuration.Filter);
     }
 
     public Task SendPunch(Punch punch, CancellationToken ct = default)
     {
-      _backgroundJobClient.Enqueue(() => SendPunchAction(_httpClient, punch, default));
+      _backgroundJobClient.Enqueue(() => SendPunchAction(_filter, _httpClient, punch, default));
       return Task.CompletedTask;
     }
 
@@ -34,8 +41,10 @@ namespace RadioSender.Hosts.Target.Oribos
       return Task.CompletedTask;
     }
 
-    public static async Task SendPunchAction(HttpClient httpClient, Punch punch, CancellationToken ct = default)
+    public static async Task SendPunchAction(IFilter filter, HttpClient httpClient, Punch punch, CancellationToken ct = default)
     {
+      punch = filter.Transform(punch);
+
       if (punch == null)
         return;
 

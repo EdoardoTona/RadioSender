@@ -1,10 +1,12 @@
 ﻿using CsvHelper;
 using CsvHelper.Configuration;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,16 +18,21 @@ namespace RadioSender.Hosts.Target.File
     private readonly FileConfiguration _configuration;
     private readonly FileInfo _fileInfo;
     private readonly FileFormat _format;
+    private readonly IFilter _filter;
 
     private readonly StreamWriter _sr;
     private readonly CsvWriter _csv;
     private readonly SemaphoreSlim _semaphore;
 
-    public FileTarget(FileConfiguration configuration)
+    public FileTarget(
+      IEnumerable<IFilter> filters,
+      FileConfiguration configuration)
     {
       _configuration = configuration;
       _semaphore = new SemaphoreSlim(1, 1);
       _fileInfo = new FileInfo(_configuration.Path);
+
+      _filter = filters.GetFilter(_configuration.Filter);
 
       if (!_fileInfo.Directory.Exists)
         Directory.CreateDirectory(_fileInfo.DirectoryName);
@@ -41,7 +48,7 @@ namespace RadioSender.Hosts.Target.File
           case "xml": _format = FileFormat.Xml; break;
         }
       }
-
+      // TODO: handle network files (with broken connection)
       _sr = new StreamWriter(_fileInfo.FullName, append: true, Encoding.UTF8);
 
       switch (_format)
@@ -72,6 +79,8 @@ namespace RadioSender.Hosts.Target.File
     public async Task SendPunch(Punch punch, CancellationToken ct = default)
     {
       await Task.Yield();
+      punch = _filter.Transform(punch);
+      if (punch == null) return;
       await _semaphore.WaitAsync();
       try
       {
@@ -93,6 +102,8 @@ namespace RadioSender.Hosts.Target.File
     public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
     {
       await Task.Yield();
+      punches = _filter.Transform(punches);
+      if (punches == null || !punches.Any()) return;
       await _semaphore.WaitAsync(ct);
       try
       {

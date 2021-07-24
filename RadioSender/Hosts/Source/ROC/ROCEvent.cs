@@ -2,6 +2,7 @@
 using CsvHelper.Configuration;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -19,18 +20,23 @@ namespace RadioSender.Hosts.Source.ROC
   {
     public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;
-    private readonly Event _rocEvent;
+    private readonly Event _configuration;
     private readonly DispatcherService _dispatcherService;
     private readonly int _refreshInterval_ms;
+    private readonly IFilter _filter = Filter.Invariant;
 
     private long _lastReceivedId = 0;
 
     private CsvConfiguration _csvReaderConfiguration;
 
-    public ROCEvent(IHttpClientFactory clientFactory, DispatcherService dispatcherService, Event rocEvent)
+    public ROCEvent(
+      IEnumerable<IFilter> filters,
+      IHttpClientFactory clientFactory,
+      DispatcherService dispatcherService,
+      Event rocEvent)
     {
       _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
-      _rocEvent = rocEvent;
+      _configuration = rocEvent;
       _dispatcherService = dispatcherService;
 
       _csvReaderConfiguration = new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -39,6 +45,7 @@ namespace RadioSender.Hosts.Source.ROC
         Delimiter = ";"
       };
       _refreshInterval_ms = rocEvent.RefreshMs;
+      _filter = filters.GetFilter(_configuration.Filter);
     }
 
 
@@ -68,7 +75,7 @@ namespace RadioSender.Hosts.Source.ROC
     {
       try
       {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/getPunches.asp?unitId={_rocEvent.EventId}&lastId={_lastReceivedId}");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/getPunches.asp?unitId={_configuration.EventId}&lastId={_lastReceivedId}");
 
         var response = await _httpClient.SendAsync(request, ct);
 
@@ -83,9 +90,9 @@ namespace RadioSender.Hosts.Source.ROC
           if (!punches.Any())
             return;
 
-          if (_rocEvent.IgnoreOlderThan > TimeSpan.Zero)
+          if (_configuration.IgnoreOlderThan > TimeSpan.Zero)
           {
-            var limit = DateTimeOffset.UtcNow - _rocEvent.IgnoreOlderThan;
+            var limit = DateTimeOffset.UtcNow - _configuration.IgnoreOlderThan;
             punches = punches.Where(p => { var dto = new DateTimeOffset(p.Time); return dto > limit; });
 
             if (!punches.Any())
@@ -94,19 +101,23 @@ namespace RadioSender.Hosts.Source.ROC
 
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
-          _dispatcherService.PushPunches(punches.Select(p =>
-          new Punch()
-          {
-            Card = p.Card.ToString(),
-            Time = p.Time,
-            Control = p.Code,
-            OriginalControlType = PunchControlType.Unknown
-          }));
+          _dispatcherService.PushPunches(
+            _filter.Transform(
+                    punches.Select(p =>
+                    new Punch()
+                    {
+                      Card = p.Card.ToString(),
+                      Time = p.Time,
+                      Control = p.Code,
+                      ControlType = PunchControlType.Unknown
+                    })
+                  )
+            );
 
         }
         else
         {
-          Log.Error("Error getting data from ROC (event {event}): response code {code}", _rocEvent, response.StatusCode);
+          Log.Error("Error getting data from ROC (event {event}): response code {code}", _configuration, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -115,7 +126,7 @@ namespace RadioSender.Hosts.Source.ROC
       }
       catch (Exception e)
       {
-        Log.Error("Error getting data from ROC (event {event}): {message}", _rocEvent, e.Message);
+        Log.Error("Error getting data from ROC (event {event}): {message}", _configuration, e.Message);
       }
     }
 

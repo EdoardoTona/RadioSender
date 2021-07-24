@@ -1,13 +1,16 @@
 ﻿using Microsoft.Extensions.Hosting;
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Source.SportidentSerial;
 using RadioSender.Hubs.Devices;
 using Serilog;
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,9 +20,10 @@ namespace RadioSender.Hosts.Source.TmFRadio
   {
     public const uint BROADCAST = 0xffffffff;
 
+    private readonly IFilter _filter = Filter.Invariant;
     private readonly DispatcherService _dispatcherService;
     private readonly DeviceService _deviceService;
-    private readonly Gateway _gateway;
+    private readonly Gateway _configuration;
     private readonly SerialPort _port;
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
 
@@ -27,12 +31,17 @@ namespace RadioSender.Hosts.Source.TmFRadio
     private byte _commandId = 0;
     private Timer _timer;
 
-    public TmFRadioGateway(DispatcherService dispatcherService, DeviceService deviceService, Gateway gateway)
+    public TmFRadioGateway(
+      IEnumerable<IFilter> filters,
+      DispatcherService dispatcherService,
+      DeviceService deviceService,
+      Gateway gateway)
     {
       _dispatcherService = dispatcherService;
       _deviceService = deviceService;
-      _gateway = gateway;
+      _configuration = gateway;
       _port = new SerialPort();
+      _filter = filters.GetFilter(_configuration.Filter);
     }
 
     public Task StartAsync(CancellationToken st)
@@ -42,8 +51,8 @@ namespace RadioSender.Hosts.Source.TmFRadio
         if (_port.IsOpen)
           _port.Close();
 
-        _port.PortName = _gateway.PortName;
-        _port.BaudRate = _gateway.Baudrate;
+        _port.PortName = _configuration.PortName;
+        _port.BaudRate = _configuration.Baudrate;
         _port.Parity = Parity.None;
         _port.StopBits = StopBits.One;
         _port.Handshake = Handshake.None;
@@ -62,12 +71,12 @@ namespace RadioSender.Hosts.Source.TmFRadio
       }
       catch (UnauthorizedAccessException e)
       {
-        Log.Error("Port {port} occupied by another program", _gateway.PortName);
+        Log.Error("Port {port} occupied by another program", _configuration.PortName);
         return Task.FromException(e);
       }
       catch (FileNotFoundException e)
       {
-        Log.Error("Port {port} doesn't exist", _gateway.PortName);
+        Log.Error("Port {port} doesn't exist", _configuration.PortName);
         return Task.FromException(e);
       }
       catch (IOException)
@@ -76,7 +85,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       }
       catch (Exception e)
       {
-        Log.Error(e, "Error starting port {port}", _gateway.PortName);
+        Log.Error(e, "Error starting port {port}", _configuration.PortName);
         return Task.FromException(e);
       }
     }

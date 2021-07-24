@@ -2,6 +2,7 @@
 using CsvHelper.Configuration;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -19,8 +20,9 @@ namespace RadioSender.Hosts.Source.SportidentCenter
   public class SportidentCenterEvent : BackgroundService
   {
     public const string HTTPCLIENT_NAME = "sportident";
+    private readonly IFilter _filter = Filter.Invariant;
     private readonly HttpClient _httpClient;
-    private readonly Event _siEvent;
+    private readonly Event _configuration;
     private readonly DispatcherService _dispatcherService;
     private readonly int _refreshInterval_ms;
 
@@ -28,10 +30,14 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
     private CsvConfiguration _csvReaderConfiguration;
 
-    public SportidentCenterEvent(IHttpClientFactory clientFactory, DispatcherService dispatcherService, Event siEvent)
+    public SportidentCenterEvent(
+      IEnumerable<IFilter> filters,
+      IHttpClientFactory clientFactory,
+      DispatcherService dispatcherService,
+      Event siEvent)
     {
       _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
-      _siEvent = siEvent;
+      _configuration = siEvent;
       _dispatcherService = dispatcherService;
 
       _csvReaderConfiguration = new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -39,6 +45,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         PrepareHeaderForMatch = args => args.Header.ToLower()
       };
       _refreshInterval_ms = siEvent.RefreshMs;
+      _filter = filters.GetFilter(_configuration.Filter);
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -67,9 +74,9 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     {
       try
       {
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{_siEvent.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{_configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
 
-        request.Headers.Add("apikey", _siEvent.ApiKey);
+        request.Headers.Add("apikey", _configuration.ApiKey);
         request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("text/csv"));
 
         var response = await _httpClient.SendAsync(request, ct);
@@ -88,9 +95,9 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           if (!punches.Any())
             return;
 
-          if (_siEvent.IgnoreOlderThan > TimeSpan.Zero)
+          if (_configuration.IgnoreOlderThan > TimeSpan.Zero)
           {
-            var limit = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _siEvent.IgnoreOlderThan.TotalMilliseconds;
+            var limit = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _configuration.IgnoreOlderThan.TotalMilliseconds;
             punches = punches.Where(p => p.Time > limit);
 
             if (!punches.Any())
@@ -99,19 +106,23 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
-          _dispatcherService.PushPunches(punches.Select(p =>
-          new Punch()
-          {
-            Card = p.Card.ToString(),
-            Time = DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
-            Control = p.Code,
-            OriginalControlType = MapControlType(p.Mode)
-          }));
+          _dispatcherService.PushPunches(
+            _filter.Transform(
+                    punches.Select(p =>
+                    new Punch()
+                    {
+                      Card = p.Card.ToString(),
+                      Time = DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
+                      Control = p.Code,
+                      ControlType = MapControlType(p.Mode)
+                    })
+                  )
+            );
 
         }
         else
         {
-          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", _siEvent, response.StatusCode);
+          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", _configuration, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -120,7 +131,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
       }
       catch (Exception e)
       {
-        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", _siEvent, e.Message);
+        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", _configuration, e.Message);
       }
     }
 

@@ -1,9 +1,11 @@
 ﻿using Microsoft.Extensions.Hosting;
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -28,19 +30,24 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     private const byte ARG_DirectCommunication = 0x4D;
     private const byte ARG_RemoteCommunication = 0x53;
 
+    private readonly IFilter _filter = Filter.Invariant;
     private readonly DispatcherService _dispatcherService;
-    private readonly Port _portInfo;
+    private readonly Port _configuration;
     private readonly SerialPort _port;
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
 
     private SportidentProduct _stationInfo;
     private Task _readTask;
 
-    public SportidentSerialPort(DispatcherService dispatcherService, Port portInfo)
+    public SportidentSerialPort(
+      IEnumerable<IFilter> filters,
+      DispatcherService dispatcherService,
+      Port portInfo)
     {
       _dispatcherService = dispatcherService;
-      _portInfo = portInfo;
+      _configuration = portInfo;
       _port = new SerialPort();
+      _filter = filters.GetFilter(_configuration.Filter);
     }
 
     public async Task StartAsync(CancellationToken st)
@@ -50,7 +57,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         if (_port.IsOpen)
           _port.Close();
 
-        _port.PortName = _portInfo.PortName;
+        _port.PortName = _configuration.PortName;
         _port.BaudRate = 38400;
         //_port.RtsEnable = true;
         _port.DtrEnable = true;
@@ -80,22 +87,22 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         if (!unknownStation)
         {
           _stationInfo = await GetStationInfo();
-          Log.Information("Port {port} baudrate {baudrate} device: {info}", _portInfo.PortName, _port.BaudRate, _stationInfo);
+          Log.Information("Port {port} baudrate {baudrate} device: {info}", _configuration.PortName, _port.BaudRate, _stationInfo);
         }
         else
         {
-          Log.Information("Port {port} baudrate {baudrate} device unknown", _portInfo.PortName, _port.BaudRate);
+          Log.Information("Port {port} baudrate {baudrate} device unknown", _configuration.PortName, _port.BaudRate);
         }
 
         _readTask = ReadData();
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Error("Port {port} occupied by another program", _portInfo.PortName);
+        Log.Error("Port {port} occupied by another program", _configuration.PortName);
       }
       catch (FileNotFoundException)
       {
-        Log.Error("Port {port} doesn't exist", _portInfo.PortName);
+        Log.Error("Port {port} doesn't exist", _configuration.PortName);
       }
       catch (IOException)
       {
@@ -103,7 +110,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       }
       catch (Exception e)
       {
-        Log.Error(e, "Error starting port {port}", _portInfo.PortName);
+        Log.Error(e, "Error starting port {port}", _configuration.PortName);
       }
     }
 
@@ -199,7 +206,10 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           data[2] = length;
           Buffer.BlockCopy(buffer, 0, data, 3, buffer.Length);
 
-          _dispatcherService.PushPunch(MessageToPunch(data));
+
+          _dispatcherService.PushPunch(
+            _filter.Transform(MessageToPunch(data))
+          );
         }
         catch (OperationCanceledException)
         {
@@ -318,7 +328,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         Card = cardNumber.ToString(),
         Time = dt,
         Control = controlCode,
-        OriginalControlType = PunchControlType.Unknown
+        ControlType = PunchControlType.Unknown
       };
     }
 

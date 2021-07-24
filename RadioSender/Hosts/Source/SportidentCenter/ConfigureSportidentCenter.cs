@@ -2,13 +2,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
 
 namespace RadioSender.Hosts.Source.SportidentCenter
 {
-  public record Event
+  public record Event : FilterableConfiguration
   {
     public int EventId { get; set; }
     public string ApiKey { get; set; }
@@ -18,7 +19,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
   public static class ConfigureSportidentCenter
   {
-    public static IHostBuilder UseSportidentCenter(this IHostBuilder builder)
+    public static IHostBuilder FromSportidentCenter(this IHostBuilder builder)
     {
       builder.ConfigureServices((context, services) =>
       {
@@ -36,6 +37,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         {
           services.AddHostedService(sp =>
            new SportidentCenterEvent(
+             sp.GetServices<IFilter>(),
              sp.GetRequiredService<IHttpClientFactory>(),
              sp.GetRequiredService<DispatcherService>(),
              ev)

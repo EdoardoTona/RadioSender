@@ -1,4 +1,4 @@
-﻿using Hangfire;
+﻿using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Target;
 using Serilog;
 using System.Collections.Generic;
@@ -9,28 +9,43 @@ namespace RadioSender.Hosts.Common
 {
   public class DispatcherService
   {
-    private readonly IBackgroundJobClient _backgroundJobClient;
+    private readonly DispatcherConfiguration _configuration;
+    private readonly IFilter _filter = Filter.Invariant;
     private readonly IEnumerable<ITarget> _targets;
     public DispatcherService(
-      IBackgroundJobClient backgroundJobClient,
-      IEnumerable<ITarget> targets)
+      IEnumerable<IFilter> filters,
+      IEnumerable<ITarget> targets,
+      DispatcherConfiguration configuration
+      )
     {
       _targets = targets;
+      _configuration = configuration;
+      _filter = filters.GetFilter(_configuration.Filter);
     }
 
     public void PushPunch(Punch punch)
     {
-      if (punch == null) return;
+      punch = _filter.Transform(punch);
+
+      if (punch == null)
+        return;
 
       Log.Information("Received punch " + punch);
       // TODO handle duplicate punches
 
-      _ = Task.WhenAll(_targets.Select(t => t.SendPunch(punch, default)));
+      if (punch != null)
+        _ = Task.WhenAll(_targets.Select(t => t.SendPunch(punch, default)));
     }
 
     public void PushPunches(IEnumerable<Punch> punches)
     {
-      if (punches == null) return;
+      punches = _filter.Transform(punches);
+
+      if (punches == null || !punches.Any())
+        return;
+
+      foreach (var punch in punches)
+        Log.Information("Received punch " + punch);
       // TODO handle duplicate punches
 
       _ = Task.WhenAll(_targets.Select(t => t.SendPunches(punches, default)));

@@ -1,11 +1,12 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RadioSender.Hosts.Common.Filters;
 using System.Collections.Generic;
 
 namespace RadioSender.Hosts.Target.File
 {
-  public record FileConfiguration
+  public record FileConfiguration : FilterableConfiguration
   {
     public string Path { get; set; }
     public FileFormat Format { get; set; } = FileFormat.Auto;
@@ -31,7 +32,7 @@ namespace RadioSender.Hosts.Target.File
 
         foreach (var file in files)
         {
-          services.AddSingleton<ITarget, FileTarget>(s => new FileTarget(file));
+          services.AddSingleton<ITarget, FileTarget>(s => new FileTarget(s.GetServices<IFilter>(), file));
         }
 
       });

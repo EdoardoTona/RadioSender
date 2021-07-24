@@ -2,12 +2,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
-  public record Port
+  public record Port : FilterableConfiguration
   {
     public string PortName { get; set; }
     public int Baudrate { get; set; } = 38400;
@@ -15,7 +15,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
   public static class ConfigureSportidentSerial
   {
-    public static IHostBuilder UseSportidentSerial(this IHostBuilder builder)
+    public static IHostBuilder FromSportidentSerial(this IHostBuilder builder)
     {
       builder.ConfigureServices((context, services) =>
       {
@@ -26,7 +26,10 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
         foreach (var port in ports)
         {
-          services.AddHostedService(sp => new SportidentSerialPort(sp.GetRequiredService<DispatcherService>(), port));
+          services.AddHostedService(sp => new SportidentSerialPort(
+            sp.GetServices<IFilter>(),
+            sp.GetRequiredService<DispatcherService>(),
+            port));
         }
 
       });
