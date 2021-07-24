@@ -1,5 +1,7 @@
-﻿using RadioSender.Hosts.Common;
+﻿using Hangfire;
+using RadioSender.Hosts.Common;
 using Serilog;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,15 +10,31 @@ namespace RadioSender.Hosts.Target.Oribos
 {
   public class OribosService : ITarget
   {
+    private readonly IBackgroundJobClient _backgroundJobClient;
     private readonly OribosServer _server;
     private readonly HttpClient _httpClient;
-    public OribosService(IHttpClientFactory httpClientFactory, OribosServer server)
+    public OribosService(IBackgroundJobClient backgroundJobClient, IHttpClientFactory httpClientFactory, OribosServer server)
     {
+      _backgroundJobClient = backgroundJobClient;
       _server = server;
       _httpClient = httpClientFactory.CreateClient(_server.Host);
     }
 
-    public async Task SendPunch(Punch punch, CancellationToken ct = default)
+    public Task SendPunch(Punch punch, CancellationToken ct = default)
+    {
+      _backgroundJobClient.Enqueue(() => SendPunchAction(_httpClient, punch, default));
+      return Task.CompletedTask;
+    }
+
+    public Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
+    {
+      foreach (var punch in punches)
+        SendPunch(punch);
+
+      return Task.CompletedTask;
+    }
+
+    public static async Task SendPunchAction(HttpClient httpClient, Punch punch, CancellationToken ct = default)
     {
       if (punch == null)
         return;
@@ -30,7 +48,7 @@ namespace RadioSender.Hosts.Target.Oribos
         _ => $"/radiotime.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
       };
 
-      var response = await _httpClient.GetAsync(url, ct);
+      var response = await httpClient.GetAsync(url, ct);
 
       response.EnsureSuccessStatusCode();
 
@@ -57,5 +75,6 @@ namespace RadioSender.Hosts.Target.Oribos
 
 
     }
+
   }
 }

@@ -2,8 +2,13 @@
 
 namespace RadioSender.Hosts.Common
 {
-  public record Punch(string Card, DateTime Time, int Control, PunchControlType OriginalControlType)
+  public record Punch
   {
+    public string Card { get; set; }
+    public DateTime Time { get; set; }
+    public int Control { get; set; }
+    [CsvHelper.Configuration.Attributes.Ignore]
+    public PunchControlType OriginalControlType { get; set; }
     public PunchControlType ControlType
     {
       get

@@ -51,6 +51,7 @@ namespace RadioSender.Hosts.Source.ROC
         try
         {
           await GetData(ct);
+          await Task.Delay(_refreshInterval_ms, ct);
         }
         catch (OperationCanceledException)
         {
@@ -59,10 +60,6 @@ namespace RadioSender.Hosts.Source.ROC
         catch (Exception e)
         {
           Log.Error("Error getting data from ROC: {message}", e.Message);
-        }
-        finally
-        {
-          await Task.Delay(_refreshInterval_ms, ct);
         }
       }
     }
@@ -98,12 +95,13 @@ namespace RadioSender.Hosts.Source.ROC
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
           _dispatcherService.PushPunches(punches.Select(p =>
-          new Punch(
-            p.Card.ToString(),
-            p.Time,
-            p.Code,
-            PunchControlType.Unknown
-            )));
+          new Punch()
+          {
+            Card = p.Card.ToString(),
+            Time = p.Time,
+            Control = p.Code,
+            OriginalControlType = PunchControlType.Unknown
+          }));
 
         }
         else

@@ -50,7 +50,7 @@ namespace RadioSender
       return Task.CompletedTask;
     }
 
-    private async Task ShowTrayIcon(CancellationToken cancellationToken)
+    private Task ShowTrayIcon(CancellationToken cancellationToken)
     {
       _uiThread = new Thread(new ThreadStart(() =>
       {
@@ -110,6 +110,7 @@ namespace RadioSender
       _uiThread.IsBackground = true;
       _uiThread.Start();
 
+      return Task.CompletedTask;
     }
 
     private void OpenInfoWindow()

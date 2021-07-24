@@ -233,7 +233,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           _port.Write(data, 0, data.Length);
         }
 
-        await Task.Delay(500);
+        await Task.Delay(500, _cts.Token);
 
         if (_port.BytesToRead > 0)
         {
@@ -243,8 +243,13 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           return buffer;
         }
       }
+      catch (OperationCanceledException)
+      {
+
+      }
       catch (TimeoutException)
       {
+
       }
       catch (Exception e)
       {
@@ -308,7 +313,13 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       var now = DateTime.Now;
       var dt = new DateTime(now.Year, now.Month, now.Day) + time;
 
-      return new Punch(cardNumber.ToString(), dt, controlCode, PunchControlType.Unknown);
+      return new Punch()
+      {
+        Card = cardNumber.ToString(),
+        Time = dt,
+        Control = controlCode,
+        OriginalControlType = PunchControlType.Unknown
+      };
     }
 
 

@@ -34,7 +34,6 @@ namespace RadioSender.Hosts.Common
           setup.ServerName = "Radiosender";
           setup.WorkerCount = Environment.ProcessorCount * 5;
           setup.ServerCheckInterval = TimeSpan.FromSeconds(0.1);
-          //setup.
         });
 
         services.AddHangfireConsoleExtensions();

@@ -35,7 +35,7 @@ namespace RadioSender
       app.UseEndpoints(endpoints =>
       {
         endpoints.MapRazorPages();
-        endpoints.MapHub<PunchHub>("/punchHub");
+        //endpoints.MapHub<PunchHub>("/punchHub");
         endpoints.MapHub<DeviceHub>("/deviceHub");
 
         endpoints.MapHangfireDashboard();

@@ -50,6 +50,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         try
         {
           await GetData(ct);
+          await Task.Delay(_refreshInterval_ms, ct);
         }
         catch (OperationCanceledException)
         {
@@ -58,10 +59,6 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         catch (Exception e)
         {
           Log.Error("Error getting data from SportidentCenter: {message}", e.Message);
-        }
-        finally
-        {
-          await Task.Delay(_refreshInterval_ms, ct);
         }
       }
     }
@@ -103,12 +100,13 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
           _dispatcherService.PushPunches(punches.Select(p =>
-          new Punch(
-            p.Card.ToString(),
-            DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
-            p.Code,
-            MapControlType(p.Mode)
-            )));
+          new Punch()
+          {
+            Card = p.Card.ToString(),
+            Time = DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
+            Control = p.Code,
+            OriginalControlType = MapControlType(p.Mode)
+          }));
 
         }
         else

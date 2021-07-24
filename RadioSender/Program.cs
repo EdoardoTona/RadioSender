@@ -7,7 +7,9 @@ using RadioSender.Hosts.Source.ROC;
 using RadioSender.Hosts.Source.SportidentCenter;
 using RadioSender.Hosts.Source.SportidentSerial;
 using RadioSender.Hosts.Source.TmFRadio;
+using RadioSender.Hosts.Target.File;
 using RadioSender.Hosts.Target.Oribos;
+using RadioSender.Hosts.Target.UI;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -56,13 +58,15 @@ namespace RadioSender
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
             .UseSerilog()
-            .UseHangfire()
-            .UseOribos()
+            .ToOribos()
+            .ToUI()
+            .ToFile()
             .UseDispatcher()
             .UseRoc()
             .UseSportidentCenter()
             .UseSportidentSerial()
             .UseTmFRadio()
+            .UseHangfire()
             .ConfigureServices(services => services.AddHostedService<Launcher>())
             .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
 

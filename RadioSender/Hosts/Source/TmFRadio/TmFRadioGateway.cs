@@ -109,7 +109,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
     public async void CheckStatus(object state)
     {
       await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
-      await Task.Delay(200);
+      await Task.Delay(200, _cts.Token);
       await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
     }
 
@@ -154,92 +154,96 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     private async Task ReadData()
     {
-      while (!_cts.Token.IsCancellationRequested)
+      try
       {
-        if (!_port?.IsOpen ?? false)
+        while (!_cts.Token.IsCancellationRequested)
         {
-          await Task.Delay(5000);
-          // TODO try to reopen
-          continue;
-        }
-
-        try
-        {
-          var length = (int)await _port.ReadByteAsync(_cts.Token).ConfigureAwait(false);
-
-          if (_port.BytesToRead < length - 1)
+          if (!_port?.IsOpen ?? false)
           {
-            await Task.Delay(50);
+            await Task.Delay(5000, _cts.Token);
+            // TODO try to reopen
+            continue;
+          }
+
+          try
+          {
+            var length = (int)await _port.ReadByteAsync(_cts.Token).ConfigureAwait(false);
+
             if (_port.BytesToRead < length - 1)
             {
-              length = _port.BytesToRead;
-            }
-          }
-
-          if (length <= 0)
-            continue;
-
-          var buffer = await _port.ReadAsync(length - 1, _cts.Token).ConfigureAwait(false);
-
-          var data = new byte[length];
-          data[0] = (byte)Math.Min(byte.MaxValue, length);
-          Buffer.BlockCopy(buffer, 0, data, 1, buffer.Length); // TODO optimize this part (using a memorystream?)
-
-          Log.Verbose(BitConverter.ToString(data));
-
-          if (length < 18)
-          {
-            Log.Error("Received broken message of {count} bytes", length);
-            continue;
-          }
-
-          var header = new RxHeader(data);
-
-
-          RxMsg packet = null;
-
-          if (header.PacketType == PacketType.Event)
-          {
-            if (data[17] == 0x09)
-            {
-              packet = new RxGetStatus(header, data);
-              UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus).Voltage_V);
-            }
-            else if (data[17] == 0x20)
-            {
-              packet = new RxGetPath(header, data);
-              var from = header.OrigID;
-              var hop = header.HopCounter == 0 ? 1 : header.HopCounter;
-              foreach (var jump in (packet as RxGetPath).Jumps)
+              await Task.Delay(50, _cts.Token);
+              if (_port.BytesToRead < length - 1)
               {
-                UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
-                from = jump.ReceiverId;
+                length = _port.BytesToRead;
+              }
+            }
+
+            if (length <= 0)
+              continue;
+
+            var buffer = await _port.ReadAsync(length - 1, _cts.Token).ConfigureAwait(false);
+
+            var data = new byte[length];
+            data[0] = (byte)Math.Min(byte.MaxValue, length);
+            Buffer.BlockCopy(buffer, 0, data, 1, buffer.Length); // TODO optimize this part (using a memorystream?)
+
+            Log.Verbose(BitConverter.ToString(data));
+
+            if (length < 18)
+            {
+              Log.Error("Received broken message of {count} bytes", length);
+              continue;
+            }
+
+            var header = new RxHeader(data);
+
+
+            RxMsg packet = null;
+
+            if (header.PacketType == PacketType.Event)
+            {
+              if (data[17] == 0x09)
+              {
+                packet = new RxGetStatus(header, data);
+                UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus).Voltage_V);
+              }
+              else if (data[17] == 0x20)
+              {
+                packet = new RxGetPath(header, data);
+                var from = header.OrigID;
+                var hop = header.HopCounter == 0 ? 1 : header.HopCounter;
+                foreach (var jump in (packet as RxGetPath).Jumps)
+                {
+                  UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
+                  from = jump.ReceiverId;
+                }
+              }
+              else
+              {
+
               }
             }
             else
             {
+              packet = new RxData(header, data);
 
+              var punch = SportidentSerialPort.MessageToPunch((packet as RxData).RxSerData);
+              _dispatcherService.PushPunch(punch);
             }
+
+            Log.Verbose(packet?.ToString());
+
+
           }
-          else
+          catch (Exception e)
           {
-            packet = new RxData(header, data);
-
-            var punch = SportidentSerialPort.MessageToPunch((packet as RxData).RxSerData);
-            _dispatcherService.PushPunch(punch);
+            Log.Error(e, "Exeption reading data from serial port");
           }
-
-          Log.Verbose(packet?.ToString());
-
-
         }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception e)
-        {
-          Log.Error(e, "Exeption reading data from serial port");
-        }
+      }
+      catch (OperationCanceledException)
+      {
+
       }
 
     }

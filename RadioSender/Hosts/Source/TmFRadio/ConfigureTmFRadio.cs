@@ -1,15 +1,17 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
-using RadioSender.Hubs;
 using RadioSender.Hubs.Devices;
 using System.Collections.Generic;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public record Gateway(string PortName, int Baudrate = 19200);
+  public record Gateway
+  {
+    public string PortName { get; set; }
+    public int Baudrate { get; set; } = 19200;
+  }
 
   public static class ConfigureTmFRadio
   {

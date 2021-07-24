@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Hangfire;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -7,11 +8,14 @@ using System.Net.Http;
 
 namespace RadioSender.Hosts.Target.Oribos
 {
-  public record OribosServer(string Host);
+  public record OribosServer
+  {
+    public string Host { get; set; }
+  }
 
   public static class ConfigureOribos
   {
-    public static IHostBuilder UseOribos(this IHostBuilder builder)
+    public static IHostBuilder ToOribos(this IHostBuilder builder)
     {
       builder.ConfigureServices((context, services) =>
       {
@@ -22,11 +26,10 @@ namespace RadioSender.Hosts.Target.Oribos
 
         foreach (var server in servers)
         {
-          var host = context.Configuration.GetValue<string>("Target:Oribos:Host");
-          host = host.Replace("localhost", "127.0.0.1"); // optimization to skip the dns resolution
+          server.Host = server.Host.Replace("localhost", "127.0.0.1"); // optimization to skip the dns resolution
 
-          services.AddHttpClient(host, c => { c.BaseAddress = new Uri(host); });
-          services.AddSingleton(s => new OribosService(s.GetRequiredService<IHttpClientFactory>(), server));
+          services.AddHttpClient(server.Host, c => { c.BaseAddress = new Uri(server.Host); });
+          services.AddSingleton<ITarget>(s => new OribosService(s.GetRequiredService<IBackgroundJobClient>(), s.GetRequiredService<IHttpClientFactory>(), server));
         }
 
       });
