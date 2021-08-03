@@ -10,7 +10,6 @@ namespace RadioSender.Hosts.Source.SIRAP
   public record SirapServerConfiguration : FilterableConfiguration
   {
     public int Port { get; init; }
-    public int Version { get; init; } = 2;
   }
 
   public static class ConfigureSirapServer
