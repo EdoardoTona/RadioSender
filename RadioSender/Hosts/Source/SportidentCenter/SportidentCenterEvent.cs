@@ -95,15 +95,6 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           if (!punches.Any())
             return;
 
-          if (_configuration.IgnoreOlderThan > TimeSpan.Zero)
-          {
-            var limit = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _configuration.IgnoreOlderThan.TotalMilliseconds;
-            punches = punches.Where(p => p.Time > limit);
-
-            if (!punches.Any())
-              return;
-          }
-
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
           _dispatcherService.PushPunches(

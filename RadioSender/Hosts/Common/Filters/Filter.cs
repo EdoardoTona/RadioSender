@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace RadioSender.Hosts.Common.Filters
@@ -14,11 +15,15 @@ namespace RadioSender.Hosts.Common.Filters
     public Dictionary<string, int> MapControls { get; init; } = new();
     public Dictionary<string, string> MapCards { get; init; } = new();
     public Dictionary<PunchControlType, HashSet<int>> TypeFromCode { get; init; } = new();
+    public TimeSpan IgnoreOlderThan { get; init; }
 
     public Punch Transform(Punch punch)
     {
       if (!Enable || punch == null)
         return punch;
+
+      if (IgnoreOlderThan != default && DateTime.Now - punch.Time > IgnoreOlderThan)
+        return null;
 
       var control = MapControls.ContainsKey(punch.Control.ToString()) ? MapControls[punch.Control.ToString()] : punch.Control;
 

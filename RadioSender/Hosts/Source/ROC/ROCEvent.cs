@@ -90,15 +90,6 @@ namespace RadioSender.Hosts.Source.ROC
           if (!punches.Any())
             return;
 
-          if (_configuration.IgnoreOlderThan > TimeSpan.Zero)
-          {
-            var limit = DateTimeOffset.UtcNow - _configuration.IgnoreOlderThan;
-            punches = punches.Where(p => { var dto = new DateTimeOffset(p.Time); return dto > limit; });
-
-            if (!punches.Any())
-              return;
-          }
-
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
           _dispatcherService.PushPunches(

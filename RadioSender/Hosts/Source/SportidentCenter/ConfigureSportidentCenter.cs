@@ -13,7 +13,6 @@ namespace RadioSender.Hosts.Source.SportidentCenter
   {
     public int EventId { get; init; }
     public string ApiKey { get; init; }
-    public TimeSpan IgnoreOlderThan { get; init; }
     public int RefreshMs { get; init; } = 1000;
   }
 
