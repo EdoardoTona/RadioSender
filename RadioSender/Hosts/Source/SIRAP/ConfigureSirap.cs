@@ -1,16 +1,19 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RadioSender.Hosts.Common;
+using RadioSender.Hosts.Common.Filters;
 using System.Collections.Generic;
 
 namespace RadioSender.Hosts.Source.SIRAP
 {
-  public record Listner
+  public record SirapServerConfiguration : FilterableConfiguration
   {
     public int Port { get; init; }
-    public int Version { get; init; }
+    public int Version { get; init; } = 2;
   }
 
-  public static class ConfigureSIRAP
+  public static class ConfigureSirapServer
   {
     public static IHostBuilder FromSirap(this IHostBuilder builder)
     {
@@ -19,16 +22,19 @@ namespace RadioSender.Hosts.Source.SIRAP
         if (!context.Configuration.GetValue("Source:SIRAP:Enable", false))
           return;
 
-        var listners = context.Configuration.GetSection("Source:SIRAP:Listners").Get<IEnumerable<Listner>>();
+        var servers = context.Configuration.GetSection("Source:SIRAP:Servers").Get<IEnumerable<SirapServerConfiguration>>();
 
-        //services.AddHostedService(sp =>
-        //  new ROCService(
-        //    sp.GetRequiredService<IHttpClientFactory>(),
-        //    sp.GetRequiredService<DispatcherService>(),
-        //    context.Configuration.GetValue("Source:ROC:Refresh", TimeSpan.FromSeconds(5)),
-        //    events
-        //    )
-        //);
+        foreach (var server in servers)
+        {
+          services.AddHostedService(sp =>
+            new SirapServer(
+              sp.GetServices<IFilter>(),
+              sp.GetRequiredService<DispatcherService>(),
+              server
+              )
+          );
+        }
+
       });
 
       return builder;
