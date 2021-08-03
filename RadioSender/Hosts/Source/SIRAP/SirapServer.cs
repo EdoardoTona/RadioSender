@@ -72,7 +72,7 @@ namespace RadioSender.Hosts.Source.SIRAP
       byte type = buffer[0]; // 0=punch, 255=Triggered time
       var codeNo = BitConverter.ToUInt16(buffer.Slice(1, 2));
       var chipNo = BitConverter.ToInt32(buffer.Slice(3, 4));
-      var codeDay = BitConverter.ToInt32(buffer.Slice(7, 4)); // Day information from SI punch
+      var codeDay = BitConverter.ToInt32(buffer.Slice(7, 4)); // Day information from SI punch, sunday = 0
       var codeTime = BitConverter.ToInt32(buffer.Slice(11, 4));
 
       if (codeTime == 360000001)
