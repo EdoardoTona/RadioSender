@@ -11,6 +11,7 @@ using RadioSender.Hosts.Source.TmFRadio;
 using RadioSender.Hosts.Target.File;
 using RadioSender.Hosts.Target.Oribos;
 using RadioSender.Hosts.Target.SIRAP;
+using RadioSender.Hosts.Target.Tcp;
 using RadioSender.Hosts.Target.UI;
 using Serilog;
 using Serilog.Events;
@@ -77,7 +78,8 @@ namespace RadioSender
             .ToUI()
             .ToOribos()
             .ToFile()
-            .ToSirap();
+            .ToSirap()
+            .ToTcp();
 
   }
 }
