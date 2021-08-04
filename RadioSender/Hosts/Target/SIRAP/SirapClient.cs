@@ -1,7 +1,5 @@
-﻿using NetCoreServer;
-using RadioSender.Hosts.Common;
+﻿using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,21 +9,36 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.SIRAP
 {
-  public class SirapClient : TcpClient, ITarget
+  public class SirapClient : ITarget
   {
-    private readonly IFilter _filter = Filter.Invariant;
-    private readonly SirapClientConfiguration _configuration;
+    private IFilter _filter = Filter.Invariant;
+    private SirapClientConfiguration _configuration;
 
-    private bool _stop;
+    private TcpClient _tcpClient;
 
     public SirapClient(
       IEnumerable<IFilter> filters,
-      SirapClientConfiguration configuration) : base(configuration.Address, configuration.Port)
+      SirapClientConfiguration configuration)
     {
-      _configuration = configuration;
-      _filter = filters.GetFilter(_configuration.Filter);
+      UpdateConfiguration(filters, configuration);
+    }
 
-      ConnectAsync();
+    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
+    {
+      Interlocked.Exchange(ref _configuration, configuration as SirapClientConfiguration);
+      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
+
+      var newClient = new TcpClient(_configuration.Address, _configuration.Port);
+      newClient.ConnectAsync();
+
+      var oldClient = Interlocked.Exchange(ref _tcpClient, newClient);
+
+      if (oldClient != null)
+      {
+        oldClient.DisconnectAndStop();
+        oldClient.Dispose();
+      }
+
     }
 
     public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
@@ -36,7 +49,7 @@ namespace RadioSender.Hosts.Target.SIRAP
 
     public Task SendPunch(Punch punch, CancellationToken ct = default)
     {
-      if (_stop || !IsConnected)
+      if (!_tcpClient.IsConnected)
         return Task.CompletedTask;
 
       punch = _filter.Transform(punch);
@@ -49,7 +62,7 @@ namespace RadioSender.Hosts.Target.SIRAP
       if (buffer == null || buffer.Length == 0)
         return Task.CompletedTask;
 
-      SendAsync(buffer);
+      _tcpClient.SendAsync(buffer);
 
       return Task.CompletedTask;
     }
@@ -102,32 +115,8 @@ namespace RadioSender.Hosts.Target.SIRAP
       return ms.ToArray();
     }
 
-    public void DisconnectAndStop()
-    {
-      _stop = true;
-      DisconnectAsync();
-      while (IsConnected)
-        Thread.Yield();
-    }
-
-    protected override void OnConnected()
-    {
-      Log.Information("SirapClient {id} connected", Id.ToString());
-    }
-
-    protected override void OnDisconnected()
-    {
-      Log.Information("SirapClient {id} disconnected", Id.ToString());
-
-      // Wait for a while...
-      Thread.Sleep(1000);
-
-      // Try to connect again
-      if (!_stop)
-        ConnectAsync();
-    }
-
 
   }
+
 
 }

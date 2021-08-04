@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
-  public class SportidentSerialPort : IHostedService, IDisposable
+  public class SportidentSerialPort : ISource, IHostedService, IDisposable
   {
     private const byte WAKEUP = 0xFF;
     private const byte STX = 0x02;

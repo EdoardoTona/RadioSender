@@ -31,7 +31,8 @@ namespace RadioSender.Hosts.Target.Oribos
           if (s.Host.Contains("localhost"))
             server = s with { Host = server.Host.Replace("localhost", "127.0.0.1") }; // optimization to skip the dns resolution
 
-          services.AddHttpClient(server.Host, c => { c.BaseAddress = new Uri(server.Host); });
+          services.AddHttpClient();
+
           services.AddSingleton<ITarget>(s => new OribosService(
             s.GetServices<IFilter>(),
             s.GetRequiredService<IBackgroundJobClient>(),

@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.ROC
 {
-  public class ROCEvent : BackgroundService
+  public class ROCEvent : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;

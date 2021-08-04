@@ -1,29 +1,42 @@
-﻿using NetCoreServer;
-using RadioSender.Helpers;
+﻿using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
-using Serilog;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.Tcp
 {
-  public class TcpTargetClient : TcpClient, ITarget
+  public class TcpTargetClient : ITarget
   {
-    private readonly IFilter _filter = Filter.Invariant;
-    private readonly TcpTargetConfiguration _configuration;
+    private IFilter _filter = Filter.Invariant;
+    private TcpTargetConfiguration _configuration;
 
-    private bool _stop;
+    private TcpClient _tcpClient;
 
     public TcpTargetClient(
       IEnumerable<IFilter> filters,
-      TcpTargetConfiguration configuration) : base(configuration.Address, configuration.Port)
+      TcpTargetConfiguration configuration)
     {
-      _configuration = configuration;
-      _filter = filters.GetFilter(_configuration.Filter);
+      UpdateConfiguration(filters, configuration);
+    }
 
-      ConnectAsync();
+    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
+    {
+      Interlocked.Exchange(ref _configuration, configuration as TcpTargetConfiguration);
+      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
+
+      var newClient = new TcpClient(_configuration.Address, _configuration.Port);
+      newClient.ConnectAsync();
+
+      var oldClient = Interlocked.Exchange(ref _tcpClient, newClient);
+
+      if (oldClient != null)
+      {
+        oldClient.DisconnectAndStop();
+        oldClient.Dispose();
+      }
+
     }
 
     public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
@@ -34,7 +47,7 @@ namespace RadioSender.Hosts.Target.Tcp
 
     public Task SendPunch(Punch punch, CancellationToken ct = default)
     {
-      if (_stop || !IsConnected)
+      if (!_tcpClient.IsConnected)
         return Task.CompletedTask;
 
       punch = _filter.Transform(punch);
@@ -47,36 +60,10 @@ namespace RadioSender.Hosts.Target.Tcp
       if (buffer == null || buffer.Length == 0)
         return Task.CompletedTask;
 
-      SendAsync(buffer);
+      _tcpClient.SendAsync(buffer);
 
       return Task.CompletedTask;
     }
-
-    public void DisconnectAndStop()
-    {
-      _stop = true;
-      DisconnectAsync();
-      while (IsConnected)
-        Thread.Yield();
-    }
-
-    protected override void OnConnected()
-    {
-      Log.Information("TcpTargetClient {id} connected", Id);
-    }
-
-    protected override void OnDisconnected()
-    {
-      Log.Information("TcpTargetClient {id} disconnected", Id);
-
-      // Wait for a while...
-      Thread.Sleep(1000);
-
-      // Try to connect again
-      if (!_stop)
-        ConnectAsync();
-    }
-
 
   }
 

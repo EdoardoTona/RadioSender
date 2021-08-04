@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentCenter
 {
-  public class SportidentCenterEvent : BackgroundService
+  public class SportidentCenterEvent : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "sportident";
     private readonly IFilter _filter = Filter.Invariant;

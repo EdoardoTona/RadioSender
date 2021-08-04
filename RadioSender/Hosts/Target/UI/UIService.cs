@@ -9,15 +9,22 @@ namespace RadioSender.Hosts.Target.UI
 {
   public class UIService : Hub, ITarget
   {
-    private readonly IFilter _filter;
-    private readonly UIConfiguration _configuration;
+    private IFilter _filter;
+    private UIConfiguration _configuration;
+
     public UIService(
       IEnumerable<IFilter> filters,
-      UIConfiguration uiConfiguration)
+      UIConfiguration configuration)
     {
-      _configuration = uiConfiguration;
-      _filter = filters.GetFilter(_configuration.Filter);
+      UpdateConfiguration(filters, configuration);
     }
+
+    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
+    {
+      Interlocked.Exchange(ref _configuration, configuration as UIConfiguration);
+      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
+    }
+
     public async Task SendPunch(Punch punch, CancellationToken ct = default)
     {
       if (Clients == null)

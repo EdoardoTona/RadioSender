@@ -2,6 +2,7 @@
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
@@ -12,24 +13,29 @@ namespace RadioSender.Hosts.Target.Oribos
   public class OribosService : ITarget
   {
     private readonly IBackgroundJobClient _backgroundJobClient;
-    private readonly OribosServer _configuration;
-    private readonly HttpClient _httpClient;
-    private readonly IFilter _filter;
+    private static IHttpClientFactory _httpClientFactory;
+    private OribosServer _configuration;
+    private IFilter _filter;
     public OribosService(
       IEnumerable<IFilter> filters,
       IBackgroundJobClient backgroundJobClient,
       IHttpClientFactory httpClientFactory,
-      OribosServer server)
+      OribosServer configuration)
     {
       _backgroundJobClient = backgroundJobClient;
-      _configuration = server;
-      _httpClient = httpClientFactory.CreateClient(_configuration.Host);
-      _filter = filters.GetFilter(_configuration.Filter);
+      _httpClientFactory = httpClientFactory;
+
+      UpdateConfiguration(filters, configuration);
+    }
+    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
+    {
+      Interlocked.Exchange(ref _configuration, configuration as OribosServer);
+      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
     }
 
     public Task SendPunch(Punch punch, CancellationToken ct = default)
     {
-      _backgroundJobClient.Enqueue(() => SendPunchAction(_filter as Filter, _httpClient, punch, default));
+      _backgroundJobClient.Enqueue(() => SendPunchAction(_filter as Filter, _configuration, punch, default));
       return Task.CompletedTask;
     }
 
@@ -41,12 +47,15 @@ namespace RadioSender.Hosts.Target.Oribos
       return Task.CompletedTask;
     }
 
-    public static async Task SendPunchAction(Filter filter, HttpClient httpClient, Punch punch, CancellationToken ct = default)
+    public static async Task SendPunchAction(Filter filter, OribosServer _configuration, Punch punch, CancellationToken ct = default)
     {
       punch = filter.Transform(punch);
 
       if (punch == null)
         return;
+
+      var httpClient = _httpClientFactory.CreateClient();
+      httpClient.BaseAddress = new Uri(_configuration.Host);
 
       string url = punch.ControlType switch
       {
@@ -86,4 +95,6 @@ namespace RadioSender.Hosts.Target.Oribos
     }
 
   }
+
+
 }

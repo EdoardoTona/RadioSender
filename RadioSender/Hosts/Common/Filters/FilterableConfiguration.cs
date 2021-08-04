@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Common.Filters
 {
-  public record FilterableConfiguration
+  public record FilterableConfiguration : Configuration
   {
     public string Filter { get; init; }
   }

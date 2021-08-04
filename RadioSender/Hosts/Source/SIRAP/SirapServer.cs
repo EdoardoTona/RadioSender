@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SIRAP
 {
-  public class SirapServer : TcpServer, IHostedService
+  public class SirapServer : TcpServer, ISource, IHostedService
   {
     private readonly IFilter _filter = Filter.Invariant;
     private readonly SirapServerConfiguration _configuration;

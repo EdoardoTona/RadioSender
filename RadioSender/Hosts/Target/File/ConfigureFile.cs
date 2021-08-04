@@ -9,7 +9,7 @@ namespace RadioSender.Hosts.Target.File
   public record FileConfiguration : FilterableConfiguration
   {
     public string Path { get; init; }
-    public FileFormat Format { get; init; } = FileFormat.Auto;
+    public string Format { get; init; }
   }
 
   public enum FileFormat
