@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
+using Microsoft.IO;
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
@@ -29,6 +30,8 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     private const byte ARG_DirectCommunication = 0x4D;
     private const byte ARG_RemoteCommunication = 0x53;
+
+    private static readonly RecyclableMemoryStreamManager _memoryManager = new();
 
     private readonly IFilter _filter = Filter.Invariant;
     private readonly DispatcherService _dispatcherService;
@@ -143,7 +146,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     {
       var res = await SendCommand(CMD_GetSystemValue, 0x00, 0x80); // read 0x80 bytes from position 0x00
 
-      using var ms = new MemoryStream(res);
+      using var ms = _memoryManager.GetStream(res);
 
       while (ms.Position < ms.Length)
       {
@@ -229,7 +232,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
       try
       {
-        using (var ms = new MemoryStream())
+        using (var ms = _memoryManager.GetStream())
         {
           ms.WriteByte(WAKEUP);
           ms.WriteByte(STX);
@@ -336,7 +339,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     public static byte[] CalculateCrc(byte command, byte[] data, byte length = 0)
     {
       length = length == 0 ? (byte)data.Length : length;
-      using var ms = new MemoryStream();
+      using var ms = _memoryManager.GetStream();
       ms.WriteByte(command);
       ms.WriteByte(length);
       ms.Write(data);

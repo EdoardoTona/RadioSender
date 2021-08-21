@@ -1,4 +1,5 @@
-﻿using RadioSender.Hosts.Common;
+﻿using Microsoft.IO;
+using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,8 @@ namespace RadioSender.Hosts.Target.SIRAP
 {
   public class SirapClient : ITarget
   {
+    private static readonly RecyclableMemoryStreamManager _memoryManager = new();
+
     private IFilter _filter = Filter.Invariant;
     private SirapClientConfiguration _configuration;
 
@@ -72,7 +75,7 @@ namespace RadioSender.Hosts.Target.SIRAP
       if (!int.TryParse(punch.Card, out int chipNo))
         return null; // not numeric cards are not supported in SIRAP
 
-      using var ms = new MemoryStream();
+      using var ms = _memoryManager.GetStream();
       using var bw = new BinaryWriter(ms);
 
       if (version == 2)
