@@ -23,12 +23,12 @@ namespace RadioSender.Hosts.Target
 
     protected override void OnConnected()
     {
-      Log.Information("SirapClient {id} connected", Id.ToString());
+      Log.Information("TcpTargetClient {id} connected", Id.ToString());
     }
 
     protected override void OnDisconnected()
     {
-      Log.Information("SirapClient {id} disconnected", Id.ToString());
+      Log.Information("TcpTargetClient {id} disconnected", Id.ToString());
 
       // Wait for a while...
       Thread.Sleep(1000);
