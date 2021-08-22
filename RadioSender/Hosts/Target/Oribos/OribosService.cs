@@ -13,15 +13,16 @@ namespace RadioSender.Hosts.Target.Oribos
   public class OribosService : ITarget
   {
     private readonly IBackgroundJobClient _backgroundJobClient;
-    private static IHttpClientFactory _httpClientFactory;
+    private static IHttpClientFactory? _httpClientFactory; // static for hangfire
     private OribosServer _configuration;
-    private IFilter _filter;
+    private IFilter _filter = Filter.Invariant;
     public OribosService(
       IEnumerable<IFilter> filters,
       IBackgroundJobClient backgroundJobClient,
       IHttpClientFactory httpClientFactory,
       OribosServer configuration)
     {
+      _configuration = configuration;
       _backgroundJobClient = backgroundJobClient;
       _httpClientFactory = httpClientFactory;
 
@@ -29,33 +30,36 @@ namespace RadioSender.Hosts.Target.Oribos
     }
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
     {
-      Interlocked.Exchange(ref _configuration, configuration as OribosServer);
+      Interlocked.Exchange(ref _configuration!, configuration as OribosServer);
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
     }
 
-    public Task SendPunch(Punch punch, CancellationToken ct = default)
+    public Task SendPunch(Punch? punch, CancellationToken ct = default)
     {
-      _backgroundJobClient.Enqueue(() => SendPunchAction(_filter as Filter, _configuration, punch, default));
+      if (_filter is Filter f)
+        _backgroundJobClient.Enqueue(() => SendPunchAction(f, _configuration, punch, default));
       return Task.CompletedTask;
     }
 
     public Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
     {
       foreach (var punch in punches)
-        SendPunch(punch);
+        SendPunch(punch, ct);
 
       return Task.CompletedTask;
     }
 
-    public static async Task SendPunchAction(Filter filter, OribosServer _configuration, Punch punch, CancellationToken ct = default)
+    public static async Task SendPunchAction(Filter filter, OribosServer _configuration, Punch? punch, CancellationToken ct = default)
     {
       punch = filter.Transform(punch);
 
-      if (punch == null)
+      if (punch == null || string.IsNullOrEmpty(_configuration.Host) || _httpClientFactory == null)
         return;
 
       var httpClient = _httpClientFactory.CreateClient();
-      httpClient.BaseAddress = new Uri(_configuration.Host);
+
+      var host = _configuration.Host.Contains("localhost") ? _configuration.Host.Replace("localhost", "127.0.0.1") : _configuration.Host; // optimization to skip the dns resolution
+      httpClient.BaseAddress = new Uri(host);
 
       string url = punch.ControlType switch
       {
@@ -79,10 +83,12 @@ namespace RadioSender.Hosts.Target.Oribos
         // r[0] è "Ok"
         if (r.Length > 1)
         {
+#pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
           var nome = r[1];
           var societa = r[2];
           var nazione = r[3];
           var tempotot = r[4];
+#pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
         }
       }
       else

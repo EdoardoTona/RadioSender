@@ -3,15 +3,15 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common.Filters;
-using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 
 namespace RadioSender.Hosts.Target.Oribos
 {
   public record OribosServer : FilterableConfiguration
   {
-    public string Host { get; init; }
+    public string? Host { get; init; }
   }
 
   public static class ConfigureOribos
@@ -25,14 +25,11 @@ namespace RadioSender.Hosts.Target.Oribos
 
         var servers = context.Configuration.GetSection("Target:Oribos:Servers").Get<IEnumerable<OribosServer>>();
 
-        foreach (var s in servers)
-        {
-          var server = s;
-          if (s.Host.Contains("localhost"))
-            server = s with { Host = server.Host.Replace("localhost", "127.0.0.1") }; // optimization to skip the dns resolution
-
+        if (servers.Any())
           services.AddHttpClient();
 
+        foreach (var server in servers)
+        {
           services.AddSingleton<ITarget>(s => new OribosService(
             s.GetServices<IFilter>(),
             s.GetRequiredService<IBackgroundJobClient>(),

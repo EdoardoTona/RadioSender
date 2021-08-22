@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
@@ -31,6 +29,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
     }
     public byte MessDetail; // 17   Status Message IMA = 9
 
-    public List<Jump> Jumps = new List<Jump>();
+    public List<Jump> Jumps = new();
   }
 }

@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public class TmFRadioGateway : ISource, IHostedService, IDisposable
+  public sealed class TmFRadioGateway : ISource, IHostedService, IDisposable
   {
     public const uint BROADCAST = 0xffffffff;
 
@@ -24,11 +24,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
     private readonly DeviceService _deviceService;
     private readonly Gateway _configuration;
     private readonly SerialPort _port;
-    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+    private readonly CancellationTokenSource _cts = new();
 
-    private Task _readTask;
-    private byte _commandId = 0;
-    private Timer _timer;
+    private Task? _readTask;
+    private byte _commandId;
+    private Timer? _timer;
 
     public TmFRadioGateway(
       IEnumerable<IFilter> filters,
@@ -114,7 +114,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       StopAsync(default).Wait();
     }
 
-    public async void CheckStatus(object state)
+    public async void CheckStatus(object? state)
     {
       await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
       await Task.Delay(200, _cts.Token);
@@ -149,7 +149,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       try
       {
         //_port.Write(data, 0, data.Length);
-        await _port.BaseStream.WriteAsync(data, ct);
+        await _port!.BaseStream.WriteAsync(data, ct);
       }
       catch (TimeoutException)
       {
@@ -175,9 +175,9 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
           try
           {
-            var length = (int)await _port.ReadByteAsync(_cts.Token).ConfigureAwait(false);
+            var length = (int)await _port!.ReadByteAsync(_cts.Token).ConfigureAwait(false);
 
-            if (_port.BytesToRead < length - 1)
+            if (_port!.BytesToRead < length - 1)
             {
               await Task.Delay(50, _cts.Token);
               if (_port.BytesToRead < length - 1)
@@ -206,21 +206,21 @@ namespace RadioSender.Hosts.Source.TmFRadio
             var header = new RxHeader(data);
 
 
-            RxMsg packet = null;
+            RxMsg? packet = null;
 
             if (header.PacketType == PacketType.Event)
             {
               if (data[17] == 0x09)
               {
                 packet = new RxGetStatus(header, data);
-                UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus).Voltage_V);
+                UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus)!.Voltage_V);
               }
               else if (data[17] == 0x20)
               {
                 packet = new RxGetPath(header, data);
                 var from = header.OrigID;
                 var hop = header.HopCounter == 0 ? 1 : header.HopCounter;
-                foreach (var jump in (packet as RxGetPath).Jumps)
+                foreach (var jump in (packet as RxGetPath)!.Jumps)
                 {
                   UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
                   from = jump.ReceiverId;
@@ -235,7 +235,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
             {
               packet = new RxData(header, data);
 
-              var punch = SportidentSerialPort.MessageToPunch((packet as RxData).RxSerData);
+              var punch = SportidentSerialPort.MessageToPunch((packet as RxData)!.RxSerData);
               _dispatcherService.PushPunch(punch);
             }
 

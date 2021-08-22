@@ -1,6 +1,7 @@
 ﻿using Hardcodet.Wpf.TaskbarNotification;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
+using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -13,20 +14,25 @@ using System.Windows.Threading;
 
 namespace RadioSender
 {
-  public class Launcher : IHostedService
+  public sealed class Launcher : IHostedService, IDisposable
   {
     private static readonly string URL = "http://localhost:5000/";
 
-    private TaskbarIcon taskBar;
+    private TaskbarIcon? taskBar;
     private readonly IHostApplicationLifetime appLife;
     private readonly IWebHostEnvironment env;
 
-    private Thread _uiThread;
+    private Thread? _uiThread;
 
     public Launcher(IHostApplicationLifetime appLife, IWebHostEnvironment env)
     {
       this.appLife = appLife;
       this.env = env;
+    }
+
+    public void Dispose()
+    {
+      taskBar?.Dispose();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -113,7 +119,7 @@ namespace RadioSender
       return Task.CompletedTask;
     }
 
-    private void OpenInfoWindow()
+    private static void OpenInfoWindow()
     {
 
       var w = new Window

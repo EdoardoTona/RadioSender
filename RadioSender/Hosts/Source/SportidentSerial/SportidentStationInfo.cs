@@ -1,9 +1,10 @@
-﻿using System;
+﻿#pragma warning disable
+
+using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
@@ -147,9 +148,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     {
       ProductType ProductType = ProductType.NotSet;
       ProductInterface ProductInterface = ProductInterface.NotSet;
-#pragma warning disable CS0219 // La variabile è assegnata, ma il suo valore non viene mai usato
       var attachedSrrModule = false;
-#pragma warning restore CS0219 // La variabile è assegnata, ma il suo valore non viene mai usato
       bool flag1 = ((int)cfg0 & 128) == 128;
       string str1 = string.Empty;
       string str2 = string.Empty;

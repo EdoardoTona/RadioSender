@@ -32,7 +32,7 @@ namespace RadioSender.Hosts.Common
       _ = Task.WhenAll(_targets.Select(t => t.SendPunches(_punches, default)));
     }
 
-    public void PushPunch(Punch punch)
+    public void PushPunch(Punch? punch)
     {
       punch = _filter.Transform(punch);
 
@@ -56,7 +56,7 @@ namespace RadioSender.Hosts.Common
     {
       punches = _filter.Transform(punches);
 
-      if (punches == null || !punches.Any())
+      if (!punches.Any())
         return;
 
       var notDuplicated = new List<Punch>();

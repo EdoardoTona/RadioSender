@@ -8,7 +8,7 @@ namespace RadioSender.Hosts.Target.UI
 {
   public record UIConfiguration : FilterableConfiguration
   {
-    public bool Enable { get; init; } = false;
+    public bool Enable { get; init; }
   }
   public static class ConfigureUI
   {

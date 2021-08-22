@@ -10,7 +10,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 {
   public record Gateway : FilterableConfiguration
   {
-    public string PortName { get; init; }
+    public string? PortName { get; init; }
     public int Baudrate { get; init; } = 19200;
   }
 

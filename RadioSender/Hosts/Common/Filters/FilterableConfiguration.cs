@@ -2,6 +2,6 @@
 {
   public record FilterableConfiguration : Configuration
   {
-    public string Filter { get; init; }
+    public string? Filter { get; init; }
   }
 }

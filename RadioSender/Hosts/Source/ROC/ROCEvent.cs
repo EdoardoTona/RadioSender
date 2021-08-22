@@ -25,9 +25,9 @@ namespace RadioSender.Hosts.Source.ROC
     private readonly int _refreshInterval_ms;
     private readonly IFilter _filter = Filter.Invariant;
 
-    private long _lastReceivedId = 0;
+    private long _lastReceivedId;
 
-    private CsvConfiguration _csvReaderConfiguration;
+    private readonly CsvConfiguration _csvReaderConfiguration;
 
     public ROCEvent(
       IEnumerable<IFilter> filters,

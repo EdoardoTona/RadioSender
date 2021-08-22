@@ -8,19 +8,20 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.File
 {
-  public class FileTarget : ITarget, IDisposable
+  public sealed class FileTarget : ITarget, IDisposable
   {
     private readonly SemaphoreSlim _semaphore;
 
-    private IFilter _filter;
+    private IFilter _filter = Filter.Invariant;
     private FileConfiguration _configuration;
 
-    private FileWriter _fileWriter;
+    private FileWriter? _fileWriter;
 
     public FileTarget(
       IEnumerable<IFilter> filters,
       FileConfiguration configuration)
     {
+      _configuration = configuration;
       _semaphore = new SemaphoreSlim(1, 1);
       UpdateConfiguration(filters, configuration);
     }
@@ -32,7 +33,7 @@ namespace RadioSender.Hosts.Target.File
 
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
     {
-      Interlocked.Exchange(ref _configuration, configuration as FileConfiguration);
+      Interlocked.Exchange(ref _configuration!, configuration as FileConfiguration);
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
 
       _semaphore.Wait();
@@ -40,7 +41,8 @@ namespace RadioSender.Hosts.Target.File
       try
       {
         _fileWriter?.Dispose();
-        _fileWriter = new FileWriter(_configuration.Path);
+        if (!string.IsNullOrEmpty(_configuration.Path))
+          _fileWriter = new FileWriter(_configuration.Path);
       }
       finally
       {
@@ -49,13 +51,17 @@ namespace RadioSender.Hosts.Target.File
     }
 
 
-    public async Task SendPunch(Punch punch, CancellationToken ct = default)
+    public async Task SendPunch(Punch? punch, CancellationToken ct = default)
     {
       await Task.Yield();
-      punch = _filter.Transform(punch);
-      if (punch == null) return;
+      if (_fileWriter == null || string.IsNullOrWhiteSpace(_configuration.Format))
+        return;
 
-      await _semaphore.WaitAsync();
+      punch = _filter.Transform(punch);
+      if (punch == null)
+        return;
+
+      await _semaphore.WaitAsync(ct);
       try
       {
         string record = FormatStringHelper.GetString(punch, _configuration.Format);

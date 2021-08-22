@@ -13,23 +13,25 @@ namespace RadioSender.Hosts.Target.Tcp
     private IFilter _filter = Filter.Invariant;
     private TcpTargetConfiguration _configuration;
 
-    private TcpServer _tcpServer;
-
-
+    private TcpServer? _tcpServer;
 
     public TcpTargetServer(
       IEnumerable<IFilter> filters,
       TcpTargetConfiguration configuration)
     {
+      _configuration = configuration;
       UpdateConfiguration(filters, configuration);
     }
 
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
     {
-      Interlocked.Exchange(ref _configuration, configuration as TcpTargetConfiguration);
+      Interlocked.Exchange(ref _configuration!, configuration as TcpTargetConfiguration);
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
 
-      var newServer = new TcpServer(_configuration.Address, _configuration.Port);
+      if (_configuration.Address == null || _configuration.Port == null)
+        return;
+
+      var newServer = new TcpServer(_configuration.Port.Value);
       newServer.Start();
 
       var oldServer = Interlocked.Exchange(ref _tcpServer, newServer);
@@ -48,9 +50,9 @@ namespace RadioSender.Hosts.Target.Tcp
         await SendPunch(punch, ct);
     }
 
-    public Task SendPunch(Punch punch, CancellationToken ct = default)
+    public Task SendPunch(Punch? punch, CancellationToken ct = default)
     {
-      if (_tcpServer.ConnectedSessions == 0)
+      if (_tcpServer == null || _tcpServer.ConnectedSessions == 0 || string.IsNullOrWhiteSpace(_configuration.Format))
         return Task.CompletedTask;
 
       punch = _filter.Transform(punch);
@@ -72,13 +74,13 @@ namespace RadioSender.Hosts.Target.Tcp
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-      _tcpServer.Start();
+      _tcpServer?.Start();
       return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-      _tcpServer.Stop();
+      _tcpServer?.Stop();
       return Task.CompletedTask;
     }
 

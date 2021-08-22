@@ -78,7 +78,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
     {
       float rssi = Convert.ToInt32(_bRSSI);
       float deltaRSSI = 190 - 46; // (190 = segnale minimo, 20 = saturazione                      
-      rssi = rssi - 46; // rssi - minimo valore
+      rssi -= 46; // rssi - minimo valore
       float res = (rssi / deltaRSSI) * 100;
 
       int risp = 100 - (int)res;

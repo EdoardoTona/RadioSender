@@ -11,7 +11,7 @@ namespace RadioSender.Hosts.Source.ROC
 {
   public record Event : FilterableConfiguration
   {
-    public int EventId { get; init; }
+    public int? EventId { get; init; }
     public int RefreshMs { get; init; } = 1000;
   }
 

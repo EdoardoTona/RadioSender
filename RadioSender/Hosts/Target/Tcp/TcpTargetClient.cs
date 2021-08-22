@@ -12,21 +12,27 @@ namespace RadioSender.Hosts.Target.Tcp
     private IFilter _filter = Filter.Invariant;
     private TcpTargetConfiguration _configuration;
 
-    private TcpClient _tcpClient;
+    private TcpClient? _tcpClient;
 
     public TcpTargetClient(
       IEnumerable<IFilter> filters,
       TcpTargetConfiguration configuration)
     {
+      _configuration = configuration;
       UpdateConfiguration(filters, configuration);
     }
 
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
     {
-      Interlocked.Exchange(ref _configuration, configuration as TcpTargetConfiguration);
+      Interlocked.Exchange(ref _configuration!, configuration as TcpTargetConfiguration);
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
 
-      var newClient = new TcpClient(_configuration.Address, _configuration.Port);
+      if (_configuration.Address == null || _configuration.Port == null)
+        return;
+
+      var address = _configuration.Address == "localhost" ? "127.0.0.1" : _configuration.Address;
+
+      var newClient = new TcpClient(address, _configuration.Port.Value);
       newClient.ConnectAsync();
 
       var oldClient = Interlocked.Exchange(ref _tcpClient, newClient);
@@ -45,9 +51,9 @@ namespace RadioSender.Hosts.Target.Tcp
         await SendPunch(punch, ct);
     }
 
-    public Task SendPunch(Punch punch, CancellationToken ct = default)
+    public Task SendPunch(Punch? punch, CancellationToken ct = default)
     {
-      if (!_tcpClient.IsConnected)
+      if (_tcpClient == null || !_tcpClient.IsConnected || string.IsNullOrWhiteSpace(_configuration.Format))
         return Task.CompletedTask;
 
       punch = _filter.Transform(punch);

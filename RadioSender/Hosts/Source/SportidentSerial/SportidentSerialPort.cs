@@ -15,8 +15,9 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
-  public class SportidentSerialPort : ISource, IHostedService, IDisposable
+  public sealed class SportidentSerialPort : ISource, IHostedService, IDisposable
   {
+#pragma warning disable IDE0051 // Rimuovi i membri privati inutilizzati
     private const byte WAKEUP = 0xFF;
     private const byte STX = 0x02;
     private const byte ETX = 0x03;
@@ -30,6 +31,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     private const byte ARG_DirectCommunication = 0x4D;
     private const byte ARG_RemoteCommunication = 0x53;
+#pragma warning restore IDE0051 // Rimuovi i membri privati inutilizzati
 
     private static readonly RecyclableMemoryStreamManager _memoryManager = new();
 
@@ -37,10 +39,10 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     private readonly DispatcherService _dispatcherService;
     private readonly Port _configuration;
     private readonly SerialPort _port;
-    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+    private readonly CancellationTokenSource _cts = new();
 
-    private SportidentProduct _stationInfo;
-    private Task _readTask;
+    private SportidentProduct? _stationInfo;
+    private Task? _readTask;
 
     public SportidentSerialPort(
       IEnumerable<IFilter> filters,
@@ -142,7 +144,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     }
 
 
-    private async Task<SportidentProduct> GetStationInfo()
+    private async Task<SportidentProduct?> GetStationInfo()
     {
       var res = await SendCommand(CMD_GetSystemValue, 0x00, 0x80); // read 0x80 bytes from position 0x00
 
@@ -176,6 +178,12 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         }
 
         var etx = ms.ReadByte(); // should be ETX
+
+        if (etx != ETX)
+        {
+          Log.Warning("Invalid ETX byte");
+          return null;
+        }
 
         return SportidentStationInfo.GetSportidentProductInfo(data);
       }
@@ -226,7 +234,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     }
 
-    public async Task<byte[]> SendCommand(byte command, params byte[] parameters)
+    public async Task<byte[]?> SendCommand(byte command, params byte[] parameters)
     {
       var crc = CalculateCrc(command, parameters);
 
@@ -271,7 +279,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       return null;
     }
 
-    public static Punch MessageToPunch(byte[] buffer)
+    public static Punch? MessageToPunch(byte[] buffer)
     {
       if (buffer[0] == WAKEUP)
         Buffer.BlockCopy(buffer, 1, buffer, 0, buffer.Length - 1);
@@ -312,8 +320,10 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         cardNumber = BinaryPrimitives.ReadUInt16BigEndian(new byte[] { buffer[7], buffer[8] }) + buffer[6] * 100000;
       }
 
+#pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
       var am = buffer[9] % 2 == 0; // antemeridian
       var dayOfWeek = (buffer[9] << 4) >> 5; // from 0 (sunday) to 6 (saturday)
+#pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
 
       var time_s = BinaryPrimitives.ReadUInt16BigEndian(new byte[] { buffer[10], buffer[11] });
 

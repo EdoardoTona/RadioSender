@@ -9,9 +9,9 @@ namespace RadioSender.Hosts.Target.Tcp
 {
   public record TcpTargetConfiguration : FilterableConfiguration
   {
-    public string Address { get; init; }
-    public int Port { get; init; }
-    public string Format { get; init; }
+    public string? Address { get; init; }
+    public int? Port { get; init; }
+    public string? Format { get; init; }
     public bool AsServer { get; init; }
   }
 
@@ -26,12 +26,8 @@ namespace RadioSender.Hosts.Target.Tcp
 
         var targets = context.Configuration.GetSection("Target:Tcp:Targets").Get<IEnumerable<TcpTargetConfiguration>>();
 
-        foreach (var t in targets)
+        foreach (var target in targets)
         {
-          var target = t;
-          if (t.Address.ToLower().Equals("localhost"))
-            target = t with { Address = target.Address.Replace("localhost", "127.0.0.1") }; // optimization to skip the dns resolution
-
           if (target.AsServer)
           {
             services.AddSingleton<ITarget>(sp => new TcpTargetServer(

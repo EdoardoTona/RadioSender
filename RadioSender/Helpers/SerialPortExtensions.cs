@@ -7,6 +7,7 @@ namespace RadioSender.Helpers
 {
   public static class SerialPortExtensions
   {
+    // TODO optimize
     public async static Task ReadAsync(this SerialPort serialPort, byte[] buffer, int offset, int count, CancellationToken ct = default)
     {
       var bytesToRead = count;

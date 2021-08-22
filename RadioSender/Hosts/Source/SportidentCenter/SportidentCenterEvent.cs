@@ -26,9 +26,9 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     private readonly DispatcherService _dispatcherService;
     private readonly int _refreshInterval_ms;
 
-    private long _lastReceivedId = 0;
+    private long _lastReceivedId;
 
-    private CsvConfiguration _csvReaderConfiguration;
+    private readonly CsvConfiguration _csvReaderConfiguration;
 
     public SportidentCenterEvent(
       IEnumerable<IFilter> filters,
@@ -42,7 +42,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
       _csvReaderConfiguration = new CsvConfiguration(CultureInfo.InvariantCulture)
       {
-        PrepareHeaderForMatch = args => args.Header.ToLower()
+        PrepareHeaderForMatch = args => args.Header.ToLower(CultureInfo.InvariantCulture)
       };
       _refreshInterval_ms = siEvent.RefreshMs;
       _filter = filters.GetFilter(_configuration.Filter);

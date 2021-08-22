@@ -8,7 +8,7 @@ namespace RadioSender.Hosts.Common.Filters
   {
     public static Filter Invariant { get => new() { Enable = false }; }
 
-    public string Name { get; init; }
+    public string Name { get; init; } = null!;
     public bool Enable { get; init; } = true;
     public HashSet<int> IncludeOnlyControls { get; init; } = new HashSet<int>();
     public HashSet<string> IncludeOnlyCards { get; init; } = new HashSet<string>();
@@ -17,7 +17,7 @@ namespace RadioSender.Hosts.Common.Filters
     public Dictionary<PunchControlType, HashSet<int>> TypeFromCode { get; init; } = new();
     public TimeSpan IgnoreOlderThan { get; init; }
 
-    public Punch Transform(Punch punch)
+    public Punch? Transform(Punch? punch)
     {
       if (!Enable || punch == null)
         return punch;
@@ -63,16 +63,19 @@ namespace RadioSender.Hosts.Common.Filters
 
     public IEnumerable<Punch> Transform(IEnumerable<Punch> punches)
     {
-      if (!Enable || punches == null || !punches.Any())
+      if (!Enable)
         return punches;
 
-      return punches.Select(p => Transform(p)).Where(p => p != null);
+      if (punches == null || !punches.Any())
+        return Array.Empty<Punch>();
+
+      return punches.Select(p => Transform(p)).Where(p => p != null).Select(p => p!);
     }
   }
 
   public static class IEnumerableFilterExtension
   {
-    public static IFilter GetFilter(this IEnumerable<IFilter> filters, string name)
+    public static IFilter GetFilter(this IEnumerable<IFilter> filters, string? name)
     {
       if (!string.IsNullOrWhiteSpace(name) && filters.Any(f => f.Name == name))
         return filters.Where(f => f.Name == name).First();

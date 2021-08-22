@@ -17,21 +17,27 @@ namespace RadioSender.Hosts.Target.SIRAP
     private IFilter _filter = Filter.Invariant;
     private SirapClientConfiguration _configuration;
 
-    private TcpClient _tcpClient;
+    private TcpClient? _tcpClient;
 
     public SirapClient(
       IEnumerable<IFilter> filters,
       SirapClientConfiguration configuration)
     {
+      _configuration = configuration;
       UpdateConfiguration(filters, configuration);
     }
 
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
     {
-      Interlocked.Exchange(ref _configuration, configuration as SirapClientConfiguration);
+      Interlocked.Exchange(ref _configuration!, configuration as SirapClientConfiguration);
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
 
-      var newClient = new TcpClient(_configuration.Address, _configuration.Port);
+      if (_configuration.Address == null || _configuration.Port == null)
+        return;
+
+      var address = _configuration.Address == "localhost" ? "127.0.0.1" : _configuration.Address;
+
+      var newClient = new TcpClient(address, _configuration.Port.Value);
       newClient.ConnectAsync();
 
       var oldClient = Interlocked.Exchange(ref _tcpClient, newClient);
@@ -50,9 +56,9 @@ namespace RadioSender.Hosts.Target.SIRAP
         await SendPunch(punch, ct);
     }
 
-    public Task SendPunch(Punch punch, CancellationToken ct = default)
+    public Task SendPunch(Punch? punch, CancellationToken ct = default)
     {
-      if (!_tcpClient.IsConnected)
+      if (_tcpClient == null || !_tcpClient.IsConnected)
         return Task.CompletedTask;
 
       punch = _filter.Transform(punch);
@@ -60,7 +66,7 @@ namespace RadioSender.Hosts.Target.SIRAP
       if (punch == null)
         return Task.CompletedTask;
 
-      byte[] buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
+      var buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
 
       if (buffer == null || buffer.Length == 0)
         return Task.CompletedTask;
@@ -70,7 +76,7 @@ namespace RadioSender.Hosts.Target.SIRAP
       return Task.CompletedTask;
     }
 
-    private static byte[] GetBytes(Punch punch, int version, TimeSpan zeroTime)
+    private static byte[]? GetBytes(Punch punch, int version, TimeSpan zeroTime)
     {
       if (!int.TryParse(punch.Card, out int chipNo))
         return null; // not numeric cards are not supported in SIRAP

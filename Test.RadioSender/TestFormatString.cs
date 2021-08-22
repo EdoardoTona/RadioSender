@@ -4,9 +4,10 @@ using RadioSender.Hosts.Common;
 
 namespace Test.RadioSender
 {
-  public class Tests
+  public class TestFormatString
   {
-    Punch punch;
+    Punch? punch;
+
     [OneTimeSetUp]
     public void Setup()
     {
@@ -44,9 +45,10 @@ namespace Test.RadioSender
     [TestCase("1", "{ControlType:d}")]
     [TestCase("00000001", "{ControlType:x}")]
     [TestCase("", "{invalid}")]
-    public void Test1(string expected, string conf)
+    [TestCase("", "")]
+    public void Test(string expected, string conf)
     {
-      var res = FormatStringHelper.GetString(punch, conf);
+      var res = FormatStringHelper.GetString(punch!, conf);
       Assert.AreEqual(expected, res);
 
       Assert.Pass();

@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hubs.Devices
 {
@@ -11,5 +8,5 @@ namespace RadioSender.Hubs.Devices
     public bool Hidden { get => DateTimeOffset.UtcNow - LastSeen > TimeSpan.FromSeconds(20); }
   }
 
-  public record Node(string Id, string Label, int? Value, string Title, DateTimeOffset LastSeen);
+  public record Node(string Id, string Label, int? Value, string? Title, DateTimeOffset LastSeen);
 }

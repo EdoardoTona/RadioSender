@@ -1,0 +1,19 @@
+﻿[*.cs]
+
+# CA2016: Inoltrare il parametro 'CancellationToken' ai metodi che ne accettano uno
+dotnet_diagnostic.CA2016.severity = error
+dotnet_diagnostic.CA1001.severity=error
+
+[*.{cs,vb}]
+dotnet_diagnostic.CA1041.severity=silent
+dotnet_diagnostic.CA1067.severity=warning
+dotnet_diagnostic.CA1068.severity=warning
+dotnet_diagnostic.CA1069.severity=suggestion
+dotnet_diagnostic.CA1304.severity=warning
+dotnet_diagnostic.CA1805.severity=suggestion
+dotnet_diagnostic.CA2215.severity=suggestion
+dotnet_diagnostic.CA1838.severity=suggestion
+dotnet_diagnostic.CA1708.severity=warning
+dotnet_diagnostic.CA5350.severity=suggestion
+dotnet_diagnostic.CA5351.severity=suggestion
+dotnet_diagnostic.CA5364.severity=suggestion

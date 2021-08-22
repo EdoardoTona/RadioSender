@@ -8,7 +8,7 @@ namespace RadioSender.Hosts.Target
 {
   public class TcpServer : NetCoreServer.TcpServer
   {
-    public TcpServer(string address, int port) : base(IPAddress.Any, port) { }
+    public TcpServer(int port) : base(IPAddress.Any, port) { }
 
     public ConcurrentDictionary<Guid, NetCoreServer.TcpSession> GetSessions() { return Sessions; }
 

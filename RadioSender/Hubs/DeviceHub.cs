@@ -1,6 +1,4 @@
 ﻿using Microsoft.AspNetCore.SignalR;
-using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Source.TmFRadio;
 using RadioSender.Hubs.Devices;
 using System.Threading.Tasks;
 

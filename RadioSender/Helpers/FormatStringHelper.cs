@@ -33,11 +33,11 @@ namespace RadioSender.Helpers
     {
       return FormatterPattern.Replace(format, (match) =>
       {
-        var capture = match?.Groups?.OfType<Group>().Skip(1).Select((group) => group.Value).ToArray();
-        if (!(capture?.FirstOrDefault() is string key && MapKey(punch, key) is var value && value != null))
+        var capture = match.Groups?.OfType<Group>().Skip(1).Select((group) => group.Value).ToArray();
+        if (!(capture?.FirstOrDefault() is string key && MapKey(punch, key) is object value))
           return match.Value;
 
-        return capture.Length > 1 && value is IFormattable formattable ? formattable.ToString(capture[1], CultureInfo.InvariantCulture) : value?.ToString();
+        return capture.Length > 1 && value is IFormattable formattable ? formattable.ToString(capture[1], CultureInfo.InvariantCulture) : value.ToString() ?? "";
       });
     }
 

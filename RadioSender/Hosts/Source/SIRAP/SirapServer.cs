@@ -22,7 +22,7 @@ namespace RadioSender.Hosts.Source.SIRAP
     public SirapServer(
       IEnumerable<IFilter> filters,
       DispatcherService dispatcherService,
-      SirapServerConfiguration configuration) : base(IPAddress.Any, configuration.Port)
+      SirapServerConfiguration configuration) : base(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration)))
     {
       _dispatcherService = dispatcherService;
       _configuration = configuration;
@@ -69,11 +69,13 @@ namespace RadioSender.Hosts.Source.SIRAP
 
     internal void OnReceivedV1(TcpSirapSession session, ReadOnlySpan<byte> buffer)
     {
+#pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
       byte type = buffer[0]; // 0=punch, 255=Triggered time
       var codeNo = BitConverter.ToUInt16(buffer.Slice(1, 2));
       var chipNo = BitConverter.ToInt32(buffer.Slice(3, 4));
       var codeDay = BitConverter.ToInt32(buffer.Slice(7, 4)); // Day information from SI punch, sunday = 0
       var codeTime = BitConverter.ToInt32(buffer.Slice(11, 4));
+#pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
 
       if (codeTime == 360000001)
       {
@@ -105,12 +107,14 @@ namespace RadioSender.Hosts.Source.SIRAP
         session.Name = Encoding.UTF8.GetString(buffer.Slice(1, nameLength));
       }
 
+#pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
       byte type = buffer[21]; // 0=punch, 255=Triggered time
 
       var codeNo = BitConverter.ToUInt16(buffer.Slice(22, 2));
       var chipNo = BitConverter.ToInt32(buffer.Slice(24, 4));
       var codeDay = BitConverter.ToInt32(buffer.Slice(28, 4)); // Day information from SI punch
       var codeTime = BitConverter.ToInt32(buffer.Slice(32, 4));
+#pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
 
       if (codeTime == 360000001)
       {
@@ -138,8 +142,8 @@ namespace RadioSender.Hosts.Source.SIRAP
 
   class TcpSirapSession : TcpSession
   {
-    private string _name = null;
-    public string Name
+    private string? _name;
+    public string? Name
     {
       get => _name;
       set

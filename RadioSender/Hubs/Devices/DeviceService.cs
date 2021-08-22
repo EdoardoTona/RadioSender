@@ -4,18 +4,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hubs.Devices
 {
-  public class DeviceService : IDisposable
+  public sealed class DeviceService : IDisposable
   {
     private readonly IHubContext<DeviceHub> _hubContext;
 
     private readonly SortedDictionary<string, Edge> _edges = new();
     private readonly SortedDictionary<string, Node> _nodes = new();
 
-    private readonly Subject<object> _changes = new();
+    private readonly Subject<object?> _changes = new();
     private readonly IDisposable sub;
 
     public DeviceService(IHubContext<DeviceHub> hubContext)
