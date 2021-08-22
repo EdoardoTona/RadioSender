@@ -26,7 +26,7 @@ namespace RadioSender.Hosts.Target.UI
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
     }
 
-    public async Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
+    public async Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       if (Clients == null)
         return;
@@ -39,10 +39,10 @@ namespace RadioSender.Hosts.Target.UI
       await Clients.All.SendAsync("Punch", punch, ct);
     }
 
-    public async Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
+    public async Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
       foreach (var dispatch in dispatches)
-        await SendPunch(dispatch, ct);
+        await SendDispatch(dispatch, ct);
 
     }
 

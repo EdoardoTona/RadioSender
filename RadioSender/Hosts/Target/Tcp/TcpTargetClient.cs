@@ -46,13 +46,13 @@ namespace RadioSender.Hosts.Target.Tcp
 
     }
 
-    public async Task SendPunches(IEnumerable<PunchDispatch> dispatcher, CancellationToken ct = default)
+    public async Task SendDispatches(IEnumerable<PunchDispatch> dispatcher, CancellationToken ct = default)
     {
       foreach (var dispatch in dispatcher)
-        await SendPunch(dispatch, ct);
+        await SendDispatch(dispatch, ct);
     }
 
-    public Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
+    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       if (_tcpClient == null || !_tcpClient.IsConnected || string.IsNullOrWhiteSpace(_configuration.Format))
         return Task.CompletedTask;

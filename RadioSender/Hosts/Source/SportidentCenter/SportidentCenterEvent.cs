@@ -103,7 +103,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
-          _dispatcherService.PushPunch(
+          _dispatcherService.PushDispatch(
                       new PunchDispatch(
                         _filter.Transform(
                           punches.Select(p =>

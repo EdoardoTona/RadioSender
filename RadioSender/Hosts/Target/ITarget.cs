@@ -9,7 +9,7 @@ namespace RadioSender.Hosts.Target
   public interface ITarget
   {
     void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration);
-    Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default);
-    Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default);
+    Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default);
+    Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default);
   }
 }

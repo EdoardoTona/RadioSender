@@ -97,7 +97,7 @@ namespace RadioSender.Hosts.Source.SIRAP
                   );
 
       if (punch != null)
-        _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
+        _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
     }
 
     internal void OnReceivedV2(TcpSirapSession session, ReadOnlySpan<byte> buffer)
@@ -137,7 +137,7 @@ namespace RadioSender.Hosts.Source.SIRAP
                   );
 
       if (punch != null)
-        _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
+        _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
     }
   }
 

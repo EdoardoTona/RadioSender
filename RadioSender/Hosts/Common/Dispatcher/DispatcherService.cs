@@ -29,7 +29,7 @@ namespace RadioSender.Hosts.Common
 
     public void ResendPunches()
     {
-      _ = Task.WhenAll(_targets.Select(t => t.SendPunch(new PunchDispatch(_punches.ToArray(), null), default)));
+      _ = Task.WhenAll(_targets.Select(t => t.SendDispatch(new PunchDispatch(_punches.ToArray(), null), default)));
     }
 
     //public void PushPunch(Punch? punch)
@@ -78,7 +78,7 @@ namespace RadioSender.Hosts.Common
     //}
 
 
-    public void PushPunch(PunchDispatch dispatch)
+    public void PushDispatch(PunchDispatch dispatch)
     {
       var punches = _filter.Transform(dispatch.Punches);
 
@@ -103,10 +103,10 @@ namespace RadioSender.Hosts.Common
         return;
 
       dispatch = dispatch with { Punches = toBeForwardedPunch };
-      _ = Task.WhenAll(_targets.Select(t => t.SendPunch(dispatch, default)));
+      _ = Task.WhenAll(_targets.Select(t => t.SendDispatch(dispatch, default)));
     }
 
-    public void PushPunches(IEnumerable<PunchDispatch> dispatches)
+    public void PushDispatches(IEnumerable<PunchDispatch> dispatches)
     {
       var toBeForwardedDispatcher = new List<PunchDispatch>();
       foreach (var dispatch in dispatches)
@@ -134,7 +134,7 @@ namespace RadioSender.Hosts.Common
       }
 
       if (toBeForwardedDispatcher.Any())
-        _ = Task.WhenAll(_targets.Select(t => t.SendPunches(toBeForwardedDispatcher, default)));
+        _ = Task.WhenAll(_targets.Select(t => t.SendDispatches(toBeForwardedDispatcher, default)));
     }
 
   }

@@ -34,7 +34,7 @@ namespace RadioSender.Hosts.Target.Oribos
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
     }
 
-    public Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
+    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
 
       foreach (var p in dispatch.Punches)
@@ -49,10 +49,10 @@ namespace RadioSender.Hosts.Target.Oribos
       return Task.CompletedTask;
     }
 
-    public Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
+    public Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
       foreach (var dispatch in dispatches)
-        SendPunch(dispatch, ct);
+        SendDispatch(dispatch, ct);
 
       return Task.CompletedTask;
     }

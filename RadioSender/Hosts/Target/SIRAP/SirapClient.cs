@@ -51,13 +51,13 @@ namespace RadioSender.Hosts.Target.SIRAP
 
     }
 
-    public async Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
+    public async Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
       foreach (var dispatch in dispatches)
-        await SendPunch(dispatch, ct);
+        await SendDispatch(dispatch, ct);
     }
 
-    public Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
+    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       if (_tcpClient == null || !_tcpClient.IsConnected)
         return Task.CompletedTask;

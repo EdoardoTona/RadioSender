@@ -221,7 +221,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           var punch = _filter.Transform(MessageToPunch(data));
 
           if (punch != null)
-            _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
+            _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
         }
         catch (OperationCanceledException)
         {

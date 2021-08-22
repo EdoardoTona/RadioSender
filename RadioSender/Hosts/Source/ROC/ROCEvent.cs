@@ -99,7 +99,7 @@ namespace RadioSender.Hosts.Source.ROC
 
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
-          _dispatcherService.PushPunch(
+          _dispatcherService.PushDispatch(
                       new PunchDispatch(
                         _filter.Transform(
                           punches.Select(p =>
