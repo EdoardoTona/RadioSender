@@ -54,13 +54,10 @@ namespace RadioSender.Hosts.Target.Tcp
 
     public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
-      if (_tcpClient == null || !_tcpClient.IsConnected || string.IsNullOrWhiteSpace(_configuration.Format))
+      if (dispatch.Punches == null || _tcpClient == null || !_tcpClient.IsConnected || string.IsNullOrWhiteSpace(_configuration.Format))
         return Task.CompletedTask;
 
       var punches = _filter.Transform(dispatch.Punches);
-
-      if (!punches.Any())
-        return Task.CompletedTask;
 
       foreach (var punch in punches)
       {

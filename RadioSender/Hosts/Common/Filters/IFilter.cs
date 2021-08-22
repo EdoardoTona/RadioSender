@@ -6,6 +6,6 @@ namespace RadioSender.Hosts.Common.Filters
   {
     string Name { get; init; }
     Punch? Transform(Punch? punch);
-    IEnumerable<Punch> Transform(IEnumerable<Punch> punches);
+    IEnumerable<Punch> Transform(IEnumerable<Punch>? punches);
   }
 }

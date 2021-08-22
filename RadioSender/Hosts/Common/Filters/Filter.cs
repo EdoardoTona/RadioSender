@@ -61,13 +61,13 @@ namespace RadioSender.Hosts.Common.Filters
       }; ;
     }
 
-    public IEnumerable<Punch> Transform(IEnumerable<Punch> punches)
+    public IEnumerable<Punch> Transform(IEnumerable<Punch>? punches)
     {
-      if (!Enable)
-        return punches;
-
-      if (punches == null || !punches.Any())
+      if (punches == null)
         return Array.Empty<Punch>();
+
+      if (!Enable || !punches.Any())
+        return punches;
 
       return punches.Select(p => Transform(p)).Where(p => p != null).Select(p => p!);
     }

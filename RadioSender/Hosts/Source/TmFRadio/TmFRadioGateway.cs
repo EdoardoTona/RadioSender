@@ -213,18 +213,24 @@ namespace RadioSender.Hosts.Source.TmFRadio
               if (data[17] == 0x09)
               {
                 packet = new RxGetStatus(header, data);
-                UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus)!.Voltage_V);
+                //UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus)!.Voltage_V);
+                _dispatcherService.PushDispatch(new PunchDispatch(Nodes: new[] { new NodeNew(header.OrigID.ToString(), null, header.Latency, header.RSSI_Percent) }));
               }
               else if (data[17] == 0x20)
               {
                 packet = new RxGetPath(header, data);
                 var from = header.OrigID;
                 var hop = header.HopCounter == 0 ? 1 : header.HopCounter;
+
+                var list = new List<Hop>();
                 foreach (var jump in (packet as RxGetPath)!.Jumps)
                 {
-                  UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
+                  list.Add(new Hop(from.ToString(), jump.ReceiverId.ToString(), header.Latency / hop, jump.RSSI_Percent));
+                  //UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
                   from = jump.ReceiverId;
                 }
+
+                _dispatcherService.PushDispatch(new PunchDispatch(Hops: list));
               }
               else
               {
@@ -238,12 +244,10 @@ namespace RadioSender.Hosts.Source.TmFRadio
               var punch = _filter.Transform(SportidentSerialPort.MessageToPunch((packet as RxData)!.RxSerData));
 
               if (punch != null)
-                _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+                _dispatcherService.PushDispatch(new PunchDispatch(Punches: new[] { punch }));
             }
 
             Log.Verbose(packet?.ToString());
-
-
           }
           catch (Exception e)
           {

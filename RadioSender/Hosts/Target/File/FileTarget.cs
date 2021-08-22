@@ -55,7 +55,7 @@ namespace RadioSender.Hosts.Target.File
     public async Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       await Task.Yield();
-      if (_fileWriter == null || string.IsNullOrWhiteSpace(_configuration.Format))
+      if (dispatch.Punches == null || _fileWriter == null || string.IsNullOrWhiteSpace(_configuration.Format))
         return;
 
       var punches = _filter.Transform(dispatch.Punches);

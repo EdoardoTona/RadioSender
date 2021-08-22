@@ -6,6 +6,7 @@ using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -85,7 +86,10 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         request.Headers.Add("apikey", _configuration.ApiKey);
         request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("text/csv"));
 
+        var sw = new Stopwatch();
+        sw.Start();
         var response = await _httpClient.SendAsync(request, ct);
+        sw.Stop();
 
         if (response.IsSuccessStatusCode)
         {
@@ -96,25 +100,29 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
           using var reader = new StreamReader(responseStream, Encoding.UTF8);
           using var csv = new CsvReader(reader, _csvReaderConfiguration);
-          IEnumerable<SimplePunch> punches = csv.GetRecords<SimplePunch>().ToList();
+          IEnumerable<SimplePunch> list = csv.GetRecords<SimplePunch>().OrderBy(p => p.Time).ToList();
 
-          if (!punches.Any())
-            return;
-
-          _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
-
-          _dispatcherService.PushDispatch(
-                      new PunchDispatch(
-                        _filter.Transform(
-                          punches.Select(p =>
+          IEnumerable<Punch>? punches = null;
+          if (list.Any())
+          {
+            punches = _filter.Transform(
+                        list.Select(p =>
                               new Punch(
                                Card: p.Card.ToString(),
                                Control: p.Code,
                                ControlType: MapControlType(p.Mode),
                                Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime
                               )
-                          )
-                        )
+                      )
+                    );
+
+            _lastReceivedId = list.Last().Id;
+          }
+
+          _dispatcherService.PushDispatch(
+                      new PunchDispatch(
+                        Punches: punches,
+                        Nodes: new[] { new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) }
                       )
             );
 

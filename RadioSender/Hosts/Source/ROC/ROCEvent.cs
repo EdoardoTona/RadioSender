@@ -6,6 +6,7 @@ using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -83,34 +84,39 @@ namespace RadioSender.Hosts.Source.ROC
         }
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/getPunches.asp?unitId={_configuration.EventId}&lastId={_lastReceivedId}");
-
+        var sw = new Stopwatch();
+        sw.Start();
         var response = await _httpClient.SendAsync(request, ct);
-
+        sw.Stop();
         if (response.IsSuccessStatusCode)
         {
           using var responseStream = await response.Content.ReadAsStreamAsync(ct);
 
           using var reader = new StreamReader(responseStream, Encoding.UTF8);
           using var csv = new CsvReader(reader, _csvReaderConfiguration);
-          IEnumerable<ROCPunch> punches = csv.GetRecords<ROCPunch>().ToList();
 
-          if (!punches.Any())
-            return;
+          var list = csv.GetRecords<ROCPunch>().OrderBy(p => p.Time).ToList();
+          IEnumerable<Punch>? punches = null;
+          if (list.Any())
+          {
+            punches = _filter.Transform(
+                        list.Select(p =>
+                        new Punch(
+                          Card: p.Card.ToString(),
+                          Time: p.Time,
+                          Control: p.Code,
+                          ControlType: PunchControlType.Unknown
+                        )
+                      )
+                    );
 
-          _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
+            _lastReceivedId = list.Last().Id;
+          }
 
           _dispatcherService.PushDispatch(
                       new PunchDispatch(
-                        _filter.Transform(
-                          punches.Select(p =>
-                            new Punch(
-                              Card: p.Card.ToString(),
-                              Time: p.Time,
-                              Control: p.Code,
-                              ControlType: PunchControlType.Unknown
-                            )
-                          )
-                        )
+                        Punches: punches,
+                        Nodes: new[] { new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) }
                       )
             );
 

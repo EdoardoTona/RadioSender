@@ -59,13 +59,10 @@ namespace RadioSender.Hosts.Target.SIRAP
 
     public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
-      if (_tcpClient == null || !_tcpClient.IsConnected)
+      if (dispatch.Punches == null || _tcpClient == null || !_tcpClient.IsConnected)
         return Task.CompletedTask;
 
       var punches = _filter.Transform(dispatch.Punches);
-
-      if (!punches.Any())
-        return Task.CompletedTask;
 
       foreach (var punch in punches)
       {

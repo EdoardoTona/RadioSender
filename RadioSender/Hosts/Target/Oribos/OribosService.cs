@@ -36,14 +36,13 @@ namespace RadioSender.Hosts.Target.Oribos
 
     public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
+      if (dispatch.Punches == null)
+        return Task.CompletedTask;
 
-      foreach (var p in dispatch.Punches)
+      var punches = _filter.Transform(dispatch.Punches);
+
+      foreach (var punch in punches)
       {
-        var punch = _filter.Transform(p);
-
-        if (punch == null)
-          continue;
-
         _backgroundJobClient.Enqueue(() => SendPunchAction(_configuration, punch, default));
       }
       return Task.CompletedTask;
@@ -60,7 +59,7 @@ namespace RadioSender.Hosts.Target.Oribos
     public static async Task SendPunchAction(OribosServer _configuration, Punch punch, CancellationToken ct = default)
     {
       if (string.IsNullOrEmpty(_configuration.Host) || _httpClientFactory == null)
-        return;
+        throw new ArgumentException("Missing host");
 
       var httpClient = _httpClientFactory.CreateClient();
 
