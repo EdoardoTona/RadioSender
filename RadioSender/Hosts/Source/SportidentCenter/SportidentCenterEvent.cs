@@ -74,6 +74,11 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     {
       try
       {
+        if (_configuration.EventId == null || _configuration.ApiKey == null)
+        {
+          Log.Error("No EventId/ApiKey");
+          return;
+        }
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{_configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
 
         request.Headers.Add("apikey", _configuration.ApiKey);
@@ -100,13 +105,13 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           _dispatcherService.PushPunches(
             _filter.Transform(
                     punches.Select(p =>
-                    new Punch()
-                    {
-                      Card = p.Card.ToString(),
-                      Time = DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
-                      Control = p.Code,
-                      ControlType = MapControlType(p.Mode)
-                    })
+                      new Punch(
+                       Card: p.Card.ToString(),
+                       Control: p.Code,
+                       ControlType: MapControlType(p.Mode),
+                       Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime
+                       )
+                    )
                   )
             );
 

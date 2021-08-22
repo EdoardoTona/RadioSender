@@ -11,13 +11,12 @@ namespace Test.RadioSender
     [OneTimeSetUp]
     public void Setup()
     {
-      punch = new Punch()
-      {
-        Card = "1234",
-        Control = 31,
-        ControlType = PunchControlType.Control,
-        Time = new System.DateTime(2021, 08, 04, 21, 45, 59, 123)
-      };
+      punch = new Punch(
+        Card: "1234",
+        Control: 31,
+        ControlType: PunchControlType.Control,
+        Time: new System.DateTime(2021, 08, 04, 21, 45, 59, 123)
+        );
     }
 
     [TestCase("1234", "{Card}")]

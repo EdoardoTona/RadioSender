@@ -89,13 +89,12 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       _dispatcherService.PushPunch(
          _filter.Transform(
-           new Punch()
-           {
-             Card = chipNo.ToString(),
-             Control = codeNo,
-             ControlType = codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-             Time = dt
-           }
+           new Punch(
+             Card: chipNo.ToString(),
+             Control: codeNo,
+             ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
+             Time: dt
+             )
          ));
     }
 
@@ -128,13 +127,12 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       _dispatcherService.PushPunch(
          _filter.Transform(
-           new Punch()
-           {
-             Card = chipNo.ToString(),
-             Control = codeNo,
-             ControlType = codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-             Time = dt
-           }
+             new Punch(
+             Card: chipNo.ToString(),
+             Control: codeNo,
+             ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
+             Time: dt
+             )
          ));
     }
   }
