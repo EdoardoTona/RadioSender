@@ -17,6 +17,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentCenter
 {
+  public record SimplePunch(long Id, long Card, long Time, int Code, string Mode);
   public class SportidentCenterEvent : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "sportident";
@@ -95,24 +96,26 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
           using var reader = new StreamReader(responseStream, Encoding.UTF8);
           using var csv = new CsvReader(reader, _csvReaderConfiguration);
-          IEnumerable<ROCPunch> punches = csv.GetRecords<ROCPunch>().ToList();
+          IEnumerable<SimplePunch> punches = csv.GetRecords<SimplePunch>().ToList();
 
           if (!punches.Any())
             return;
 
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
-          _dispatcherService.PushPunches(
-            _filter.Transform(
-                    punches.Select(p =>
-                      new Punch(
-                       Card: p.Card.ToString(),
-                       Control: p.Code,
-                       ControlType: MapControlType(p.Mode),
-                       Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime
-                       )
-                    )
-                  )
+          _dispatcherService.PushPunch(
+                      new PunchDispatch(
+                        _filter.Transform(
+                          punches.Select(p =>
+                              new Punch(
+                               Card: p.Card.ToString(),
+                               Control: p.Code,
+                               ControlType: MapControlType(p.Mode),
+                               Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime
+                              )
+                          )
+                        )
+                      )
             );
 
         }

@@ -26,12 +26,12 @@ namespace RadioSender.Hosts.Target.UI
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
     }
 
-    public async Task SendPunch(Punch? punch, CancellationToken ct = default)
+    public async Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       if (Clients == null)
         return;
 
-      punch = _filter.Transform(punch);
+      var punch = _filter.Transform(dispatch.Punches);
 
       if (punch == null)
         return;
@@ -39,10 +39,10 @@ namespace RadioSender.Hosts.Target.UI
       await Clients.All.SendAsync("Punch", punch, ct);
     }
 
-    public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
+    public async Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
-      foreach (var punch in punches)
-        await SendPunch(punch, ct);
+      foreach (var dispatch in dispatches)
+        await SendPunch(dispatch, ct);
 
     }
 

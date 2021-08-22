@@ -29,52 +29,112 @@ namespace RadioSender.Hosts.Common
 
     public void ResendPunches()
     {
-      _ = Task.WhenAll(_targets.Select(t => t.SendPunches(_punches, default)));
+      _ = Task.WhenAll(_targets.Select(t => t.SendPunch(new PunchDispatch(_punches.ToArray(), null), default)));
     }
 
-    public void PushPunch(Punch? punch)
+    //public void PushPunch(Punch? punch)
+    //{
+    //  punch = _filter.Transform(punch);
+
+    //  if (punch == null)
+    //    return;
+
+    //  if (_punches.Contains(punch))
+    //  {
+    //    Log.Information("Detected duplicated punch " + punch);
+    //    return;
+    //  }
+
+    //  Log.Information("Received punch " + punch);
+    //  _punches.Add(punch);
+
+    //  if (punch != null)
+    //    _ = Task.WhenAll(_targets.Select(t => t.SendPunch(punch, default)));
+    //}
+
+    //public void PushPunches(IEnumerable<Punch> punches)
+    //{
+    //  punches = _filter.Transform(punches);
+
+    //  if (!punches.Any())
+    //    return;
+
+    //  var toBeForwarded = new List<Punch>();
+
+    //  foreach (var punch in punches)
+    //  {
+    //    if (_punches.Contains(punch))
+    //      Log.Information("Detected duplicated punch " + punch);
+    //    else
+    //    {
+    //      Log.Information("Received punch " + punch);
+    //      _punches.Add(punch);
+    //      toBeForwarded.Add(punch);
+    //    }
+    //  }
+
+    //  if (toBeForwarded.Any())
+    //    _ = Task.WhenAll(_targets.Select(t => t.SendPunches(toBeForwarded, default)));
+    //}
+
+
+    public void PushPunch(PunchDispatch dispatch)
     {
-      punch = _filter.Transform(punch);
-
-      if (punch == null)
-        return;
-
-      if (_punches.Contains(punch))
-      {
-        Log.Information("Detected duplicated punch " + punch);
-        return;
-      }
-
-      Log.Information("Received punch " + punch);
-      _punches.Add(punch);
-
-      if (punch != null)
-        _ = Task.WhenAll(_targets.Select(t => t.SendPunch(punch, default)));
-    }
-
-    public void PushPunches(IEnumerable<Punch> punches)
-    {
-      punches = _filter.Transform(punches);
+      var punches = _filter.Transform(dispatch.Punches);
 
       if (!punches.Any())
         return;
 
-      var notDuplicated = new List<Punch>();
-
+      var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
       {
         if (_punches.Contains(punch))
-          Log.Information("Detected duplicated punch " + punch);
-        else
         {
-          Log.Information("Received punch " + punch);
-          _punches.Add(punch);
-          notDuplicated.Add(punch);
+          Log.Information("Detected duplicated punch " + punch);
+          continue;
         }
+
+        Log.Information("Received punch " + punch);
+        _punches.Add(punch);
+        toBeForwardedPunch.Add(punch);
       }
 
-      if (notDuplicated.Any())
-        _ = Task.WhenAll(_targets.Select(t => t.SendPunches(notDuplicated, default)));
+      if (!toBeForwardedPunch.Any())
+        return;
+
+      dispatch = dispatch with { Punches = toBeForwardedPunch };
+      _ = Task.WhenAll(_targets.Select(t => t.SendPunch(dispatch, default)));
+    }
+
+    public void PushPunches(IEnumerable<PunchDispatch> dispatches)
+    {
+      var toBeForwardedDispatcher = new List<PunchDispatch>();
+      foreach (var dispatch in dispatches)
+      {
+        var punches = _filter.Transform(dispatch.Punches);
+        if (!punches.Any())
+          return;
+
+        var toBeForwardedPunch = new List<Punch>();
+        foreach (var punch in punches)
+        {
+          if (_punches.Contains(punch))
+          {
+            Log.Information("Detected duplicated punch " + punch);
+            continue;
+          }
+
+          Log.Information("Received punch " + punch);
+          _punches.Add(punch);
+          toBeForwardedPunch.Add(punch);
+        }
+
+        if (toBeForwardedPunch.Any())
+          toBeForwardedDispatcher.Add(dispatch with { Punches = toBeForwardedPunch });
+      }
+
+      if (toBeForwardedDispatcher.Any())
+        _ = Task.WhenAll(_targets.Select(t => t.SendPunches(toBeForwardedDispatcher, default)));
     }
 
   }

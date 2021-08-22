@@ -87,15 +87,17 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
-      _dispatcherService.PushPunch(
-         _filter.Transform(
-           new Punch(
-             Card: chipNo.ToString(),
-             Control: codeNo,
-             ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-             Time: dt
-             )
-         ));
+      var punch = _filter.Transform(
+                     new Punch(
+                     Card: chipNo.ToString(),
+                     Control: codeNo,
+                     ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
+                     Time: dt
+                     )
+                  );
+
+      if (punch != null)
+        _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
     }
 
     internal void OnReceivedV2(TcpSirapSession session, ReadOnlySpan<byte> buffer)
@@ -125,15 +127,17 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
-      _dispatcherService.PushPunch(
-         _filter.Transform(
-             new Punch(
-             Card: chipNo.ToString(),
-             Control: codeNo,
-             ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-             Time: dt
-             )
-         ));
+      var punch = _filter.Transform(
+                     new Punch(
+                     Card: chipNo.ToString(),
+                     Control: codeNo,
+                     ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
+                     Time: dt
+                     )
+                  );
+
+      if (punch != null)
+        _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
     }
   }
 

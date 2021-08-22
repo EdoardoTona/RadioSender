@@ -34,26 +34,32 @@ namespace RadioSender.Hosts.Target.Oribos
       Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
     }
 
-    public Task SendPunch(Punch? punch, CancellationToken ct = default)
+    public Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
     {
-      if (_filter is Filter f)
-        _backgroundJobClient.Enqueue(() => SendPunchAction(f, _configuration, punch, default));
+
+      foreach (var p in dispatch.Punches)
+      {
+        var punch = _filter.Transform(p);
+
+        if (punch == null)
+          continue;
+
+        _backgroundJobClient.Enqueue(() => SendPunchAction(_configuration, punch, default));
+      }
       return Task.CompletedTask;
     }
 
-    public Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
+    public Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
-      foreach (var punch in punches)
-        SendPunch(punch, ct);
+      foreach (var dispatch in dispatches)
+        SendPunch(dispatch, ct);
 
       return Task.CompletedTask;
     }
 
-    public static async Task SendPunchAction(Filter filter, OribosServer _configuration, Punch? punch, CancellationToken ct = default)
+    public static async Task SendPunchAction(OribosServer _configuration, Punch punch, CancellationToken ct = default)
     {
-      punch = filter.Transform(punch);
-
-      if (punch == null || string.IsNullOrEmpty(_configuration.Host) || _httpClientFactory == null)
+      if (string.IsNullOrEmpty(_configuration.Host) || _httpClientFactory == null)
         return;
 
       var httpClient = _httpClientFactory.CreateClient();

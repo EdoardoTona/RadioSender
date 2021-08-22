@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.ROC
 {
+  public record ROCPunch(long Id, int Code, long Card, DateTime Time);
   public class ROCEvent : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "roc";
@@ -75,6 +76,12 @@ namespace RadioSender.Hosts.Source.ROC
     {
       try
       {
+        if (_configuration.EventId == null)
+        {
+          Log.Error("No EventId");
+          return;
+        }
+
         var request = new HttpRequestMessage(HttpMethod.Get, $"/getPunches.asp?unitId={_configuration.EventId}&lastId={_lastReceivedId}");
 
         var response = await _httpClient.SendAsync(request, ct);
@@ -92,17 +99,19 @@ namespace RadioSender.Hosts.Source.ROC
 
           _lastReceivedId = punches.OrderBy(p => p.Time).Last().Id;
 
-          _dispatcherService.PushPunches(
-            _filter.Transform(
-                    punches.Select(p =>
-                    new Punch()
-                    {
-                      Card = p.Card.ToString(),
-                      Time = p.Time,
-                      Control = p.Code,
-                      ControlType = PunchControlType.Unknown
-                    })
-                  )
+          _dispatcherService.PushPunch(
+                      new PunchDispatch(
+                        _filter.Transform(
+                          punches.Select(p =>
+                            new Punch(
+                              Card: p.Card.ToString(),
+                              Time: p.Time,
+                              Control: p.Code,
+                              ControlType: PunchControlType.Unknown
+                            )
+                          )
+                        )
+                      )
             );
 
         }

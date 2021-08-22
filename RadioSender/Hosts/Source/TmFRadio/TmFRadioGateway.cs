@@ -235,8 +235,10 @@ namespace RadioSender.Hosts.Source.TmFRadio
             {
               packet = new RxData(header, data);
 
-              var punch = SportidentSerialPort.MessageToPunch((packet as RxData)!.RxSerData);
-              _dispatcherService.PushPunch(punch);
+              var punch = _filter.Transform(SportidentSerialPort.MessageToPunch((packet as RxData)!.RxSerData));
+
+              if (punch != null)
+                _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
             }
 
             Log.Verbose(packet?.ToString());

@@ -3,6 +3,7 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -51,21 +52,25 @@ namespace RadioSender.Hosts.Target.File
     }
 
 
-    public async Task SendPunch(Punch? punch, CancellationToken ct = default)
+    public async Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       await Task.Yield();
       if (_fileWriter == null || string.IsNullOrWhiteSpace(_configuration.Format))
         return;
 
-      punch = _filter.Transform(punch);
-      if (punch == null)
+      var punches = _filter.Transform(dispatch.Punches);
+
+      if (!punches.Any())
         return;
 
       await _semaphore.WaitAsync(ct);
       try
       {
-        string record = FormatStringHelper.GetString(punch, _configuration.Format);
-        _fileWriter.Write(record);
+        foreach (var punch in punches)
+        {
+          string record = FormatStringHelper.GetString(punch, _configuration.Format);
+          _fileWriter.Write(record);
+        }
       }
       finally
       {
@@ -73,10 +78,10 @@ namespace RadioSender.Hosts.Target.File
       }
     }
 
-    public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
+    public async Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
-      foreach (var punch in punches)
-        await SendPunch(punch, ct);
+      foreach (var dispatch in dispatches)
+        await SendPunch(dispatch, ct);
     }
 
   }

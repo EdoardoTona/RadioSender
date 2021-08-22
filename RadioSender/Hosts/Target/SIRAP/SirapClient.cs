@@ -4,6 +4,7 @@ using RadioSender.Hosts.Common.Filters;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -50,28 +51,31 @@ namespace RadioSender.Hosts.Target.SIRAP
 
     }
 
-    public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
+    public async Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
-      foreach (var punch in punches)
-        await SendPunch(punch, ct);
+      foreach (var dispatch in dispatches)
+        await SendPunch(dispatch, ct);
     }
 
-    public Task SendPunch(Punch? punch, CancellationToken ct = default)
+    public Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       if (_tcpClient == null || !_tcpClient.IsConnected)
         return Task.CompletedTask;
 
-      punch = _filter.Transform(punch);
+      var punches = _filter.Transform(dispatch.Punches);
 
-      if (punch == null)
+      if (!punches.Any())
         return Task.CompletedTask;
 
-      var buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
+      foreach (var punch in punches)
+      {
+        var buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
 
-      if (buffer == null || buffer.Length == 0)
-        return Task.CompletedTask;
+        if (buffer == null || buffer.Length == 0)
+          continue;
 
-      _tcpClient.SendAsync(buffer);
+        _tcpClient.SendAsync(buffer);
+      }
 
       return Task.CompletedTask;
     }

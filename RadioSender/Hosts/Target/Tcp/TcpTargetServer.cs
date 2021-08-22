@@ -3,6 +3,7 @@ using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -44,29 +45,32 @@ namespace RadioSender.Hosts.Target.Tcp
 
     }
 
-    public async Task SendPunches(IEnumerable<Punch> punches, CancellationToken ct = default)
+    public async Task SendPunches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
-      foreach (var punch in punches)
-        await SendPunch(punch, ct);
+      foreach (var dispatch in dispatches)
+        await SendPunch(dispatch, ct);
     }
 
-    public Task SendPunch(Punch? punch, CancellationToken ct = default)
+    public Task SendPunch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       if (_tcpServer == null || _tcpServer.ConnectedSessions == 0 || string.IsNullOrWhiteSpace(_configuration.Format))
         return Task.CompletedTask;
 
-      punch = _filter.Transform(punch);
+      var punches = _filter.Transform(dispatch.Punches);
 
-      if (punch == null)
+      if (!punches.Any())
         return Task.CompletedTask;
 
-      byte[] buffer = FormatStringHelper.GetBytes(punch, _configuration.Format);
+      foreach (var punch in punches)
+      {
+        byte[] buffer = FormatStringHelper.GetBytes(punch, _configuration.Format);
 
-      if (buffer == null || buffer.Length == 0)
-        return Task.CompletedTask;
+        if (buffer == null || buffer.Length == 0)
+          continue;
 
-      foreach (var session in _tcpServer.GetSessions())
-        session.Value.SendAsync(buffer);
+        foreach (var session in _tcpServer.GetSessions())
+          session.Value.SendAsync(buffer);
+      }
 
       return Task.CompletedTask;
     }

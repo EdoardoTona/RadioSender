@@ -218,9 +218,10 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           Buffer.BlockCopy(buffer, 0, data, 3, buffer.Length);
 
 
-          _dispatcherService.PushPunch(
-            _filter.Transform(MessageToPunch(data))
-          );
+          var punch = _filter.Transform(MessageToPunch(data));
+
+          if (punch != null)
+            _dispatcherService.PushPunch(new PunchDispatch(new[] { punch }));
         }
         catch (OperationCanceledException)
         {
@@ -336,13 +337,12 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       var now = DateTime.Now;
       var dt = new DateTime(now.Year, now.Month, now.Day) + time;
 
-      return new Punch()
-      {
-        Card = cardNumber.ToString(),
-        Time = dt,
-        Control = controlCode,
-        ControlType = PunchControlType.Unknown
-      };
+      return new Punch(
+        Card: cardNumber.ToString(),
+        Time: dt,
+        Control: controlCode,
+        ControlType: PunchControlType.Unknown
+        );
     }
 
 

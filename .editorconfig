@@ -4,6 +4,9 @@
 dotnet_diagnostic.CA2016.severity = error
 dotnet_diagnostic.CA1001.severity=error
 
+# CS8604: Possibile argomento di riferimento Null.
+dotnet_diagnostic.CS8604.severity = error
+
 [*.{cs,vb}]
 dotnet_diagnostic.CA1041.severity=silent
 dotnet_diagnostic.CA1067.severity=warning

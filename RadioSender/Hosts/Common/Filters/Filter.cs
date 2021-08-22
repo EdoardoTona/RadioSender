@@ -71,6 +71,7 @@ namespace RadioSender.Hosts.Common.Filters
 
       return punches.Select(p => Transform(p)).Where(p => p != null).Select(p => p!);
     }
+
   }
 
   public static class IEnumerableFilterExtension
