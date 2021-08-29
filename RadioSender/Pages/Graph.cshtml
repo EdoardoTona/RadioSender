@@ -1,0 +1,89 @@
+﻿@page
+
+@{
+  ViewData["Title"] = "Graph";
+  Layout = "_Layout";
+}
+
+<style>
+  #graph {
+    height: 100%;
+    width: 100%;
+    background-color: gray;
+  }
+</style>
+
+<div id="graph"></div>
+
+@section Scripts
+{
+  <script>
+
+    var container = document.getElementById("graph");
+
+    var nodes = new vis.DataSet([
+      {
+        id: 1, label: "Unavailable"
+      }]);
+    var edges = new vis.DataSet(edges);
+
+
+    var network = new vis.Network(
+      document.getElementById("graph"),
+      { nodes, edges }, {
+      interaction: {
+        dragNodes: false,
+        dragView: false,
+      },
+      layout: { randomSeed: 2 },
+      nodes: {
+        shape: "circle",
+        scaling: {
+          label: false,
+          min: 1,
+          max: 10
+        }
+      },
+      edges: {
+        scaling: {
+          label: false,
+          min: 1,
+          max: 10
+        }
+      }
+    });
+
+    connection.on("graph", function (e, n) {
+      console.log(e, n);
+
+      network.setData({
+        nodes: new vis.DataSet(n),
+        edges: new vis.DataSet(e)
+      })
+      //network.
+      //nodes.clear();
+      //edges.clear();
+      //nodes.add(n);
+      //edges.add(e);
+
+    });
+
+
+                  //connection.start().then(function () {
+                  //  //document.getElementById("sendButton").disabled = false;
+                  //}).catch(function (err) {
+                  //  return console.error(err.toString());
+                  //});
+
+                  //document.getElementById("sendButton").addEventListener("click", function (event) {
+                  //  var user = document.getElementById("userInput").value;
+                  //  var message = document.getElementById("messageInput").value;
+                  //  connection.invoke("SendMessage", user, message).catch(function (err) {
+                  //    return console.error(err.toString());
+                  //  });
+                  //  event.preventDefault();
+                  //});
+
+  </script>
+}
+

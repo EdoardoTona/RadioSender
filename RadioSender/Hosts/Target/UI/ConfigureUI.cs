@@ -23,7 +23,7 @@ namespace RadioSender.Hosts.Target.UI
             return;
 
           services.AddSingleton<ITarget>(sp => new UIService(sp.GetServices<IFilter>(), conf));
-          services.AddHostedService<Launcher>();
+          //services.AddHostedService<Launcher>();
         })
         .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
 

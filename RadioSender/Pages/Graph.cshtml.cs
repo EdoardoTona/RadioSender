@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace RadioSender.Pages
 {
-  public class IndexModel : PageModel
+  public class GraphModel : PageModel
   {
     public void OnGet()
     {

@@ -34,6 +34,7 @@ namespace RadioSender
                         .ReadFrom.Configuration(configuration)
                         .Enrich.FromLogContext()
                         .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+                        .WriteTo.CustomLogSink()
                         .CreateLogger();
       try
       {
@@ -63,6 +64,8 @@ namespace RadioSender
             .UseSerilog()
             .UseHangfire()
             .UseFilters()
+
+            .ActivatePhotino()
 
             // Sources
             .FromRoc()

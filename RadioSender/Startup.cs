@@ -17,6 +17,8 @@ namespace RadioSender
       services.AddSignalR();
 
       services.AddSingleton<DeviceService>();
+
+
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -26,7 +28,14 @@ namespace RadioSender
         app.UseDeveloperExceptionPage();
       }
 
-      app.UseStaticFiles();
+      //app.UseDefaultFiles();
+      app.UseStaticFiles(new StaticFileOptions
+      {
+        OnPrepareResponse = context =>
+        {
+          context.Context.Response.Headers.Add("Cache-Control", "no-cache");
+        }
+      });
 
       app.UseHangfireDashboard();
 

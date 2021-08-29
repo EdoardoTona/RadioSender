@@ -21,6 +21,8 @@ namespace RadioSender.Hubs.Devices
     {
       _hubContext = hubContext;
 
+      CustomLogSink._hubContext = hubContext;
+
       sub = _changes.Throttle(TimeSpan.FromMilliseconds(1000))
                         .Do(_ => Notify())
                         .Subscribe();

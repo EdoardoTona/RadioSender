@@ -1,31 +1,43 @@
 ﻿@page
-<html>
 
-<head>
+@{
+  ViewData["Title"] = "Log";
+  Layout = "_Layout";
+}
 
-  <link rel="stylesheet" href="~/lib/vis/vis-network.min.css">
-  <script src="~/js/signalr/dist/browser/signalr.js"></script>
-  <script src="~/lib/vis/vis-network.min.js"></script>
+<style>
+  #messagesList {
+    height: 100%;
+    color: white;
+    background: black;
+    overflow: auto;
+    font-family: monospace;
+    list-style-type: none;
+  }
 
-</head>
+  .logcontainer {
+    height: 100%;
+  }
+</style>
 
-<body>
-  <h1>Hello, world!</h1>
-  <h2>The time on the server is @DateTime.Now</h2>
+<div class="row mb-3 logcontainer">
+  <ul class="flex-fill" id="messagesList">
+  </ul>
+</div>
 
+@section Scripts
+{
+  <script>
 
-  <div id="mynetwork"></div>
+    var messagesList = document.getElementById("messagesList");
 
-  <style>
-    #mynetwork {
-      width: 600px;
-      height: 400px;
-      border: 1px solid lightgray;
-    }
-  </style>
+    connection.on("log", function (m) {
 
-  <ul id="messagesList"></ul>
+      var li = document.createElement("li");
+      li.innerHTML = m;
+      messagesList.prepend(li);
 
-  <script src="~/js/deviceHub.js"></script>
-</body>
-</html>
+    });
+  </script>
+}
+
