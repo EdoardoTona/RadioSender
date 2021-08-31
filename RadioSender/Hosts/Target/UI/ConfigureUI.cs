@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common.Filters;
+using RadioSender.Hubs;
 
 namespace RadioSender.Hosts.Target.UI
 {
@@ -22,7 +24,11 @@ namespace RadioSender.Hosts.Target.UI
           if (conf == null || !conf.Enable)
             return;
 
-          services.AddSingleton<ITarget>(sp => new UIService(sp.GetServices<IFilter>(), conf));
+          services.AddSingleton<ITarget>(sp => new UIService(
+            sp.GetServices<IFilter>(),
+            sp.GetRequiredService<IHubContext<DeviceHub, IDeviceHub>>(),
+            sp.GetRequiredService<HubEvents>(),
+            conf));
           //services.AddHostedService<Launcher>();
         })
         .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());

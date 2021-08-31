@@ -1,40 +1,66 @@
 ﻿<!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>@ViewData["Title"]</title>
 
-  <link rel="stylesheet" href="~/lib/vis/vis-network.min.css">
   <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css">
-  <link rel="stylesheet" href="~/css/style.css">
 
-  <script src="~/lib/signalr/dist/browser/signalr.min.js"></script>
-  <script src="~/lib/vis/vis-network.min.js"></script>
+  <script src="~/lib/jquery/jquery.slim.min.js"></script>
+
+  <script src="~/lib/signalr/signalr.min.js"></script>
+
   <script src="~/lib/bootstrap/js/bootstrap.min.js"></script>
+
+
+  @RenderSection("Head", required: false)
+
+  <link rel="stylesheet" href="~/css/style.css">
 </head>
 
 <body>
 
-  <nav class="navbar  navbar-expand-lg navbar-dark bg-dark" style="position: absolute; width: 100%; z-index:2">
+  <nav class="navbar navbar-expand-sm navbar-dark bg-dark" style="position: absolute; width: 100%; z-index:2">
     <div class="container-fluid">
-      <a class="navbar-brand" href="/">
-        <img src="/favicon.png" alt="" width="24" height="24" class="d-inline-block align-text-top">
+      <a class="navbar-brand d-flex align-items-center me-auto pe-2" href="/">
+        <img src="/favicon.png" alt="" width="24" height="24" class="me-2">
         Radiosender
       </a>
+
+      <span class="navbar-text d-sm-none me-3">
+        <span class="badge rounded-pill bg-success d-none onlineBadge">
+          Online
+        </span>
+        <span class="badge rounded-pill bg-danger offlineBadge">
+          Offline
+        </span>
+      </span>
+
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav">
+        <ul class="navbar-nav me-auto">
           <li class="nav-item">
-            <a class="nav-link active" aria-current="page" href="/">Log</a>
+            <a @if ((string)@ViewData["Title"] == "Log") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/">Log</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="/Graph">Graph</a>
+            <a @if ((string)@ViewData["Title"] == "Punches") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Punches">Punches</a>
+          </li>
+          <li class="nav-item">
+            <a @if ((string)@ViewData["Title"] == "Graph") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Graph">Graph</a>
           </li>
         </ul>
+        <span class="navbar-text d-none d-sm-inline">
+          <span class="badge rounded-pill bg-success d-none onlineBadge">
+            Online
+          </span>
+          <span class="badge rounded-pill bg-danger offlineBadge">
+            Offline
+          </span>
+        </span>
       </div>
     </div>
   </nav>
@@ -44,15 +70,68 @@
   </div>
 
   <script>
-    var connection = new signalR.HubConnectionBuilder().withUrl("/deviceHub").build();
 
-    connection.start();
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
 
-    connection.on("disconnected", function () {
-      console.log("disconnected");
-      setTimeout(function () {
-        connection.start();
-      }, 5000); // Restart connection after 5 seconds.
+    var connection = new signalR
+      .HubConnectionBuilder()
+      .withUrl("/deviceHub")
+      .withAutomaticReconnect({
+
+        nextRetryDelayInMilliseconds: retryContext => {
+          if (retryContext.elapsedMilliseconds < 60000) {
+            return 2000;
+          } else {
+            return 10000;
+          }
+        }
+      })
+      .build();
+
+    async function start() {
+      try {
+        await connection.start();
+        console.assert(connection.state === signalR.HubConnectionState.Connected);
+        console.log("SignalR Connected.");
+
+        connection.invoke("SetMetadata", { "prova": "valore", "prova2": 42 });
+
+        //document.getElementById("onlineBadge").classList.remove("d-none");
+        //document.getElementById("offlineBadge").classList.add("d-none");
+        $(".onlineBadge").removeClass("d-none");
+        $(".offlineBadge").addClass("d-none");
+      } catch (err) {
+        console.assert(connection.state === signalR.HubConnectionState.Disconnected);
+        console.log(err);
+        setTimeout(() => start(), 5000);
+      }
+    };
+
+    connection.onreconnected(async () => {
+      $(".onlineBadge").removeClass("d-none");
+      $(".offlineBadge").addClass("d-none");
+      //document.getElementById("onlineBadge").classList.remove("d-none");
+      //document.getElementById("offlineBadge").classList.add("d-none");
+    });
+    connection.onreconnecting(async () => {
+      $(".onlineBadge").addClass("d-none");
+      $(".offlineBadge").removeClass("d-none");
+      //document.getElementById("onlineBadge").classList.add("d-none");
+      //document.getElementById("offlineBadge").classList.remove("d-none");
+    });
+    connection.onclose(async () => {
+      $(".onlineBadge").addClass("d-none");
+      $(".offlineBadge").removeClass("d-none");
+      //document.getElementById("onlineBadge").classList.add("d-none");
+      //document.getElementById("offlineBadge").classList.remove("d-none");
     });
 
   </script>

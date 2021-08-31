@@ -11,16 +11,23 @@ namespace RadioSender.UI
   public class PhotinoHostedService : IHostedService
   {
     private readonly string _port;
+    private readonly bool _isDevelopment;
 
     private static Action? _terminatePhotinoAction;
     private static Action? _terminateAppAction;
 
     private Thread? _thread;
 
-    public PhotinoHostedService(string urls, IHostApplicationLifetime hostApplicationLifetime)
+
+    public PhotinoHostedService(
+      string urls,
+      IHostApplicationLifetime hostApplicationLifetime,
+      IHostEnvironment hostEnvironment
+      )
     {
       _terminateAppAction = () => hostApplicationLifetime?.StopApplication();
       _port = Regex.Match(urls, @"(?<=:)\d{2,5}").Value;
+      _isDevelopment = hostEnvironment.IsDevelopment();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -30,7 +37,7 @@ namespace RadioSender.UI
       if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         _thread.SetApartmentState(ApartmentState.STA);
 
-      _thread.Start(_port);
+      _thread.Start(new { Port = _port, IsDevelopment = _isDevelopment });
 
       return Task.CompletedTask;
     }
@@ -48,7 +55,10 @@ namespace RadioSender.UI
       if (param == null)
         return;
 
-      string port = (string)param;
+      dynamic p = param;
+
+      var port = (string)p.Port;
+      var isDevelopment = (bool)p.IsDevelopment;
 
       var iconFile = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
           ? "wwwroot/favicon.ico"

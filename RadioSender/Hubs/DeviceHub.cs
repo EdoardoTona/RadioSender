@@ -1,27 +1,41 @@
 ﻿using Microsoft.AspNetCore.SignalR;
-using RadioSender.Hubs.Devices;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hubs
 {
-  public class DeviceHub : Hub
+  public class DeviceHub : Hub<IDeviceHub>
   {
-    private readonly DeviceService _deviceService;
-    public DeviceHub(DeviceService deviceService)
+    public const string GROUP_LOG = "log";
+    public const string GROUP_GRAPH = "graph";
+    public const string GROUP_PUNCHES = "punches";
+
+    private readonly HubEvents _hubEvents;
+    public DeviceHub(HubEvents hubEvents)
     {
-      _deviceService = deviceService;
-    }
-    public async Task UpdateDeviceStatus(string device)
-    {
-      await Clients.All.SendAsync("DeviceStatus", device);
+      _hubEvents = hubEvents;
     }
 
-    public override async Task OnConnectedAsync()
+    public void SetMetadata(Dictionary<string, object> value)
     {
-      //await Groups.AddToGroupAsync(Context.ConnectionId, "SignalR Users");
-      await base.OnConnectedAsync();
+      foreach (var i in value)
+        Context.Items.Add(i.Key, i.Value);
+    }
 
-      _deviceService.Notify(Context.ConnectionId);
+    public void JoinGroup(string group)
+    {
+      _hubEvents.JoinGroup(Context, group);
+    }
+
+    public override Task OnDisconnectedAsync(Exception? e)
+    {
+      return base.OnDisconnectedAsync(e);
+    }
+
+    public override Task OnConnectedAsync()
+    {
+      return base.OnConnectedAsync();
     }
   }
 }

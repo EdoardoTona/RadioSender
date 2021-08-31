@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hubs;
-using RadioSender.Hubs.Devices;
+using System.Text.Json.Serialization;
 
 namespace RadioSender
 {
@@ -14,11 +14,10 @@ namespace RadioSender
     {
       services.AddRazorPages();
 
-      services.AddSignalR();
+      services.AddSignalR()
+              .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-      services.AddSingleton<DeviceService>();
-
-
+      services.AddSingleton<HubEvents>();
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -28,7 +27,6 @@ namespace RadioSender
         app.UseDeveloperExceptionPage();
       }
 
-      //app.UseDefaultFiles();
       app.UseStaticFiles(new StaticFileOptions
       {
         OnPrepareResponse = context =>
@@ -44,7 +42,7 @@ namespace RadioSender
       app.UseEndpoints(endpoints =>
       {
         endpoints.MapRazorPages();
-        //endpoints.MapHub<PunchHub>("/punchHub");
+
         endpoints.MapHub<DeviceHub>("/deviceHub");
 
         endpoints.MapHangfireDashboard();

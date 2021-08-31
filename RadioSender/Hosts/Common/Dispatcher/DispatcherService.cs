@@ -47,7 +47,7 @@ namespace RadioSender.Hosts.Common
             continue;
           }
 
-          Log.Information("Received punch " + punch);
+          //Log.Information("Received punch " + punch);
           _punches.Add(punch);
           toBeForwardedPunch.Add(punch);
         }
@@ -77,7 +77,7 @@ namespace RadioSender.Hosts.Common
             continue;
           }
 
-          Log.Information("Received punch " + punch);
+          //Log.Information("Received punch " + punch);
           _punches.Add(punch);
           toBeForwardedPunch.Add(punch);
         }

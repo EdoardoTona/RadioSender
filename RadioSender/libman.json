@@ -1,31 +1,43 @@
 {
   "version": "1.0",
-  "defaultProvider": "unpkg",
+  "defaultProvider": "cdnjs",
   "libraries": [
     {
-      "library": "@microsoft/signalr@5.0.6",
-      "destination": "wwwroot/lib/signalr",
-      "files": [
-        "dist/browser/signalr.min.js"
-      ]
-    },
-    {
-      "provider": "cdnjs",
       "library": "vis@4.21.0",
       "destination": "wwwroot/lib/vis/",
       "files": [
-        "vis.min.js",
         "vis-network.min.js",
         "vis-network.min.css"
       ]
     },
     {
-      "provider": "cdnjs",
       "library": "bootstrap@5.1.0",
       "destination": "wwwroot/lib/bootstrap/",
       "files": [
         "js/bootstrap.min.js",
         "css/bootstrap.min.css"
+      ]
+    },
+    {
+      "library": "microsoft-signalr@5.0.9",
+      "destination": "wwwroot/lib/signalr/",
+      "files": [
+        "signalr.min.js"
+      ]
+    },
+    {
+      "library": "jquery@3.6.0",
+      "destination": "wwwroot/lib/jquery/",
+      "files": [
+        "jquery.slim.min.js"
+      ]
+    },
+    {
+      "library": "bootstrap-table@1.18.3",
+      "destination": "wwwroot/lib/bootstrap-table/",
+      "files": [
+        "bootstrap-table.min.css",
+        "bootstrap-table.min.js"
       ]
     }
   ]

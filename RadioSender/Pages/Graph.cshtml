@@ -1,88 +1,157 @@
-﻿@page
+﻿
+
+@page
+
+@using RadioSender.Hubs;
 
 @{
   ViewData["Title"] = "Graph";
   Layout = "_Layout";
 }
 
-<style>
-  #graph {
-    height: 100%;
-    width: 100%;
-    background-color: gray;
-  }
-</style>
 
-<div id="graph"></div>
+@section Head
+{
+  <link rel="stylesheet" href="~/lib/vis/vis-network.min.css">
+  <script src="~/lib/vis/vis-network.min.js"></script>
+}
+
+<div class="row h-100">
+  <div class="col h-100 bg-secondary bg-gradient border-end">
+    <div class="h-100" id="graph"></div>
+  </div>
+  <div class="col h-100 overflow-auto bg-light bg-gradient">
+    <h3 class="mt-2">Nodes</h3>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Label</th>
+            <th scope="col">Value</th>
+            <th scope="col">Title</th>
+          </tr>
+        </thead>
+        <tbody id="nodes-table">
+        </tbody>
+      </table>
+    </div>
+    <h3 class="mt-2">Edges</h3>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th scope="col">From</th>
+            <th scope="col">To</th>
+            <th scope="col">Value</th>
+            <th scope="col">Title</th>
+          </tr>
+        </thead>
+        <tbody id="edges-table">
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 @section Scripts
 {
   <script>
 
-    var container = document.getElementById("graph");
+    let container = document.getElementById("graph");
+    let nodesList = document.getElementById("nodes-table");
+    let edgesList = document.getElementById("edges-table");
 
-    var nodes = new vis.DataSet([
-      {
-        id: 1, label: "Unavailable"
-      }]);
-    var edges = new vis.DataSet(edges);
+    let nodes = new vis.DataSet([]);
+    let edges = new vis.DataSet([]);
 
 
-    var network = new vis.Network(
-      document.getElementById("graph"),
+    let network = new vis.Network(
+      container,
       { nodes, edges }, {
       interaction: {
-        dragNodes: false,
-        dragView: false,
       },
-      layout: { randomSeed: 2 },
+      layout: {
+        randomSeed: 1
+
+      },
+      physics: {
+        enabled: true,
+        stabilization: false
+      },
       nodes: {
-        shape: "circle",
+        shape: "dot",
         scaling: {
           label: false,
-          min: 1,
-          max: 10
         }
       },
       edges: {
         scaling: {
           label: false,
-          min: 1,
-          max: 10
         }
       }
     });
 
-    connection.on("graph", function (e, n) {
+    connection.on("graph", (e, n) => {
       console.log(e, n);
 
-      network.setData({
-        nodes: new vis.DataSet(n),
-        edges: new vis.DataSet(e)
-      })
-      //network.
-      //nodes.clear();
-      //edges.clear();
-      //nodes.add(n);
-      //edges.add(e);
+      var nodesBefore = nodes.length;
+
+      try {
+
+        for (var node of n) {
+          node.group = 1;
+          nodes.update(node);
+        }
+
+
+        for (var edge of e) {
+          edge.group = 1;
+          edges.update(edge);
+        }
+
+      } catch (e) {
+        console.log(e)
+      }
+
+      if (nodesBefore != nodes.length) {
+        // new node!
+        //network.fit()
+        //setTimeout(() => network.fit(), 1000);
+      }
+
+
+      nodesList.innerHTML = "";
+      nodes.forEach(item => {
+        var tr = document.createElement("tr");
+        tr.innerHTML = `
+                             <td>${item.id}</td>
+                             <td>${item.label}</td>
+                             <td>${item.value}</td>
+                             <td>${item.title}</td>
+                        `;
+        nodesList.appendChild(tr);
+      });
+
+      edgesList.innerHTML = "";
+      edges.forEach(item => {
+        var tr = document.createElement("tr");
+        tr.innerHTML = `
+                   <td>${item.from}</td>
+                   <td>${item.to}</td>
+                   <td>${item.value}</td>
+                   <td>${item.title}</td>
+              `;
+        edgesList.appendChild(tr);
+
+        edges.update(item);
+      });
+
 
     });
 
-
-                  //connection.start().then(function () {
-                  //  //document.getElementById("sendButton").disabled = false;
-                  //}).catch(function (err) {
-                  //  return console.error(err.toString());
-                  //});
-
-                  //document.getElementById("sendButton").addEventListener("click", function (event) {
-                  //  var user = document.getElementById("userInput").value;
-                  //  var message = document.getElementById("messageInput").value;
-                  //  connection.invoke("SendMessage", user, message).catch(function (err) {
-                  //    return console.error(err.toString());
-                  //  });
-                  //  event.preventDefault();
-                  //});
+    start().then(() => connection.invoke("JoinGroup", "@DeviceHub.GROUP_GRAPH"));
+    connection.onreconnected(() =>  connection.invoke("JoinGroup", "@DeviceHub.GROUP_GRAPH"));
 
   </script>
 }

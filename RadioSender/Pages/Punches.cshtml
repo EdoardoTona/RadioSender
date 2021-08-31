@@ -1,0 +1,84 @@
+﻿@page
+
+@using RadioSender.Hubs;
+
+@{
+  ViewData["Title"] = "Punches";
+  Layout = "_Layout";
+}
+
+@section Head
+{
+  <link rel="stylesheet" href="~/lib/bootstrap-table/bootstrap-table.min.css">
+
+  <script src="~/lib/bootstrap-table/bootstrap-table.min.js"></script>
+}
+<div class="row h-100">
+  <div class="col h-100 bg-light bg-gradient border-end" id="punchesContainer">
+    <table id="punches"
+           class="table table-striped table-sm"
+           data-height="400"
+           data-sortable="true"
+           data-sort-name="time"
+           data-sort-order="desc"
+           data-virtual-scroll="true"
+           data-search="true">
+      <thead>
+        <tr>
+          <th data-field="time" data-sortable="true">Time</th>
+          <th data-field="card" data-sortable="true" >Card</th>
+          <th data-field="control" data-sortable="true">Control</th>
+          <th data-field="controlType" data-sortable="true">Control Type</th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+
+@section Scripts
+{
+  <script>
+
+    let $table = $('#punches');
+
+    $table.bootstrapTable({});
+
+
+    let ro = new ResizeObserver(elements => {
+      console.log(punchesContainer.clientHeight)
+      $table.bootstrapTable('refreshOptions', {
+        height: punchesContainer.clientHeight
+      })
+    });
+
+    ro.observe(punchesContainer);
+
+    connection.on("punches", async (p) => {
+
+      try {
+        $table.bootstrapTable('load', p);
+
+
+      } catch (e) {
+        console.log(e)
+      }
+
+    });
+
+  connection.on("punch", async (p) => {
+
+    try {
+      $table.bootstrapTable('insertRow', { index: 0, row: p });
+
+
+    } catch (e) {
+      console.log(e)
+    }
+
+  });
+
+  start().then(() => connection.invoke("JoinGroup", "@DeviceHub.GROUP_PUNCHES"));
+  connection.onreconnected(() => connection.invoke("JoinGroup", "@DeviceHub.GROUP_PUNCHES"));
+
+  </script>
+}

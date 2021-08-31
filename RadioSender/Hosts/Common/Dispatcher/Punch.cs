@@ -8,7 +8,10 @@ namespace RadioSender.Hosts.Common
   {
     public static readonly NodeNew Localhost = new(Guid.Empty.ToString(), "localhost", 0, 1);
   }
-  public record Hop(string From, string To, long? LatencyMs, int? SignalStength) : GraphElement(null, LatencyMs, SignalStength);
+  public record Hop(string From, string To, long? LatencyMs, int? SignalStength) : GraphElement(null, LatencyMs, SignalStength)
+  {
+    public string Id { get => From + To; }
+  }
   public record PunchDispatch(IEnumerable<Punch>? Punches = null, IEnumerable<Hop>? Hops = null, IEnumerable<NodeNew>? Nodes = null);
   public record Punch(string Card, DateTime Time, int Control, PunchControlType ControlType = PunchControlType.Unknown);
   public enum PunchControlType

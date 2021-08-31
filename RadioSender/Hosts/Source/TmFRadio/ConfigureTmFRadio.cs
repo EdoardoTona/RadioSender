@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hubs.Devices;
 using System.Collections.Generic;
 
 namespace RadioSender.Hosts.Source.TmFRadio
@@ -28,7 +27,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
           services.AddHostedService(sp => new TmFRadioGateway(
             sp.GetServices<IFilter>(),
             sp.GetRequiredService<DispatcherService>(),
-            sp.GetRequiredService<DeviceService>(),
             gateway));
         }
 

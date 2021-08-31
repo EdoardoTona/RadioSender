@@ -3,7 +3,6 @@ using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Source.SportidentSerial;
-using RadioSender.Hubs.Devices;
 using Serilog;
 using System;
 using System.Buffers.Binary;
@@ -21,7 +20,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     private readonly IFilter _filter = Filter.Invariant;
     private readonly DispatcherService _dispatcherService;
-    private readonly DeviceService _deviceService;
     private readonly Gateway _configuration;
     private readonly SerialPort _port;
     private readonly CancellationTokenSource _cts = new();
@@ -33,11 +31,9 @@ namespace RadioSender.Hosts.Source.TmFRadio
     public TmFRadioGateway(
       IEnumerable<IFilter> filters,
       DispatcherService dispatcherService,
-      DeviceService deviceService,
       Gateway gateway)
     {
       _dispatcherService = dispatcherService;
-      _deviceService = deviceService;
       _configuration = gateway;
       _port = new SerialPort();
       _filter = filters.GetFilter(_configuration.Filter);
@@ -262,15 +258,15 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     }
 
-    public void UpdateNode(uint address, int signal, double battery)
-    {
-      _deviceService.UpdateNode(new Node("TmF" + address, "TmF" + address, signal / 10, $"Battery: {battery:0.00}V", DateTimeOffset.UtcNow));
+    //public void UpdateNode(uint address, int signal, double battery)
+    //{
+    //  _deviceService.UpdateNode(new Node("TmF" + address, "TmF" + address, signal / 10, $"Battery: {battery:0.00}V", DateTimeOffset.UtcNow));
 
-    }
+    //}
 
-    public void UpdateEdge(uint from, uint to, int signal, int latency)
-    {
-      _deviceService.UpdateEdge(new Edge("TmF" + from, "TmF" + to, signal / 10, latency * 2, signal + "%", "", DateTimeOffset.UtcNow));
-    }
+    //public void UpdateEdge(uint from, uint to, int signal, int latency)
+    //{
+    //  _deviceService.UpdateEdge(new Edge("TmF" + from, "TmF" + to, signal / 10, latency * 2, signal + "%", "", DateTimeOffset.UtcNow));
+    //}
   }
 }

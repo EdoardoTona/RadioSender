@@ -116,7 +116,8 @@ namespace RadioSender.Hosts.Source.ROC
           _dispatcherService.PushDispatch(
                       new PunchDispatch(
                         Punches: punches,
-                        Nodes: new[] { new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) }
+                        Nodes: new[] { new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) },
+                        Hops: new[] { new Hop(HTTPCLIENT_NAME, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) }
                       )
             );
 
