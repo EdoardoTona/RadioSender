@@ -31,9 +31,13 @@ namespace RadioSender
       {
         OnPrepareResponse = context =>
         {
-          context.Context.Response.Headers.Add("Cache-Control", "no-cache");
+          if (env.IsDevelopment())
+            context.Context.Response.Headers.Add("Cache-Control", "no-cache");
+          else
+            context.Context.Response.Headers.Add("Cache-Control", "private, max-age=86400"); // 1 day
         }
       });
+
 
       app.UseHangfireDashboard();
 
@@ -48,6 +52,7 @@ namespace RadioSender
         endpoints.MapHangfireDashboard();
 
       });
+
 
     }
 

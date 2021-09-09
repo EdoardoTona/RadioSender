@@ -1,0 +1,117 @@
+﻿@page
+
+@using RadioSender.Hubs;
+
+@{
+  ViewData["Title"] = "Stats";
+  Layout = "_Layout";
+}
+
+@section Head
+{
+  <link rel="stylesheet" href="~/lib/bootstrap-table/bootstrap-table.min.css">
+
+  <script src="~/lib/bootstrap-table/bootstrap-table.min.js"></script>
+}
+<div class="row h-100">
+  <div class="col h-100 bg-light bg-gradient border-end" id="container">
+    <table id="connections"
+           class="table table-striped table-sm"
+           data-height="400"
+           data-sortable="true"
+           data-sort-name="time"
+           data-sort-order="desc"
+           data-virtual-scroll="true"
+           data-search="true">
+      <thead>
+        <tr>
+          <th data-field="id" data-sortable="true">Id</th>
+          <th data-field="ip" data-sortable="true">Ip</th>
+          <th data-field="userAgent" data-sortable="true">User Agent</th>
+          <th data-field="group" data-sortable="true">Group</th>
+          <th data-field="operate" data-formatter="operateFormatter" data-events="operateEvents">Abort</th>
+
+        </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+
+@section Scripts
+{
+  <script>
+
+    window.operateEvents = {
+      'click .remove': function (e, value, row, index) {
+        //$table.bootstrapTable('remove', {
+        //  field: 'id',
+        //  values: [row.id]
+        //})
+        connection.invoke("Abort", row.id);
+
+      }
+    }
+
+    let $table = $('#connections');
+
+    $table.bootstrapTable({});
+
+
+    let ro = new ResizeObserver(elements => {
+      $table.bootstrapTable('refreshOptions', {
+        height: container.clientHeight
+      })
+    });
+
+    ro.observe(container);
+
+
+    function operateFormatter(value, row, index) {
+      return '<button type="button" class="btn btn-sm btn-danger remove">Abort</button>';
+    }
+
+
+
+
+
+
+
+
+
+    connection.on("connections", async (p) => {
+
+      try {
+        $table.bootstrapTable('load', p);
+
+
+      } catch (e) {
+        console.log(e)
+      }
+
+    });
+
+  connection.on("connection", async (p) => {
+
+    try {
+      $table.bootstrapTable('insertRow', { index: 0, row: p });
+
+    } catch (e) {
+      console.log(e)
+    }
+
+  });
+
+    const GROUP = "@DeviceHub.GROUP_STATS";
+    start();
+
+    connection.onreconnecting(() => {
+      console.log("to empt");
+      $table.bootstrapTable('load', []);
+    });
+    connection.onclose(() => {
+      console.log("to empty");
+      $table.bootstrapTable('load', []);
+    });
+
+  </script>
+}

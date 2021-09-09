@@ -18,7 +18,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
   {
     public const uint BROADCAST = 0xffffffff;
 
-    private readonly IFilter _filter = Filter.Invariant;
+    private readonly IFilter _filter;
     private readonly DispatcherService _dispatcherService;
     private readonly Gateway _configuration;
     private readonly SerialPort _port;
@@ -39,7 +39,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       _filter = filters.GetFilter(_configuration.Filter);
     }
 
-    public Task StartAsync(CancellationToken st)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
       try
       {
@@ -59,9 +59,8 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         _readTask = ReadData();
 
-        _timer = new Timer(CheckStatus, null, 0, 5000);
+        _timer = new Timer((state) => _ = CheckStatus(), null, 0, 5000);
 
-        //CheckStatus, null, 0, 5000);
         return Task.CompletedTask;
       }
       catch (UnauthorizedAccessException e)
@@ -86,7 +85,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
     }
 
 
-    public async Task StopAsync(CancellationToken st)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
       _timer?.Dispose();
       _cts?.Cancel();
@@ -110,11 +109,18 @@ namespace RadioSender.Hosts.Source.TmFRadio
       StopAsync(default).Wait();
     }
 
-    public async void CheckStatus(object? state)
+    public async Task CheckStatus()
     {
-      await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
-      await Task.Delay(200, _cts.Token);
-      await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
+      try
+      {
+        await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
+        await Task.Delay(200, _cts.Token);
+        await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
+      }
+      catch (Exception e)
+      {
+        Log.Error(e, "Check Status Exception");
+      }
     }
 
     public ReadOnlyMemory<byte> GenerateCommand(TmFCommand command, uint address = BROADCAST, byte arg0 = 0x00, byte arg1 = 0x00)
@@ -144,11 +150,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
       try
       {
-        //_port.Write(data, 0, data.Length);
         await _port!.BaseStream.WriteAsync(data, ct);
       }
       catch (TimeoutException)
       {
+        // quiet
       }
       catch (Exception e)
       {
@@ -209,7 +215,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
               if (data[17] == 0x09)
               {
                 packet = new RxGetStatus(header, data);
-                //UpdateNode(header.OrigID, header.RSSI_Percent, (packet as RxGetStatus)!.Voltage_V);
                 _dispatcherService.PushDispatch(new PunchDispatch(Nodes: new[] { new NodeNew(header.OrigID.ToString(), null, header.Latency, header.RSSI_Percent) }));
               }
               else if (data[17] == 0x20)
@@ -222,7 +227,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
                 foreach (var jump in (packet as RxGetPath)!.Jumps)
                 {
                   list.Add(new Hop(from.ToString(), jump.ReceiverId.ToString(), header.Latency / hop, jump.RSSI_Percent));
-                  //UpdateEdge(from, jump.ReceiverId, jump.RSSI_Percent, header.Latency / hop);
                   from = jump.ReceiverId;
                 }
 
@@ -230,7 +234,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
               }
               else
               {
-
+                // do nothing
               }
             }
             else
@@ -253,20 +257,8 @@ namespace RadioSender.Hosts.Source.TmFRadio
       }
       catch (OperationCanceledException)
       {
-
+        // quiet
       }
-
     }
-
-    //public void UpdateNode(uint address, int signal, double battery)
-    //{
-    //  _deviceService.UpdateNode(new Node("TmF" + address, "TmF" + address, signal / 10, $"Battery: {battery:0.00}V", DateTimeOffset.UtcNow));
-
-    //}
-
-    //public void UpdateEdge(uint from, uint to, int signal, int latency)
-    //{
-    //  _deviceService.UpdateEdge(new Edge("TmF" + from, "TmF" + to, signal / 10, latency * 2, signal + "%", "", DateTimeOffset.UtcNow));
-    //}
   }
 }

@@ -71,7 +71,7 @@ namespace RadioSender.UI
         .SetUseOsDefaultSize(true)
         .SetResizable(true)
         .Center()
-        .Load($"http://127.0.0.1:{port}");
+        .Load($"http://127.0.0.1:{port}/Log");
 
       _terminatePhotinoAction = () => window?.Close();
 

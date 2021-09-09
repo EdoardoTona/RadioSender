@@ -125,11 +125,11 @@
       nodes.forEach(item => {
         var tr = document.createElement("tr");
         tr.innerHTML = `
-                             <td>${item.id}</td>
-                             <td>${item.label}</td>
-                             <td>${item.value}</td>
-                             <td>${item.title}</td>
-                        `;
+                               <td>${item.id}</td>
+                               <td>${item.label}</td>
+                               <td>${item.value}</td>
+                               <td>${item.title}</td>
+                          `;
         nodesList.appendChild(tr);
       });
 
@@ -137,11 +137,11 @@
       edges.forEach(item => {
         var tr = document.createElement("tr");
         tr.innerHTML = `
-                   <td>${item.from}</td>
-                   <td>${item.to}</td>
-                   <td>${item.value}</td>
-                   <td>${item.title}</td>
-              `;
+                     <td>${item.from}</td>
+                     <td>${item.to}</td>
+                     <td>${item.value}</td>
+                     <td>${item.title}</td>
+                `;
         edgesList.appendChild(tr);
 
         edges.update(item);
@@ -150,8 +150,8 @@
 
     });
 
-    start().then(() => connection.invoke("JoinGroup", "@DeviceHub.GROUP_GRAPH"));
-    connection.onreconnected(() =>  connection.invoke("JoinGroup", "@DeviceHub.GROUP_GRAPH"));
+    const GROUP = "@DeviceHub.GROUP_GRAPH";
+    start();
 
   </script>
 }

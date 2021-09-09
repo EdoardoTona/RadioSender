@@ -18,6 +18,7 @@ namespace RadioSender.Hosts.Target.UI
     private IFilter _filter = Filter.Invariant;
     private UIConfiguration _configuration;
     private readonly IHubContext<DeviceHub, IDeviceHub> _hubContext;
+    private readonly HubEvents _hubEvents;
 
     private readonly SortedDictionary<string, VisEdge> _hops = new();
     private readonly SortedDictionary<string, VisNode> _nodes = new();
@@ -36,18 +37,25 @@ namespace RadioSender.Hosts.Target.UI
     {
       _configuration = configuration;
       _hubContext = hubContext;
-      CustomLogSink.HubContext = hubContext;
-      CustomLogSink.InitEvents(hubEvents);
+      _hubEvents = hubEvents;
 
-      hubEvents.GroupJoined += HubEvents_GroupJoined;
+      _nodes[NodeNew.Localhost.Id] = VisNode.FromNode(NodeNew.Localhost);
+
+      _hubEvents.GroupJoined += HubEvents_GroupJoined;
+
       sub = _changes.Throttle(TimeSpan.FromMilliseconds(1000))
                         .Do(_ => Notify())
                         .Subscribe();
 
-
-      _nodes[NodeNew.Localhost.Id] = VisNode.FromNode(NodeNew.Localhost);
-
       UpdateConfiguration(filters, configuration);
+    }
+
+    public void Dispose()
+    {
+      _hubEvents.GroupJoined -= HubEvents_GroupJoined;
+
+      sub?.Dispose();
+      _changes?.Dispose();
     }
 
     private async void HubEvents_GroupJoined(HubCallerContext context, string group)
@@ -72,18 +80,12 @@ namespace RadioSender.Hosts.Target.UI
       }
       catch (OperationCanceledException)
       {
-
+        // quiet
       }
       catch (Exception e)
       {
         Log.Error(e, "Exception Group Join");
       }
-    }
-
-    public void Dispose()
-    {
-      sub?.Dispose();
-      _changes?.Dispose();
     }
 
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
@@ -102,7 +104,6 @@ namespace RadioSender.Hosts.Target.UI
           _nodes[n.Id] = VisNode.FromNode(n);
 
           _changes.OnNext(null);
-          //await _hubContext.Clients.All.SendAsync("Node", n, ct);
         }
       }
 
@@ -112,7 +113,6 @@ namespace RadioSender.Hosts.Target.UI
         {
           _hops[h.Id] = VisEdge.FromHop(h);
           _changes.OnNext(null);
-          //await _hubContext.Clients.All.SendAsync("Hop", h, ct);
         }
       }
 

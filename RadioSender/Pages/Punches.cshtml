@@ -26,7 +26,7 @@
       <thead>
         <tr>
           <th data-field="time" data-sortable="true">Time</th>
-          <th data-field="card" data-sortable="true" >Card</th>
+          <th data-field="card" data-sortable="true">Card</th>
           <th data-field="control" data-sortable="true">Control</th>
           <th data-field="controlType" data-sortable="true">Control Type</th>
         </tr>
@@ -77,8 +77,8 @@
 
   });
 
-  start().then(() => connection.invoke("JoinGroup", "@DeviceHub.GROUP_PUNCHES"));
-  connection.onreconnected(() => connection.invoke("JoinGroup", "@DeviceHub.GROUP_PUNCHES"));
+    const GROUP = "@DeviceHub.GROUP_PUNCHES";
+    start();
 
   </script>
 }

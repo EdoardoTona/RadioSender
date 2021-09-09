@@ -16,12 +16,13 @@ using RadioSender.Hosts.Target.UI;
 using Serilog;
 using Serilog.Events;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 
 namespace RadioSender
 {
-  public class Program
+  public static class Program
   {
     public static int Main(string[] args)
     {
@@ -34,13 +35,14 @@ namespace RadioSender
                         .ReadFrom.Configuration(configuration)
                         .Enrich.FromLogContext()
                         .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
-                        .WriteTo.CustomLogSink()
+                        .WriteTo.EventLogSink()
                         .CreateLogger();
       try
       {
         Log.Information("**** Starting up {application} {version} ****", Assembly.GetExecutingAssembly().GetName().Name, Assembly.GetExecutingAssembly().GetName().Version);
         CreateHostBuilder(args).Build().Run();
         Log.Information("**** Shutting down ****");
+
         return 0;
       }
       catch (OperationCanceledException)

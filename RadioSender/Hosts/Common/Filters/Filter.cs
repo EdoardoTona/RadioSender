@@ -58,7 +58,7 @@ namespace RadioSender.Hosts.Common.Filters
         Card = card,
         Control = control,
         ControlType = ctype,
-      }; ;
+      };
     }
 
     public IEnumerable<Punch> Transform(IEnumerable<Punch>? punches)
@@ -79,7 +79,7 @@ namespace RadioSender.Hosts.Common.Filters
     public static IFilter GetFilter(this IEnumerable<IFilter> filters, string? name)
     {
       if (!string.IsNullOrWhiteSpace(name) && filters.Any(f => f.Name == name))
-        return filters.Where(f => f.Name == name).First();
+        return filters.First(f => f.Name == name);
 
       return Filter.Invariant;
     }

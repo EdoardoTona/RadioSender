@@ -13,6 +13,7 @@ namespace RadioSender.Hosts.Source.ROC
   {
     public int? EventId { get; init; }
     public int RefreshMs { get; init; } = 1000;
+    public string Host { get; init; } = "https://roc.olresultat.se/";
   }
 
   public static class ConfigureRoc
@@ -26,13 +27,13 @@ namespace RadioSender.Hosts.Source.ROC
 
         var events = context.Configuration.GetSection("Source:ROC:Events").Get<IEnumerable<Event>>();
 
-        services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME, c =>
-        {
-          c.BaseAddress = new Uri("https://roc.olresultat.se/");
-        });
-
         foreach (var ev in events)
         {
+          services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME, c => // TODO if added twice
+          {
+            c.BaseAddress = new Uri(ev.Host);
+          });
+
           services.AddHostedService(sp =>
             new ROCEvent(
               sp.GetServices<IFilter>(),

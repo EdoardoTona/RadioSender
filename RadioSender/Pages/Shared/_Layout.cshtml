@@ -44,13 +44,16 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav me-auto">
           <li class="nav-item">
-            <a @if ((string)@ViewData["Title"] == "Log") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/">Log</a>
+            <a @if ((string)@ViewData["Title"] == "Log") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Log">Log</a>
           </li>
           <li class="nav-item">
             <a @if ((string)@ViewData["Title"] == "Punches") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Punches">Punches</a>
           </li>
           <li class="nav-item">
             <a @if ((string)@ViewData["Title"] == "Graph") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Graph">Graph</a>
+          </li>
+          <li class="nav-item">
+            <a @if ((string)@ViewData["Title"] == "Stats") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Stats">Stats</a>
           </li>
         </ul>
         <span class="navbar-text d-none d-sm-inline">
@@ -90,7 +93,7 @@
           if (retryContext.elapsedMilliseconds < 60000) {
             return 2000;
           } else {
-            return 10000;
+            return 3000;
           }
         }
       })
@@ -102,10 +105,8 @@
         console.assert(connection.state === signalR.HubConnectionState.Connected);
         console.log("SignalR Connected.");
 
-        connection.invoke("SetMetadata", { "prova": "valore", "prova2": 42 });
+        connection.invoke("JoinGroup", GROUP, { "userAgent": navigator.userAgent });
 
-        //document.getElementById("onlineBadge").classList.remove("d-none");
-        //document.getElementById("offlineBadge").classList.add("d-none");
         $(".onlineBadge").removeClass("d-none");
         $(".offlineBadge").addClass("d-none");
       } catch (err) {
@@ -115,24 +116,24 @@
       }
     };
 
+
     connection.onreconnected(async () => {
+      connection.invoke("JoinGroup", GROUP, { "userAgent": navigator.userAgent })
+
       $(".onlineBadge").removeClass("d-none");
       $(".offlineBadge").addClass("d-none");
-      //document.getElementById("onlineBadge").classList.remove("d-none");
-      //document.getElementById("offlineBadge").classList.add("d-none");
     });
     connection.onreconnecting(async () => {
       $(".onlineBadge").addClass("d-none");
       $(".offlineBadge").removeClass("d-none");
-      //document.getElementById("onlineBadge").classList.add("d-none");
-      //document.getElementById("offlineBadge").classList.remove("d-none");
     });
     connection.onclose(async () => {
       $(".onlineBadge").addClass("d-none");
       $(".offlineBadge").removeClass("d-none");
-      //document.getElementById("onlineBadge").classList.add("d-none");
-      //document.getElementById("offlineBadge").classList.remove("d-none");
     });
+
+    connection.on("Abort",() => connection.stop());
+    
 
   </script>
   @RenderSection("Scripts", required: false)

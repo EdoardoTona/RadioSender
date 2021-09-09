@@ -1,0 +1,50 @@
+﻿@page
+
+@using RadioSender.Hubs;
+
+@{
+  ViewData["Title"] = "Log";
+  Layout = "_Layout";
+}
+
+<div class="row h-100">
+  <ul class="flex-fill h-100 p-2 overflow-auto font-monospace text-light bg-dark bg-gradient list-group rounded-0" id="messagesList">
+  </ul>
+</div>
+
+@section Scripts
+{
+  <script>
+
+    var messagesList = document.getElementById("messagesList");
+
+    connection.on("log",  (message) => {
+
+      var li = document.createElement("li");
+      li.classList.add("p-0");
+      li.classList.add("ps-1");
+      li.classList.add("d-flex");
+      li.classList.add("align-items-center");
+      li.classList.add("list-group-item");
+
+      switch (message.level) {
+        case "Verbose": li.classList.add("list-group-item-light"); break; // Verbose
+        case "Debug": li.classList.add("list-group-item-light"); break; // Debug
+        case "Information": break; // Information
+        case "Warning": li.classList.add("list-group-item-warning"); break; // Warning
+        case "Error": li.classList.add("list-group-item-danger"); break; // Error
+        case "Fatal": li.classList.add("list-group-item-danger"); break; // Fatal
+      }
+
+      li.innerHTML = "<span class='badge bg-primary me-2'>" + message.timestamp + "</span> " + message.message;
+      if (message.exception)
+        li.innerHTML += "<br>" + message.exception
+      messagesList.prepend(li);
+
+    });
+
+    const GROUP = "@DeviceHub.GROUP_LOG";
+    start();
+  </script>
+}
+

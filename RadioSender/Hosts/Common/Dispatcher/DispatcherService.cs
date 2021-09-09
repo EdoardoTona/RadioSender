@@ -10,7 +10,7 @@ namespace RadioSender.Hosts.Common
   public class DispatcherService
   {
     private readonly DispatcherConfiguration _configuration;
-    private readonly IFilter _filter = Filter.Invariant;
+    private readonly IFilter _filter;
     private readonly IEnumerable<ITarget> _targets;
 
     private readonly HashSet<Punch> _punches = new();
@@ -47,7 +47,6 @@ namespace RadioSender.Hosts.Common
             continue;
           }
 
-          //Log.Information("Received punch " + punch);
           _punches.Add(punch);
           toBeForwardedPunch.Add(punch);
         }
@@ -77,7 +76,6 @@ namespace RadioSender.Hosts.Common
             continue;
           }
 
-          //Log.Information("Received punch " + punch);
           _punches.Add(punch);
           toBeForwardedPunch.Add(punch);
         }

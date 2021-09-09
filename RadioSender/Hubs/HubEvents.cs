@@ -1,16 +1,18 @@
 ﻿using Microsoft.AspNetCore.SignalR;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hubs
 {
   public class HubEvents
   {
-    public delegate void GroupJoinedEvent(HubCallerContext context, string group);
+    public delegate void GroupJoinedHandler(HubCallerContext context, string group);
 
-    public event GroupJoinedEvent? GroupJoined;
-
+    public event GroupJoinedHandler? GroupJoined;
     public void JoinGroup(HubCallerContext context, string group) => GroupJoined?.Invoke(context, group);
+
+
+    public delegate void ConnectionAbortedHandler(HubCallerContext context);
+
+    public event ConnectionAbortedHandler? ConnectionAborted;
+    public void AbortConnection(HubCallerContext context) => ConnectionAborted?.Invoke(context);
   }
 }

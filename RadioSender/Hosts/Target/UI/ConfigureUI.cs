@@ -16,10 +16,12 @@ namespace RadioSender.Hosts.Target.UI
   {
     public static IHostBuilder ToUI(this IHostBuilder builder)
     {
-
       builder
         .ConfigureServices((context, services) =>
         {
+          services.AddHostedService<LogService>();
+          services.AddHostedService<StatsService>();
+
           var conf = context.Configuration.GetSection("Target:UI").Get<UIConfiguration>();
           if (conf == null || !conf.Enable)
             return;
@@ -29,12 +31,11 @@ namespace RadioSender.Hosts.Target.UI
             sp.GetRequiredService<IHubContext<DeviceHub, IDeviceHub>>(),
             sp.GetRequiredService<HubEvents>(),
             conf));
-          //services.AddHostedService<Launcher>();
+
         })
         .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
 
       return builder;
-
     }
   }
 }
