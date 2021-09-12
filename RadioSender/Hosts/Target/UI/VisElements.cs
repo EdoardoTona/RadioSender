@@ -32,7 +32,7 @@ namespace RadioSender.Hosts.Target.UI
 
     public static VisNode FromNode(NodeNew node)
     {
-      return new VisNode(node.Id, node.Name ?? node.Id, node.SignalStength * 20 + 10, node.LatencyMs + "ms", 10, null);
+      return new VisNode(node.Id, node.Name ?? node.Id, node.SignalStength, node.LatencyMs + "ms", 10, null);
     }
   }
 }

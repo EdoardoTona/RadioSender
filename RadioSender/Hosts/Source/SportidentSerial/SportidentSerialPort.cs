@@ -35,7 +35,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     private static readonly RecyclableMemoryStreamManager _memoryManager = new();
 
-    private readonly IFilter _filter = Filter.Invariant;
+    private readonly IFilter _filter;
     private readonly DispatcherService _dispatcherService;
     private readonly Port _configuration;
     private readonly SerialPort _port;
@@ -218,7 +218,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           Buffer.BlockCopy(buffer, 0, data, 3, buffer.Length);
 
 
-          var punch = _filter.Transform(MessageToPunch(data));
+          var punch = _filter.Transform(MessageToPunch(data, _port.PortName));
 
           if (punch != null)
             _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
@@ -267,11 +267,11 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       }
       catch (OperationCanceledException)
       {
-
+        // quiet
       }
       catch (TimeoutException)
       {
-
+        // quiet
       }
       catch (Exception e)
       {
@@ -280,7 +280,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       return null;
     }
 
-    public static Punch? MessageToPunch(byte[] buffer)
+    public static Punch? MessageToPunch(byte[] buffer, string sourceId)
     {
       if (buffer[0] == WAKEUP)
         Buffer.BlockCopy(buffer, 1, buffer, 0, buffer.Length - 1);
@@ -341,7 +341,8 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         Card: cardNumber.ToString(),
         Time: dt,
         Control: controlCode,
-        ControlType: PunchControlType.Unknown
+        ControlType: PunchControlType.Unknown,
+        SourceId: sourceId
         );
     }
 

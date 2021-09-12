@@ -22,7 +22,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
   public class SportidentCenterEvent : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "sportident";
-    private readonly IFilter _filter = Filter.Invariant;
+    private readonly IFilter _filter;
     private readonly HttpClient _httpClient;
     private readonly Event _configuration;
     private readonly DispatcherService _dispatcherService;
@@ -111,7 +111,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
                                Card: p.Card.ToString(),
                                Control: p.Code,
                                ControlType: MapControlType(p.Mode),
-                               Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime
+                               Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
+                               SourceId: HTTPCLIENT_NAME
                               )
                       )
                     );

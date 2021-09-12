@@ -92,7 +92,8 @@ namespace RadioSender.Hosts.Source.SIRAP
                      Card: chipNo.ToString(),
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-                     Time: dt
+                     Time: dt,
+                     SourceId: "Sirap" // TODO
                      )
                   );
 
@@ -132,7 +133,8 @@ namespace RadioSender.Hosts.Source.SIRAP
                      Card: chipNo.ToString(),
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-                     Time: dt
+                     Time: dt,
+                     SourceId: "Sirap" // TODO
                      )
                   );
 

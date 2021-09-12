@@ -26,11 +26,15 @@ namespace RadioSender.Hosts.Target.UI
           if (conf == null || !conf.Enable)
             return;
 
-          services.AddSingleton<ITarget>(sp => new UIService(
+          services.AddSingleton(sp => new UIService(
             sp.GetServices<IFilter>(),
             sp.GetRequiredService<IHubContext<DeviceHub, IDeviceHub>>(),
             sp.GetRequiredService<HubEvents>(),
             conf));
+
+          services.AddSingleton<ITarget>(sp => sp.GetRequiredService<UIService>());
+
+          services.AddHostedService(sp => sp.GetRequiredService<UIService>());
 
         })
         .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());

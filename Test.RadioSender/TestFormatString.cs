@@ -14,6 +14,7 @@ namespace Test.RadioSender
       punch = new Punch(
         Card: "1234",
         Control: 31,
+        SourceId: "roc",
         ControlType: PunchControlType.Control,
         Time: new System.DateTime(2021, 08, 04, 21, 45, 59, 123)
         );

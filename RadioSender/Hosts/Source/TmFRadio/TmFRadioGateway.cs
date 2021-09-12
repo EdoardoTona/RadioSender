@@ -221,16 +221,23 @@ namespace RadioSender.Hosts.Source.TmFRadio
               {
                 packet = new RxGetPath(header, data);
                 var from = header.OrigID;
-                var hop = header.HopCounter == 0 ? 1 : header.HopCounter;
+                var hopsCount = header.HopCounter == 0 ? 1 : header.HopCounter;
 
-                var list = new List<Hop>();
+                var hops = new List<Hop>();
+                var nodes = new List<NodeNew>()
+                {
+                  new NodeNew(from.ToString(), null, header.Latency, header.RSSI_Percent)
+                };
+                int i = 1;
                 foreach (var jump in (packet as RxGetPath)!.Jumps)
                 {
-                  list.Add(new Hop(from.ToString(), jump.ReceiverId.ToString(), header.Latency / hop, jump.RSSI_Percent));
+                  hops.Add(new Hop(from.ToString(), jump.ReceiverId.ToString(), header.Latency / hopsCount, jump.RSSI_Percent));
+                  nodes.Add(new NodeNew(jump.ReceiverId.ToString(), null, header.Latency - ((header.Latency / hopsCount) * i), jump.RSSI_Percent));
                   from = jump.ReceiverId;
+                  i++;
                 }
 
-                _dispatcherService.PushDispatch(new PunchDispatch(Hops: list));
+                _dispatcherService.PushDispatch(new PunchDispatch(Hops: hops, Nodes: nodes));
               }
               else
               {
@@ -241,13 +248,13 @@ namespace RadioSender.Hosts.Source.TmFRadio
             {
               packet = new RxData(header, data);
 
-              var punch = _filter.Transform(SportidentSerialPort.MessageToPunch((packet as RxData)!.RxSerData));
+              var punch = _filter.Transform(SportidentSerialPort.MessageToPunch((packet as RxData)!.RxSerData, header.OrigID.ToString()));
 
               if (punch != null)
                 _dispatcherService.PushDispatch(new PunchDispatch(Punches: new[] { punch }));
             }
 
-            Log.Verbose(packet?.ToString());
+            //Log.Verbose(packet?.ToString());
           }
           catch (Exception e)
           {

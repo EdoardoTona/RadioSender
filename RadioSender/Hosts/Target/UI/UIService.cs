@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hubs;
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.UI
 {
-  public sealed class UIService : ITarget, IDisposable
+  public sealed class UIService : IHostedService, ITarget, IDisposable
   {
     private IFilter _filter = Filter.Invariant;
     private UIConfiguration _configuration;
@@ -28,6 +29,8 @@ namespace RadioSender.Hosts.Target.UI
 
     private readonly Subject<object?> _changes = new();
     private readonly IDisposable sub;
+
+    private Timer? _timer;
 
     public UIService(
       IEnumerable<IFilter> filters,
@@ -56,6 +59,26 @@ namespace RadioSender.Hosts.Target.UI
 
       sub?.Dispose();
       _changes?.Dispose();
+      _timer?.Dispose();
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+      _timer = new Timer(ForceUpdate, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+
+      return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+      _timer?.Change(Timeout.Infinite, 0);
+
+      return Task.CompletedTask;
+    }
+
+    private void ForceUpdate(object? state)
+    {
+      _changes.OnNext(null);
     }
 
     private async void HubEvents_GroupJoined(HubCallerContext context, string group)
@@ -121,7 +144,6 @@ namespace RadioSender.Hosts.Target.UI
 
       if (dispatch.Punches == null)
         return;
-
       var punches = _filter.Transform(dispatch.Punches);
 
       foreach (var punch in punches)
@@ -142,6 +164,5 @@ namespace RadioSender.Hosts.Target.UI
     {
       _hubContext.Clients.Group(DeviceHub.GROUP_GRAPH).Graph(_hops.Values.ToList(), _nodes.Values.ToList());
     }
-
   }
 }
