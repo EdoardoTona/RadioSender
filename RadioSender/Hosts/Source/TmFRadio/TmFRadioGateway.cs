@@ -59,7 +59,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         _readTask = ReadData();
 
-        _timer = new Timer((state) => _ = CheckStatus(), null, 0, 5000);
+        _timer = new Timer((state) => _ = CheckStatus(), null, 0, _configuration.StatusCheck * 1000);
 
         return Task.CompletedTask;
       }

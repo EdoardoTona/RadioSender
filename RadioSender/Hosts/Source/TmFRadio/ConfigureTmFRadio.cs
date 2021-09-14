@@ -11,6 +11,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
   {
     public string? PortName { get; init; }
     public int Baudrate { get; init; } = 19200;
+    public int StatusCheck { get; init; } = 10; // seconds
   }
 
   public static class ConfigureTmFRadio
