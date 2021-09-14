@@ -1,0 +1,8 @@
+﻿body {
+  height: 100vh;
+  font-size: .875rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 56px auto;
+  overflow: hidden;
+}
