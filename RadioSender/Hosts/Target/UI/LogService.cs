@@ -1,4 +1,5 @@
-﻿using Cyotek.Collections.Generic;
+﻿using Common;
+using Cyotek.Collections.Generic;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hubs;

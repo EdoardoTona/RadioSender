@@ -12,6 +12,8 @@ namespace RadioSender
   {
     public void ConfigureServices(IServiceCollection services)
     {
+      services.AddHealthChecks();
+
       services.AddRazorPages();
 
       services.AddSignalR()
@@ -45,6 +47,8 @@ namespace RadioSender
 
       app.UseEndpoints(endpoints =>
       {
+        endpoints.MapHealthChecks("healthz");
+
         endpoints.MapRazorPages();
 
         endpoints.MapHub<DeviceHub>("/deviceHub");

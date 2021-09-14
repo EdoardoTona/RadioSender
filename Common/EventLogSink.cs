@@ -5,7 +5,7 @@ using Serilog.Events;
 using System;
 using System.Collections.Generic;
 
-namespace RadioSender
+namespace Common
 {
   public static class EventLogSinkSinkExtensions
   {
@@ -38,7 +38,11 @@ namespace RadioSender
     public void AddHandler(NewLogHandler handler)
     {
       NewLogEvent += handler;
-      DequeueBuffer();
+
+      while (buffer.TryDequeue(out LogMessage? oldMessage) && oldMessage != null)
+      {
+        NewLogEvent?.Invoke(this, oldMessage);
+      }
     }
     public void RemoveHandler(NewLogHandler handler)
     {
@@ -53,14 +57,6 @@ namespace RadioSender
         buffer.Enqueue(message);
       else
         NewLogEvent?.Invoke(this, message);
-    }
-
-    private void DequeueBuffer()
-    {
-      while (buffer.TryDequeue(out LogMessage? oldMessage) && oldMessage != null)
-      {
-        NewLogEvent?.Invoke(this, oldMessage);
-      }
     }
   }
 }
