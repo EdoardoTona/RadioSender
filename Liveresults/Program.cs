@@ -1,5 +1,6 @@
 ﻿using CliWrap;
 using Common;
+using Liveresults.Oribos;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -10,7 +11,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace RadioSender
+namespace Liveresults
 {
   public static class Program
   {
@@ -65,7 +66,8 @@ namespace RadioSender
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
             .UseSerilog()
-            .ActivatePhotino();
+            .ActivatePhotino()
+            .FromOribos();
 
     public static void PopupException(Exception e)
     {

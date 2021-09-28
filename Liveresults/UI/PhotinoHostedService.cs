@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace RadioSender.UI
+namespace Liveresults.UI
 {
   public class PhotinoHostedService : IHostedService
   {
@@ -66,12 +66,12 @@ namespace RadioSender.UI
 
       var window = new PhotinoWindow()
         .SetIconFile(iconFile)
-        .SetTitle("RadioSender")
+        .SetTitle("CIS")
         .SetChromeless(false)
         .SetUseOsDefaultSize(true)
         .SetResizable(true)
         .Center()
-        .Load($"http://127.0.0.1:{port}/Log");
+        .Load($"http://127.0.0.1:{port}/");
 
       _terminatePhotinoAction = () => window?.Close();
 

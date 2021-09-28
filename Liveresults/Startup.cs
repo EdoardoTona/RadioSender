@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Liveresults.Hubs;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -17,6 +18,7 @@ namespace Liveresults
       services.AddSignalR()
               .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+      services.AddSingleton<HubEvents>();
 
     }
 
@@ -47,6 +49,8 @@ namespace Liveresults
         endpoints.MapHealthChecks("healthz");
 
         endpoints.MapRazorPages();
+
+        endpoints.MapHub<ResultsHub>("/resultsHub");
 
       });
 

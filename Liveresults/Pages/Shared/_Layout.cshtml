@@ -1,0 +1,140 @@
+﻿@using Liveresults.Hubs;
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>@ViewData["Title"]</title>
+
+  <link rel="stylesheet" href="~/lib/bootstrap/css/bootstrap.min.css">
+
+  <script src="~/lib/jquery/jquery.slim.min.js"></script>
+
+  <script src="~/lib/signalr/signalr.min.js"></script>
+
+  <script src="~/lib/bootstrap/js/bootstrap.min.js"></script>
+
+
+  @RenderSection("Head", required: false)
+
+  <link rel="stylesheet" href="~/css/style.css">
+</head>
+
+<body>
+
+  <nav class="navbar navbar-expand-sm navbar-dark bg-dark" style="position: absolute; width: 100%; z-index:2">
+    <div class="container-fluid">
+      <a class="navbar-brand d-flex align-items-center me-auto pe-2" href="/">
+        <img src="/favicon.png" alt="" width="24" height="24" class="me-2">
+        CIS
+      </a>
+
+      <span class="navbar-text d-sm-none me-3">
+        <span class="badge rounded-pill bg-success d-none onlineBadge">
+          Online
+        </span>
+        <span class="badge rounded-pill bg-danger offlineBadge">
+          Offline
+        </span>
+      </span>
+
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item">
+            <a @if ((string)@ViewData["Title"] == "Results") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Results">Results</a>
+          </li>
+        </ul>
+        <span class="navbar-text d-none d-sm-inline">
+          <span class="badge rounded-pill bg-success d-none onlineBadge">
+            Online
+          </span>
+          <span class="badge rounded-pill bg-danger offlineBadge">
+            Offline
+          </span>
+        </span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid" style="position: relative; min-height: auto; overflow: hidden; grid-row-start: 2">
+    @RenderBody()
+  </div>
+
+  <script>
+    GROUP = null;
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    var connection = new signalR
+      .HubConnectionBuilder()
+      .withUrl("/resultsHub")
+      .withAutomaticReconnect({
+
+        nextRetryDelayInMilliseconds: retryContext => {
+          if (retryContext.elapsedMilliseconds < 60000) {
+            return 2000;
+          } else {
+            return 3000;
+          }
+        }
+      })
+      .build();
+
+    async function start() {
+      try {
+        await connection.start();
+        console.assert(connection.state === signalR.HubConnectionState.Connected);
+        console.log("SignalR Connected.");
+
+        connection.invoke("JoinGroup", "@ResultsHub.GROUP_CATEGORIES", { "userAgent": navigator.userAgent });
+        if(GROUP)
+          connection.invoke("JoinGroup", GROUP, { "userAgent": navigator.userAgent });
+
+        $(".onlineBadge").removeClass("d-none");
+        $(".offlineBadge").addClass("d-none");
+      } catch (err) {
+        console.assert(connection.state === signalR.HubConnectionState.Disconnected);
+        console.log(err);
+        setTimeout(() => start(), 5000);
+      }
+    };
+
+
+    connection.onreconnected(async () => {
+      connection.invoke("JoinGroup", "@ResultsHub.GROUP_CATEGORIES", { "userAgent": navigator.userAgent });
+      if (GROUP)
+        connection.invoke("JoinGroup", GROUP, { "userAgent": navigator.userAgent });
+
+      $(".onlineBadge").removeClass("d-none");
+      $(".offlineBadge").addClass("d-none");
+    });
+    connection.onreconnecting(async () => {
+      $(".onlineBadge").addClass("d-none");
+      $(".offlineBadge").removeClass("d-none");
+    });
+    connection.onclose(async () => {
+      $(".onlineBadge").addClass("d-none");
+      $(".offlineBadge").removeClass("d-none");
+    });
+
+    connection.on("Abort", () => connection.stop());
+
+
+  </script>
+  @RenderSection("Scripts", required: false)
+
+</body>
+
+</html>

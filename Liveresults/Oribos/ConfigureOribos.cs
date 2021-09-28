@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Net.Http;
 
-namespace RadioSender.Hosts.Target.Oribos
+namespace Liveresults.Oribos
 {
   public record OribosServer
   {
@@ -13,15 +13,24 @@ namespace RadioSender.Hosts.Target.Oribos
 
   public static class ConfigureOribos
   {
-    public static IHostBuilder ToOribos(this IHostBuilder builder)
+    public static IHostBuilder FromOribos(this IHostBuilder builder)
     {
       builder.ConfigureServices((context, services) =>
       {
-        var server = context.Configuration.GetSection("Target:Oribos").Get<OribosServer>();
+        var server = context.Configuration.GetSection("Oribos").Get<OribosServer>();
 
-        services.AddSingleton(s => new OribosService(
+        services.AddHttpClient();
+
+        services.AddSingleton<CategoryService>();
+        services.AddSingleton<ResultsService>();
+
+        services.AddHostedService(s => new OribosService(
           s.GetRequiredService<IHttpClientFactory>(),
-          server));
+          server,
+
+          s.GetRequiredService<CategoryService>(),
+
+          s.GetRequiredService<ResultsService>()));
 
       });
 

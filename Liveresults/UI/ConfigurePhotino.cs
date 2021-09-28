@@ -1,8 +1,8 @@
 ﻿using Liveresults;
+using Liveresults.UI;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using RadioSender.UI;
 
 namespace Microsoft.Extensions.Hosting
 {

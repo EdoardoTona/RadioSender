@@ -3,14 +3,6 @@
   "defaultProvider": "cdnjs",
   "libraries": [
     {
-      "library": "vis@4.21.0",
-      "destination": "wwwroot/lib/vis/",
-      "files": [
-        "vis-network.min.js",
-        "vis-network.min.css"
-      ]
-    },
-    {
       "library": "bootstrap@5.1.0",
       "destination": "wwwroot/lib/bootstrap/",
       "files": [
