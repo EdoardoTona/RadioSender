@@ -22,6 +22,7 @@ namespace Liveresults.Models
     public string Total { get; set; }
     public string Status { get; set; }
     public bool LastUpdated { get; set; }
+    public bool SJ { get; set; }
   }
 
   public struct Time

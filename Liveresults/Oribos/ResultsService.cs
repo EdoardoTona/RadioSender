@@ -114,7 +114,7 @@ namespace Liveresults.Oribos
 
 
         Dictionary<int, int> intermediatesTimes = new();
-        if (c.Status == "IP" || c.Status == "GA")
+        if (c.Status == "IP" || c.Status == "GA" || !c.Intermediates.Any())
         {
           intermediatesTimes = c.Radio.ToDictionary(i => i.Point, i => (int)Math.Floor(previousLegTime + i.Time));
         }
@@ -138,7 +138,8 @@ namespace Liveresults.Oribos
           Status = status,
           //Position = status == "CL" ? c.Pos : "",
           IntermediatesTimes = intermediatesTimes,
-          TotalTime = (int)Math.Floor(previousLegTime + c.Time)
+          TotalTime = (int)Math.Floor(previousLegTime + c.Time),
+          SJ = c.SJ
         };
 
         item.Start = item.StartDTO.ToLocalTime().ToString("HH:mm:ss");
@@ -221,6 +222,10 @@ namespace Liveresults.Oribos
 
             var diff = value - firstTime;
             item.Total = TimeSpan.FromSeconds(value).ToHMS() + $" ({lasti})<br><small>+" + TimeSpan.FromSeconds(diff).ToHMS() + "</small>";
+
+            if (item.SJ)
+              item.Total = "*" + item.Total;
+
             item.Position = "" + item.TotalPosition;
           }
         }
@@ -245,8 +250,8 @@ namespace Liveresults.Oribos
 
               item.Order = item.IntermediatesPositions[lastIntermediate] - 0.1f;
             }
-
-            item.Total = "<span data-running-time-from='" + item.StartDTO.ToUnixTimeSeconds() + "'></span>";
+            var diff = DateTimeOffset.UtcNow - item.StartDTO;
+            item.Total = "<span data-running-time-from='" + item.StartDTO.ToUnixTimeSeconds() + "'>" + (diff < TimeSpan.Zero ? "" : diff.ToHMS()) + "</span>";
           }
           else if (item.Status == "CL")
           {

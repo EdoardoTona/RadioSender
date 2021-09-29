@@ -63,11 +63,16 @@
     var categoriesMap = new Map();
     var $table = $('#results');
 
+    var CLASS;
 
     let ro = new ResizeObserver(elements => {
       $table.bootstrapTable('refreshOptions', {
         height: container.clientHeight
       })
+
+      //if (CLASS) {
+      //  ChangeClass(CLASS);
+      //}
     });
 
     ro.observe(container);
@@ -94,8 +99,6 @@
     });
 
     connection.on("UpdateResult", (list) => {
-      // TODO
-      console.log(list);
 
       for (var item of list) {
 
@@ -104,11 +107,15 @@
         }
       }
 
+      var current_pos = $table.bootstrapTable('getScrollPosition');
       $table.bootstrapTable('load', list);
+      $table.bootstrapTable('scrollTo', { unit: 'px', value: current_pos });
 
     });
 
+
     function ChangeClass(shortName) {
+      CLASS = shortName;
       console.log(shortName);
       GROUP = "results" + shortName;
       connection.invoke("JoinGroup", GROUP, { "userAgent": navigator.userAgent });
@@ -212,11 +219,36 @@
           var startTime = val.dataset.runningTimeFrom;
           var now = Math.floor(Date.now() / 1000);
           var s = now - startTime;
-          val.innerText = new Date(s * 1000).toISOString().substr(11, 8)
+
+          val.innerText = printTime(s); // new Date(s * 1000).toISOString().substr(11, 8)
         });
 
       }, 1000);
     });
+
+    function printTime(unix_s) {
+
+      if (unix_s < 0)
+        return "";
+
+      var h = Math.floor(unix_s / 3600);
+
+      var mm = Math.floor((unix_s - (h * 3600)) / 60);
+      var ss = Math.floor((unix_s - (h * 3600) - (mm * 60)));
+
+      if (h > 0) {
+        return h + ":" + pad(mm, 2) + ":" + pad(ss, 2);
+      } else {
+        return mm + ":" + pad(ss, 2);
+      }
+    }
+
+
+    function pad(num, size) {
+      num = num.toString();
+      while (num.length < size) num = "0" + num;
+      return num;
+    }
 
     start();
 
