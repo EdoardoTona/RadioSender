@@ -287,7 +287,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
       if (buffer[0] != STX)
       {
-        Log.Warning("Wrong STX");
+        // Log.Warning("Wrong STX");
         return null;
       }
 

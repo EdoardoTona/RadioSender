@@ -29,7 +29,8 @@
         Radiosender
       </a>
 
-      <span class="navbar-text d-sm-none me-3">
+            <span class="navbar-text d-sm-none me-3">
+                <button type="button" class="btn btn-sm btn-primary ping">Ping</button>
         <span class="badge rounded-pill bg-success d-none onlineBadge">
           Online
         </span>
@@ -56,7 +57,8 @@
             <a @if ((string)@ViewData["Title"] == "Stats") { @Html.Raw("class='nav-link active' aria-current='page'")  ; } else { @Html.Raw("class='nav-link'") ; } href="/Stats">Stats</a>
           </li>
         </ul>
-        <span class="navbar-text d-none d-sm-inline">
+                <span class="navbar-text d-none d-sm-inline">
+                    <button type="button" class="btn btn-sm btn-primary ping">Ping</button>
           <span class="badge rounded-pill bg-success d-none onlineBadge">
             Online
           </span>
@@ -73,6 +75,10 @@
   </div>
 
   <script>
+
+        $('.ping').on('click', function (event) {
+            connection.invoke("Ping");
+        });
 
     function toggleFullScreen() {
       if (!document.fullscreenElement) {

@@ -1,6 +1,7 @@
 ﻿using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Target;
 using Serilog;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -14,6 +15,8 @@ namespace RadioSender.Hosts.Common
     private readonly IEnumerable<ITarget> _targets;
 
     private readonly HashSet<Punch> _punches = new();
+
+    public event EventHandler RequestPing;
 
     public DispatcherService(
       IEnumerable<IFilter> filters,
@@ -30,6 +33,11 @@ namespace RadioSender.Hosts.Common
     public void ResendPunches()
     {
       _ = Task.WhenAll(_targets.Select(t => t.SendDispatch(new PunchDispatch(_punches.ToArray(), null), default)));
+    }
+
+    public void Ping()
+    {
+        RequestPing?.Invoke(this, EventArgs.Empty);
     }
 
     public void PushDispatch(PunchDispatch dispatch)

@@ -13,7 +13,7 @@ namespace RadioSender.Hosts.Target.UI
     DateTimeOffset LastSeen)
   {
     public string Id { get => From + "=>" + To; }
-    public bool Hidden { get => DateTimeOffset.UtcNow - LastSeen > TimeSpan.FromSeconds(20); }
+    public bool Hidden { get => DateTimeOffset.UtcNow - LastSeen > TimeSpan.FromSeconds(90); }
 
     public static VisEdge FromHop(Hop hop)
     {
