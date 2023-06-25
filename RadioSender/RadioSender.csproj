@@ -1,13 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFramework>net6.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+		<TargetFramework>net6.0</TargetFramework>
 		<LangVersion>latest</LangVersion>
 		<Nullable>enable</Nullable>
 		<ServerGarbageCollection>false</ServerGarbageCollection>
 		<ApplicationIcon>wwwroot/favicon.ico</ApplicationIcon>
 
 		<GenerateBootstrapperOnBuild>true</GenerateBootstrapperOnBuild>
+    <!--<PublishSingleFile>true</PublishSingleFile>-->
+
+		<Version>1.2.0</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
