@@ -9,9 +9,10 @@ namespace RadioSender.Hosts.Source.TmFRadio
 {
   public record Gateway : FilterableConfiguration
   {
+    public bool Enable { get; init; } = true;
     public string? PortName { get; init; }
     public int Baudrate { get; init; } = 19200;
-    public int StatusCheck { get; init; } = 10; // seconds
+    public int StatusCheck { get; init; } = 60; // seconds
   }
 
   public static class ConfigureTmFRadio
@@ -25,7 +26,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         foreach (var gateway in context.Configuration.GetSection("Source:TmFRadio:Gateways").Get<IEnumerable<Gateway>>())
         {
-          services.AddHostedService(sp => new TmFRadioGateway(
+          services.AddSingleton<IHostedService, TmFRadioGateway>(sp => new TmFRadioGateway(
             sp.GetServices<IFilter>(),
             sp.GetRequiredService<DispatcherService>(),
             gateway));

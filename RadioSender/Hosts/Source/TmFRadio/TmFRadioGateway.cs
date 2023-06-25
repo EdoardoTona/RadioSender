@@ -75,6 +75,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+      Log.Verbose("Initialized " + _configuration.PortName);
       await OpenSerialPort();
       _readTask = ReadData();
       _timer_status = new Timer((state) => _ = CheckStatus(), null, _configuration.StatusCheck * 1000, _configuration.StatusCheck * 1000);
@@ -91,21 +92,21 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         _ = CheckPathAndStatus(delay:true);
 
-        Log.Information("Port {port} connected", _configuration.PortName);
+        Log.Information("{port} Port connected", _configuration.PortName);
       }
       catch (UnauthorizedAccessException e)
       {
-        Log.Error("Port {port} occupied by another program", _configuration.PortName);
+        Log.Error("{port} Port occupied by another program", _configuration.PortName);
       }
       catch (FileNotFoundException e)
       {
-        Log.Error("Port not found {port}", _configuration.PortName);
+        Log.Error("{port} Port not found", _configuration.PortName);
       }
       catch (IOException e)
       {
         if(e.Message.Contains("Port not found"))
         {
-          Log.Error("Port not found {port}", _configuration.PortName);
+          Log.Error("{port} Port not found", _configuration.PortName);
         }
         else
         {
@@ -162,7 +163,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       }
       catch (Exception e)
       {
-        Log.Error(e, "Check status and path  Exception");
+        Log.Error(e, "{port} Check status and path exception", _configuration.PortName);
       }
     }
 
@@ -170,12 +171,12 @@ namespace RadioSender.Hosts.Source.TmFRadio
     {
       try
       {
-        Log.Verbose("Check status requested");
+        Log.Verbose("{port} Check status requested", _configuration.PortName);
         await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
       }
       catch (Exception e)
       {
-        Log.Error(e, "Check Status Exception");
+        Log.Error(e, "{port} Check Status Exception", _configuration.PortName);
       }
     }
 
@@ -183,12 +184,12 @@ namespace RadioSender.Hosts.Source.TmFRadio
     {
       try
       {
-        Log.Verbose("Check path requested");
+        Log.Verbose("{port} Check path requested", _configuration.PortName);
         await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
       }
       catch (Exception e)
       {
-        Log.Error(e, "Check Path Exception");
+        Log.Error(e, "{port} Check Path Exception", _configuration.PortName);
       }
     }
 
@@ -228,7 +229,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       }
       catch (Exception e)
       {
-        Log.Error("Error sending command SportidentSerial {msg}", e.Message);
+        Log.Error("{port} Error sending command SportidentSerial {msg}", _configuration.PortName, e.Message);
       }
     }
 
@@ -259,7 +260,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
               if (_port.BytesToRead < length - 1)
               {
                 length = (byte) _port.BytesToRead;
-                Log.Warning("Expected {length} bytes, reading {bytesToRead}", length - 1, _port.BytesToRead);
+                Log.Warning("{port} Expected {length} bytes, reading {bytesToRead}", _configuration.PortName, length - 1, _port.BytesToRead);
               }
             }
 
@@ -275,11 +276,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
           }
           catch (OperationCanceledException)
           {
-            Log.Warning("Connection lost from the serial port");
+            Log.Warning("{port} Connection lost from the serial port", _configuration.PortName);
           }
           catch (Exception e)
           {
-            Log.Error(e, "Exeption reading data from serial port");
+            Log.Error(e, "{port} Exeption reading data from serial port", _configuration.PortName);
           }
         }
       }
@@ -295,7 +296,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
       int length = data.Length;
       if (length < 18)
       {
-        Log.Error("Received broken message of {count} bytes: {hex}", length, BitConverter.ToString(data));
+        Log.Error("{port} Received broken message of {count} bytes: {hex}", _configuration.PortName, length, BitConverter.ToString(data));
         return;
       }
 
@@ -308,7 +309,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
         if (data[17] == 0x09)
         {
           var packet = new RxGetStatus(header, data);
-          Log.Verbose("Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", header.OrigID, packet.EventDetailString, header.RSSI_Percent, header.Latency, packet.Temperat_C,packet.Voltage_V);
+          Log.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, header.OrigID, packet.EventDetailString, header.RSSI_Percent, header.Latency, packet.Temperat_C,packet.Voltage_V);
           _dispatcherService.PushDispatch(new PunchDispatch(Nodes: new[] { new NodeNew(header.OrigID.ToString(), null, header.Latency, header.RSSI_Percent) }));
         }
         else if (data[17] == 0x20)
@@ -331,7 +332,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
             i++;
           }
 
-          Log.Verbose("Source {source} has {hops} hops (nodes: {nodes})", header.OrigID, hops.Count, string.Join('-',nodes.Select(n => n.Id)));
+          Log.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, header.OrigID, hops.Count, string.Join('-',nodes.Select(n => n.Id)));
          _dispatcherService.PushDispatch(new PunchDispatch(Hops: hops, Nodes: nodes));
         }
         else
@@ -348,9 +349,9 @@ namespace RadioSender.Hosts.Source.TmFRadio
         if(sportidentMsg == null)
         {
           if (HasNotPrintableChars(packet.RxSerData))
-            Log.Verbose("Source {source} says: {ascii} [HEX: {hex}]", header.OrigID, Encoding.ASCII.GetString(packet.RxSerData), BitConverter.ToString(data));
+            Log.Verbose("{port} Source {source} says: {ascii} [HEX: {hex}]", _configuration.PortName, header.OrigID, Encoding.ASCII.GetString(packet.RxSerData), BitConverter.ToString(data));
           else
-            Log.Information("Source {source} says: {ascii}", header.OrigID, Encoding.ASCII.GetString(packet.RxSerData));
+            Log.Information("{port} Source {source} says: {ascii}", _configuration.PortName, header.OrigID, Encoding.ASCII.GetString(packet.RxSerData));
 
           return;
         }
