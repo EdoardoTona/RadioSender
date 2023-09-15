@@ -26,7 +26,7 @@ namespace Liveresults.Oribos
 
         services.AddHostedService(s => new OribosService(
           s.GetRequiredService<IHttpClientFactory>(),
-          server,
+          server!,
 
           s.GetRequiredService<CategoryService>(),
 
