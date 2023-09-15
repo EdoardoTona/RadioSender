@@ -13,7 +13,15 @@ namespace RadioSender.Hosts.Common
     public string Id { get => From + To; }
   }
   public record PunchDispatch(IEnumerable<Punch>? Punches = null, IEnumerable<Hop>? Hops = null, IEnumerable<NodeNew>? Nodes = null);
-  public record Punch(string Card, DateTime Time, int Control, string SourceId, PunchControlType ControlType = PunchControlType.Unknown);
+  public record Punch(
+    string Card, 
+    DateTime Time, 
+    int Control, 
+    string SourceId, 
+    PunchControlType ControlType = PunchControlType.Unknown,
+    CompetitorStatus CompetitorStatus = CompetitorStatus.Unknown,
+    bool Cancellation = false
+    );
   public enum PunchControlType
   {
     Unknown = 0,
@@ -22,5 +30,17 @@ namespace RadioSender.Hosts.Common
     Clear,
     Check,
     Start
+  }
+  public enum CompetitorStatus
+  {
+    Unknown = 0,
+    OK,
+    DNS,
+    DNF,
+    MP,
+    DSQ,
+    OverTime,
+    WaitingStart,
+    Running
   }
 }

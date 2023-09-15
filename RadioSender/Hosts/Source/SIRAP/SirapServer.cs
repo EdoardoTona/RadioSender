@@ -77,13 +77,10 @@ namespace RadioSender.Hosts.Source.SIRAP
       var codeTime = BitConverter.ToInt32(buffer.Slice(11, 4));
 #pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
 
-      if (codeTime == 360000001)
-      {
-        // no time flag (invalid time, invalid punch...)
-        return;
-      }
-
       var time = TimeSpan.FromMilliseconds(codeTime * 100);
+
+      if (!ManageSpecialFlags(codeDay, codeTime, ref time, out CompetitorStatus competitorStatus, out bool isCancellation))
+        return;
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
@@ -93,7 +90,9 @@ namespace RadioSender.Hosts.Source.SIRAP
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
                      Time: dt,
-                     SourceId: "Sirap" // TODO
+                     SourceId: "Sirap", // TODO
+                     Cancellation: isCancellation,
+                     CompetitorStatus: competitorStatus
                      )
                   );
 
@@ -118,13 +117,10 @@ namespace RadioSender.Hosts.Source.SIRAP
       var codeTime = BitConverter.ToInt32(buffer.Slice(32, 4));
 #pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
 
-      if (codeTime == 360000001)
-      {
-        // no time flag (invalid time, invalid punch...)
-        return;
-      }
-
       var time = TimeSpan.FromMilliseconds(codeTime * 10);
+
+      if (!ManageSpecialFlags(codeDay, codeTime, ref time, out CompetitorStatus competitorStatus, out bool isCancellation))
+        return;
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
@@ -134,12 +130,74 @@ namespace RadioSender.Hosts.Source.SIRAP
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
                      Time: dt,
-                     SourceId: "Sirap" // TODO
+                     SourceId: "Sirap", // TODO
+                     Cancellation: isCancellation,
+                     CompetitorStatus: competitorStatus
                      )
                   );
 
       if (punch != null)
         _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+    }
+
+    internal static bool ManageSpecialFlags(int codeDay, 
+      int codeTime,
+      ref TimeSpan time, 
+      out CompetitorStatus competitorStatus, 
+      out bool isCancellation)
+    {
+      isCancellation = false;
+      competitorStatus = CompetitorStatus.Unknown;
+
+      if (codeDay == 0xFF)
+      {
+        // codeDay = 0xFF special flag (agreed with Simon Harston) to inform the time has a special meaning:
+        // 00:00:00:cancel previous event
+        // 00:00:01:DNS
+        // 00:00:02:DNF
+        // 00:00:03:MP
+        // 00:00:04:DSQ
+        // 00:00:05:OverTime
+
+        if (codeTime == 360000001) // documented as "no time" in Kramer original specification
+        {
+          isCancellation = true;
+          time = DateTime.Now.TimeOfDay;
+        }
+        else if (time.TotalSeconds == 1)
+        {
+          competitorStatus = CompetitorStatus.DNS;
+          time = DateTime.Now.TimeOfDay;
+        }
+        else if (time.TotalSeconds == 2)
+        {
+          competitorStatus = CompetitorStatus.DNF;
+          time = DateTime.Now.TimeOfDay;
+        }
+        else if (time.TotalSeconds == 3)
+        {
+          competitorStatus = CompetitorStatus.MP;
+          time = DateTime.Now.TimeOfDay;
+        }
+        else if (time.TotalSeconds == 4)
+        {
+          competitorStatus = CompetitorStatus.DSQ;
+          time = DateTime.Now.TimeOfDay;
+        }
+        else if (time.TotalSeconds == 5)
+        {
+          competitorStatus = CompetitorStatus.OverTime;
+          time = DateTime.Now.TimeOfDay;
+        }
+
+      }
+      else
+      {
+        if (codeTime == 360000001)
+          return false; // ignore 
+      }
+
+      return true;
     }
   }
 

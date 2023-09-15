@@ -12,6 +12,7 @@ namespace RadioSender.Hosts.Target.Oribos
   public record OribosServer : FilterableConfiguration
   {
     public string? Host { get; init; }
+    public bool UseStartNumbers { get; init; } = false;
   }
 
   public static class ConfigureOribos

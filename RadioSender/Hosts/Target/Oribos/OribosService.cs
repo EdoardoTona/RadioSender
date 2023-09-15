@@ -66,14 +66,57 @@ namespace RadioSender.Hosts.Target.Oribos
       var host = _configuration.Host.Contains("localhost") ? _configuration.Host.Replace("localhost", "127.0.0.1") : _configuration.Host; // optimization to skip the dns resolution
       httpClient.BaseAddress = new Uri(host);
 
-      string url = punch.ControlType switch
+      string? url;
+      if (!_configuration.UseStartNumbers)
       {
-        PunchControlType.Finish => $"/finish.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
-        PunchControlType.Start => $"/start.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-        PunchControlType.Clear => $"/clear.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-        PunchControlType.Check => $"/check.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-        _ => $"/radiotime.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-      };
+        url = punch.ControlType switch
+        {
+          PunchControlType.Finish => $"/finish.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
+          PunchControlType.Start => $"/start.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+          PunchControlType.Clear => $"/clear.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+          PunchControlType.Check => $"/check.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+          _ => $"/radiotime.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        };
+      }
+      else
+      {
+        if (punch.CompetitorStatus != CompetitorStatus.Unknown)
+        {
+          url = punch.CompetitorStatus switch
+          {
+            CompetitorStatus.DNS => $"/changestate.html?pett={punch.Card}&state=np",
+            CompetitorStatus.Running => $"/changestate.html?pett={punch.Card}&state=ga",
+            CompetitorStatus.WaitingStart => $"/changestate.html?pett={punch.Card}&state=ip",
+            _ => null
+          };
+        }
+        else if (punch.Cancellation)
+        {
+          url = punch.ControlType switch
+          {
+            PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
+            PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
+            _ => null
+          };
+        }
+        else
+        {
+          url = punch.ControlType switch
+          {
+            PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
+            PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
+            PunchControlType.Control => $"/cronoradio.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}&abs=1",
+            _ => null
+          };
+        }
+
+      }
+
+      if(string.IsNullOrEmpty(url))
+      {
+        Log.Warning("The event cannot be forwarded to Oribos");
+        return;
+      }
 
       var response = await httpClient.GetAsync(url, ct);
 
