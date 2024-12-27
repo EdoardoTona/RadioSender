@@ -17,7 +17,7 @@ namespace RadioSender.Hosts.Common
       {
         var conf = context.Configuration.GetSection("Dispatcher").Get<DispatcherConfiguration>();
 
-        services.AddSingleton(sp => new DispatcherService(sp.GetServices<IFilter>(), sp.GetServices<ITarget>(), conf));
+        services.AddSingleton(sp => new DispatcherService(sp.GetServices<IFilter>(), sp.GetServices<ITarget>(), conf!));
       });
 
       return builder;

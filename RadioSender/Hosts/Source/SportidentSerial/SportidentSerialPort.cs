@@ -148,7 +148,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     {
       var res = await SendCommand(CMD_GetSystemValue, 0x00, 0x80); // read 0x80 bytes from position 0x00
 
-      using var ms = _memoryManager.GetStream(res);
+      using var ms = _memoryManager.GetStream(res!);
 
       while (ms.Position < ms.Length)
       {

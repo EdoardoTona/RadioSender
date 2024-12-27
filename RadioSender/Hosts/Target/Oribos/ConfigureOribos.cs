@@ -26,7 +26,7 @@ namespace RadioSender.Hosts.Target.Oribos
 
         var servers = context.Configuration.GetSection("Target:Oribos:Servers").Get<IEnumerable<OribosServer>>();
 
-        if (servers.Any())
+        if (servers!.Any())
           services.AddHttpClient();
 
         foreach (var server in servers)

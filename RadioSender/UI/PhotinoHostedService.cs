@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
-using PhotinoNET;
+using Photino.NET;
 using System;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;

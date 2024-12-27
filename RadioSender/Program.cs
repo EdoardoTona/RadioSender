@@ -2,6 +2,7 @@ using CliWrap;
 using Common;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
@@ -83,6 +84,7 @@ namespace RadioSender
             .UseFilters()
 
             .ActivatePhotino()
+            .ConfigureServices(s => s.AddHttpClient())
 
             // Sources
             .FromRoc()
