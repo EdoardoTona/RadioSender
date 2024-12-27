@@ -61,7 +61,7 @@ namespace RadioSender.Hosts.Target.Oribos
       if (string.IsNullOrEmpty(_configuration.Host) || _httpClientFactory == null)
         throw new ArgumentException("Missing host");
 
-      var httpClient = _httpClientFactory.CreateClient();
+      using var httpClient = _httpClientFactory.CreateClient();
 
       var host = _configuration.Host.Contains("localhost") ? _configuration.Host.Replace("localhost", "127.0.0.1") : _configuration.Host; // optimization to skip the dns resolution
       httpClient.BaseAddress = new Uri(host);
@@ -112,7 +112,7 @@ namespace RadioSender.Hosts.Target.Oribos
 
       }
 
-      if(string.IsNullOrEmpty(url))
+      if (string.IsNullOrEmpty(url))
       {
         Log.Warning("The event cannot be forwarded to Oribos");
         return;
