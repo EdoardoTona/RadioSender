@@ -17,6 +17,7 @@ namespace RadioSender.Helpers
         "Card" or "card" => punch.Card,
         "Control" or "control" => punch.Control,
         "ControlType" or "controltype" => punch.ControlType,
+        "Type" or "type" => punch.ControlTypeShort ?? "",
         "Time" or "time" => punch.Time,
         "UnixS" or "unixs" => new DateTimeOffset(punch.Time).ToUnixTimeSeconds(),
         "UnixMs" or "unims" => new DateTimeOffset(punch.Time).ToUnixTimeMilliseconds(),

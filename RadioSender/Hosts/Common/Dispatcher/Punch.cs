@@ -14,14 +14,25 @@ namespace RadioSender.Hosts.Common
   }
   public record PunchDispatch(IEnumerable<Punch>? Punches = null, IEnumerable<Hop>? Hops = null, IEnumerable<NodeNew>? Nodes = null);
   public record Punch(
-    string Card, 
-    DateTime Time, 
-    int Control, 
-    string SourceId, 
+    string Card,
+    DateTime Time,
+    int Control,
+    string SourceId,
     PunchControlType ControlType = PunchControlType.Unknown,
     CompetitorStatus CompetitorStatus = CompetitorStatus.Unknown,
     bool Cancellation = false
-    );
+    )
+  {
+    public string? ControlTypeShort => ControlType switch
+    {
+      PunchControlType.Control => "CN",
+      PunchControlType.Finish => "FIN",
+      PunchControlType.Clear => "CLR",
+      PunchControlType.Check => "CHK",
+      PunchControlType.Start => "STA",
+      _ => null,
+    };
+  }
   public enum PunchControlType
   {
     Unknown = 0,
