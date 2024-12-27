@@ -67,7 +67,25 @@ public class HttpTarget : ITarget
 
     url = FormatStringHelper.GetString(punch, url);
 
-    var response = await httpClient.GetAsync(url, ct);
+    var method = _configuration.Method?.ToLowerInvariant();
+    var request = new HttpRequestMessage
+    {
+      RequestUri = new Uri(url),
+      Method = method switch
+      {
+        "get" => HttpMethod.Get,
+        "post" => HttpMethod.Post,
+        "delete" => HttpMethod.Delete,
+        "put" => HttpMethod.Put,
+        "patch" => HttpMethod.Patch,
+        "head" => HttpMethod.Head,
+        "options" => HttpMethod.Options,
+        "trace" => HttpMethod.Trace,
+        _ => HttpMethod.Get
+      }
+    };
+
+    var response = await httpClient.SendAsync(request, ct);
 
     if (_configuration.EnsureSuccessStatusCode)
       response.EnsureSuccessStatusCode();

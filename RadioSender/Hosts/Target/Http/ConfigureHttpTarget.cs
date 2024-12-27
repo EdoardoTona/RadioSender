@@ -11,12 +11,13 @@ namespace RadioSender.Hosts.Target.Http;
 public record HttpTargetConfiguration : FilterableConfiguration
 {
   public string? Url { get; set; }
+  public string? Method { get; set; }
   public bool EnsureSuccessStatusCode { get; set; }
 }
 
 public static class ConfigureHttpTarget
 {
-  public static IHostBuilder ToSirap(this IHostBuilder builder)
+  public static IHostBuilder ToHttp(this IHostBuilder builder)
   {
     builder.ConfigureServices((context, services) =>
     {

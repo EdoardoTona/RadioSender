@@ -11,6 +11,7 @@ using RadioSender.Hosts.Source.SportidentCenter;
 using RadioSender.Hosts.Source.SportidentSerial;
 using RadioSender.Hosts.Source.TmFRadio;
 using RadioSender.Hosts.Target.File;
+using RadioSender.Hosts.Target.Http;
 using RadioSender.Hosts.Target.Oribos;
 using RadioSender.Hosts.Target.SIRAP;
 using RadioSender.Hosts.Target.Tcp;
@@ -98,7 +99,8 @@ namespace RadioSender
             .ToOribos()
             .ToFile()
             .ToSirap()
-            .ToTcp();
+            .ToTcp()
+            .ToHttp();
 
     public static void PopupException(Exception e)
     {
