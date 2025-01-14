@@ -22,6 +22,7 @@ namespace RadioSender.Hosts.Source.SIRAP
           return;
 
         var servers = context.Configuration.GetSection("Source:SIRAP:Servers").Get<IEnumerable<SirapServerConfiguration>>();
+        if (servers == null) return;
 
         foreach (var server in servers)
         {

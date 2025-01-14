@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
+using RadioSender.Hosts.Source.Microplus;
 using RadioSender.Hosts.Source.ROC;
 using RadioSender.Hosts.Source.SIRAP;
 using RadioSender.Hosts.Source.SportidentCenter;
@@ -92,6 +93,7 @@ namespace RadioSender
             .FromSportidentSerial()
             .FromTmFRadio()
             .FromSirap()
+            .FromMicroplus()
 
             // Middleware
             .ThroughDispatcher()
