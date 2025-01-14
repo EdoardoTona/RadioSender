@@ -79,9 +79,14 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
         return;
       }
 
-      var ord = int.Parse(text.AsSpan(3, 3));
+      if (!int.TryParse(text.AsSpan(3, 3), out var order))
+        order = 0;
 
-      var bib = text.Substring(7, 3);
+      if (!int.TryParse(text.AsSpan(7, 3), out var bib))
+      {
+        Log.Warning($"Bib missing. Ignored. Received: {text} - {textHex}");
+        return;
+      }
 
       if (!int.TryParse(text.AsSpan(11, 3), out var control))
         control = 999;
@@ -97,7 +102,7 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
 
       var punch = _filter.Transform(
                     new Punch(
-                    Card: bib,
+                    Card: bib.ToString(),
                     Control: control,
                     ControlType: type,
                     Time: dt,
