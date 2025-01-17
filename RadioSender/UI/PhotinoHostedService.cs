@@ -71,14 +71,28 @@ namespace RadioSender.UI
         .SetUseOsDefaultSize(true)
         .SetResizable(true)
         .Center()
-        .Load($"http://127.0.0.1:{port}/Log");
+        .Load($"http://127.0.0.1:{port}/Log")
+        .RegisterWindowClosingHandler(new PhotinoWindow.NetClosingDelegate(Window_WindowClosing));
 
-      _terminatePhotinoAction = () => window?.Close();
+      _terminatePhotinoAction = async () =>
+      {
+
+        window?.Close();
+
+      };
 
       window.WaitForClose();
 
       _terminateAppAction?.Invoke();
     }
 
+    private static bool Window_WindowClosing(object sender, EventArgs e)
+    {
+      var window = sender as PhotinoWindow;
+
+      // TODO ask
+
+      return true;
+    }
   }
 }

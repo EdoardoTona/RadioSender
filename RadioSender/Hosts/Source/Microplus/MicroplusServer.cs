@@ -5,6 +5,7 @@ using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -99,15 +100,18 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
                     ControlType: PunchControlType.Unknown,
                     Time: dt,
                     SourceId: "Microplus",
-                    Cancellation: false
+                    Cancellation: false,
+                    NetTime: cmd == 'T'
                     )
                  );
 
-      if (cmd != 'S')
+      if (_configuration.IgnoreCommands != null)
       {
-        // filter only S event
-        Log.Information("Cmd {cmd} ignored. Received: {@punch}", cmd, punch);
-        return;
+        if (_configuration.IgnoreCommands.Any(c => c == cmd.ToString()))
+        {
+          Log.Information("Cmd {cmd} ignored. Received: {@punch}", cmd, punch);
+          return;
+        }
       }
 
       if (punch != null)

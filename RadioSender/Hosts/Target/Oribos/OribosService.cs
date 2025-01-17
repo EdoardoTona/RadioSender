@@ -69,6 +69,12 @@ namespace RadioSender.Hosts.Target.Oribos
       string? url;
       if (!_configuration.UseStartNumbers)
       {
+        if (punch.NetTime)
+        {
+          Log.Warning("Net time not supported in Oribos without bib numbers. Ignored");
+          return;
+        }
+
         url = punch.ControlType switch
         {
           PunchControlType.Finish => $"/finish.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
@@ -80,34 +86,56 @@ namespace RadioSender.Hosts.Target.Oribos
       }
       else
       {
-        if (punch.CompetitorStatus != CompetitorStatus.Unknown)
-        {
-          url = punch.CompetitorStatus switch
-          {
-            CompetitorStatus.DNS => $"/changestate.html?pett={punch.Card}&state=np",
-            CompetitorStatus.Running => $"/changestate.html?pett={punch.Card}&state=ga",
-            CompetitorStatus.WaitingStart => $"/changestate.html?pett={punch.Card}&state=ip",
-            _ => null
-          };
-        }
-        else if (punch.Cancellation)
+
+        if (punch.NetTime)
         {
           url = punch.ControlType switch
           {
-            PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
-            PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
+            PunchControlType.Finish => $"/algetime.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
+            PunchControlType.Control => $"/algetime.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+            PunchControlType.Unknown => $"/algetime.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
             _ => null
           };
+
+          if (url == null)
+          {
+            Log.Warning("Net time not supported in Oribos if control type is not finish or control. Ignored");
+            return;
+          }
+
         }
         else
         {
-          url = punch.ControlType switch
+          if (punch.CompetitorStatus != CompetitorStatus.Unknown)
           {
-            PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
-            PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
-            PunchControlType.Control => $"/cronoradio.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}&abs=1",
-            _ => null
-          };
+            url = punch.CompetitorStatus switch
+            {
+              CompetitorStatus.DNS => $"/changestate.html?pett={punch.Card}&state=np",
+              CompetitorStatus.Running => $"/changestate.html?pett={punch.Card}&state=ga",
+              CompetitorStatus.WaitingStart => $"/changestate.html?pett={punch.Card}&state=ip",
+              _ => null
+            };
+          }
+          else if (punch.Cancellation)
+          {
+            url = punch.ControlType switch
+            {
+              PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
+              PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
+              _ => null
+            };
+          }
+          else
+          {
+            url = punch.ControlType switch
+            {
+              PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
+              PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
+              PunchControlType.Control => $"/cronoradio.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}&abs=1",
+              _ => null
+            };
+          }
+
         }
 
       }

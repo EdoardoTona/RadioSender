@@ -20,7 +20,8 @@ namespace RadioSender.Hosts.Common
     string SourceId,
     PunchControlType ControlType = PunchControlType.Unknown,
     CompetitorStatus CompetitorStatus = CompetitorStatus.Unknown,
-    bool Cancellation = false
+    bool Cancellation = false,
+    bool NetTime = false
     )
   {
     public string? ControlTypeShort => ControlType switch

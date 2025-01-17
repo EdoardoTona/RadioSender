@@ -10,6 +10,7 @@ namespace RadioSender.Hosts.Source.Microplus;
 public record MicroplusServerConfiguration : FilterableConfiguration
 {
   public int? Port { get; init; }
+  public IEnumerable<string>? IgnoreCommands { get; set; }
 }
 
 public static class ConfigureMicroplusServer
