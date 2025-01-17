@@ -27,7 +27,8 @@ namespace RadioSender.Hosts.Common.Filters
 
       var control = MapControls.ContainsKey(punch.Control.ToString()) ? MapControls[punch.Control.ToString()] : punch.Control;
 
-      if (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control))
+      // control 0 means discard
+      if (control == 0 || (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control)))
       {
         return null; // discard
       }
