@@ -72,12 +72,6 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
       }
 
       var cmd = text[1];
-      if (cmd != 'S')
-      {
-        // filter only S event
-        Log.Information($"Cmd {(char)cmd} ignored. Received: {text} - {textHex}");
-        return;
-      }
 
       if (!int.TryParse(text.AsSpan(3, 3), out var order))
         order = 0;
@@ -91,8 +85,6 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
       if (!int.TryParse(text.AsSpan(11, 3), out var control))
         control = 999;
 
-      var type = control == 0 ? PunchControlType.Start : control >= 99 ? PunchControlType.Finish : PunchControlType.Control;
-
       var hh = int.Parse(text.AsSpan(15, 2));
       var mm = int.Parse(text.AsSpan(17, 2));
       var ss = int.Parse(text.AsSpan(19, 2));
@@ -104,12 +96,19 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
                     new Punch(
                     Card: bib.ToString(),
                     Control: control,
-                    ControlType: type,
+                    ControlType: PunchControlType.Unknown,
                     Time: dt,
-                    SourceId: "Microplus", // TODO
+                    SourceId: "Microplus",
                     Cancellation: false
                     )
                  );
+
+      if (cmd != 'S')
+      {
+        // filter only S event
+        Log.Information("Cmd {cmd} ignored. Received: {@punch}", cmd, punch);
+        return;
+      }
 
       if (punch != null)
         _dispatcherService.PushDispatch(new PunchDispatch([punch]));

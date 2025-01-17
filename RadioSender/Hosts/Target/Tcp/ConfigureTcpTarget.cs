@@ -25,6 +25,7 @@ namespace RadioSender.Hosts.Target.Tcp
           return;
 
         var targets = context.Configuration.GetSection("Target:Tcp:Targets").Get<IEnumerable<TcpTargetConfiguration>>();
+        if (targets == null) return;
 
         foreach (var target in targets)
         {
