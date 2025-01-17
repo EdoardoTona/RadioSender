@@ -54,6 +54,13 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     {
       await Task.Yield();
 
+      Log.Information("Sportident center listening event {event}. Frequency {frequency}", _configuration.EventId, _configuration.RefreshMs);
+
+      if (_configuration.EventId == 0 || _configuration.EventId == null || string.IsNullOrEmpty(_configuration.ApiKey))
+      {
+        Log.Error("Sportident center: EventId/ApiKey missing");
+      }
+
       while (!ct.IsCancellationRequested)
       {
         try
@@ -76,9 +83,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     {
       try
       {
-        if (_configuration.EventId == null || _configuration.ApiKey == null)
+        if (_configuration.EventId == 0 || _configuration.EventId == null || string.IsNullOrEmpty(_configuration.ApiKey))
         {
-          Log.Error("No EventId/ApiKey");
           return;
         }
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{_configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
@@ -94,9 +100,6 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         if (response.IsSuccessStatusCode)
         {
           using var responseStream = await response.Content.ReadAsStreamAsync(ct);
-
-          //var punches = await JsonSerializer.DeserializeAsync<IEnumerable<SimplePunch>>(responseStream,
-          //                                   new JsonSerializerOptions() { PropertyNameCaseInsensitive = true }, ct);
 
           using var reader = new StreamReader(responseStream, Encoding.UTF8);
           using var csv = new CsvReader(reader, _csvReaderConfiguration);

@@ -74,12 +74,7 @@ namespace RadioSender.UI
         .Load($"http://127.0.0.1:{port}/Log")
         .RegisterWindowClosingHandler(new PhotinoWindow.NetClosingDelegate(Window_WindowClosing));
 
-      _terminatePhotinoAction = async () =>
-      {
-
-        window?.Close();
-
-      };
+      _terminatePhotinoAction = () => { window?.Close(); };
 
       window.WaitForClose();
 
@@ -90,7 +85,10 @@ namespace RadioSender.UI
     {
       var window = sender as PhotinoWindow;
 
-      // TODO ask
+      var res = window?.ShowMessage("Radiosender", "Do you want to close?", PhotinoDialogButtons.YesNo, PhotinoDialogIcon.Warning);
+
+      if (res != null && res == PhotinoDialogResult.Yes)
+        return false;
 
       return true;
     }
