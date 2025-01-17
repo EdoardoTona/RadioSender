@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SIRAP
 {
-  public class SirapServer : TcpServer, ISource, IHostedService
+  public sealed class SirapServer : TcpServer, ISource, IHostedService, IDisposable
   {
     private readonly IFilter _filter = Filter.Invariant;
     private readonly SirapServerConfiguration _configuration;
@@ -39,6 +39,12 @@ namespace RadioSender.Hosts.Source.SIRAP
     {
       Stop();
       return Task.CompletedTask;
+    }
+
+    public new void Dispose()
+    {
+      DisconnectAll();
+      base.Dispose();
     }
 
     protected override TcpSession CreateSession() { return new TcpSirapSession(this); }
@@ -140,10 +146,10 @@ namespace RadioSender.Hosts.Source.SIRAP
         _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
     }
 
-    internal static bool ManageSpecialFlags(int codeDay, 
+    internal static bool ManageSpecialFlags(int codeDay,
       int codeTime,
-      ref TimeSpan time, 
-      out CompetitorStatus competitorStatus, 
+      ref TimeSpan time,
+      out CompetitorStatus competitorStatus,
       out bool isCancellation)
     {
       isCancellation = false;

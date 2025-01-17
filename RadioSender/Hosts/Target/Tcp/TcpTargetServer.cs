@@ -2,6 +2,7 @@
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -9,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.Tcp
 {
-  public class TcpTargetServer : IHostedService, ITarget
+  public sealed class TcpTargetServer : IHostedService, ITarget, IDisposable
   {
     private IFilter _filter = Filter.Invariant;
     private TcpTargetConfiguration _configuration;
@@ -85,7 +86,10 @@ namespace RadioSender.Hosts.Target.Tcp
       return Task.CompletedTask;
     }
 
-
+    public void Dispose()
+    {
+      _tcpServer?.Dispose();
+    }
   }
 
 

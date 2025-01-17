@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.SIRAP
 {
-  public class SirapClient : ITarget
+  public sealed class SirapClient : ITarget, IDisposable
   {
     private static readonly RecyclableMemoryStreamManager _memoryManager = new();
 
@@ -125,7 +125,10 @@ namespace RadioSender.Hosts.Target.SIRAP
       return ms.ToArray();
     }
 
-
+    public void Dispose()
+    {
+      _tcpClient?.Dispose();
+    }
   }
 
 
