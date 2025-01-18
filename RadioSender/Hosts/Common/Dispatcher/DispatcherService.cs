@@ -51,7 +51,7 @@ namespace RadioSender.Hosts.Common
         {
           if (_punches.Contains(punch))
           {
-            Log.Information("Detected duplicated punch " + punch);
+            Log.Verbose("Detected duplicated punch " + punch);
             continue;
           }
 
