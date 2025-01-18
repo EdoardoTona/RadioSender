@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Serilog;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -22,14 +23,19 @@ namespace RadioSender.Hosts.Common.Filters
       if (!Enable || punch == null)
         return punch;
 
-      if (IgnoreOlderThan != default && DateTime.Now - punch.Time > IgnoreOlderThan)
+      if (!punch.NetTime && IgnoreOlderThan != default && DateTime.Now - punch.Time > IgnoreOlderThan)
         return null;
 
-      var control = MapControls.ContainsKey(punch.Control.ToString()) ? MapControls[punch.Control.ToString()] : punch.Control;
+      var controlBefore = punch.Control.ToString();
+
+      var controlBeforeInt = int.Parse(controlBefore);
+
+      var control = MapControls.ContainsKey(controlBefore) ? MapControls[controlBefore] : punch.Control;
 
       // control 0 means discard
-      if (control == 0 || (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control)))
+      if ((controlBeforeInt != 0 && control == 0) || (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control)))
       {
+        Log.Warning("Discarded: {@punch}", punch);
         return null; // discard
       }
 
