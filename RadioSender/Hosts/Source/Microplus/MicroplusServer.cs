@@ -84,24 +84,36 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
       }
 
       if (!int.TryParse(text.AsSpan(11, 3), out var control))
-        control = 999;
+        control = 0;
 
       var hh = int.Parse(text.AsSpan(15, 2));
       var mm = int.Parse(text.AsSpan(17, 2));
       var ss = int.Parse(text.AsSpan(19, 2));
       var fff = int.Parse(text.AsSpan(21, 3));
 
-      var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, hh, mm, ss, fff);
+      var netTime = cmd == 'T';
+
+      DateTime dt;
+
+      if (netTime)
+      {
+        dt = new DateTime() + new TimeSpan(0, hh, mm, ss, fff);
+      }
+      else
+      {
+        dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, hh, mm, ss, fff);
+      }
 
       var punch = _filter.Transform(
                     new Punch(
+                      ReceivedAt: DateTimeOffset.UtcNow,
                     Card: bib.ToString(),
                     Control: control,
                     ControlType: PunchControlType.Unknown,
                     Time: dt,
                     SourceId: "Microplus",
                     Cancellation: false,
-                    NetTime: cmd == 'T'
+                    NetTime: netTime
                     )
                  );
 

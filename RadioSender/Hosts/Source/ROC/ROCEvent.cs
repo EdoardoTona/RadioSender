@@ -102,6 +102,7 @@ namespace RadioSender.Hosts.Source.ROC
             punches = _filter.Transform(
                         list.Select(p =>
                         new Punch(
+                      ReceivedAt: DateTimeOffset.UtcNow,
                           Card: p.Card.ToString(),
                           Time: p.Time,
                           Control: p.Code,

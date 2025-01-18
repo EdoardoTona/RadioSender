@@ -111,6 +111,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
             punches = _filter.Transform(
                         list.Select(p =>
                               new Punch(
+
+                      ReceivedAt: DateTimeOffset.UtcNow,
                                Card: p.Card.ToString(),
                                Control: p.Code,
                                ControlType: MapControlType(p.Mode),

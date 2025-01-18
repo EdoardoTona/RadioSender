@@ -92,6 +92,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var punch = _filter.Transform(
                      new Punch(
+                      ReceivedAt: DateTimeOffset.UtcNow,
                      Card: chipNo.ToString(),
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
@@ -132,6 +133,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var punch = _filter.Transform(
                      new Punch(
+                      ReceivedAt: DateTimeOffset.UtcNow,
                      Card: chipNo.ToString(),
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,

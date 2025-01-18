@@ -18,6 +18,7 @@ namespace RadioSender.Hosts.Common
     DateTime Time,
     int Control,
     string SourceId,
+    DateTimeOffset ReceivedAt,
     PunchControlType ControlType = PunchControlType.Unknown,
     CompetitorStatus CompetitorStatus = CompetitorStatus.Unknown,
     bool Cancellation = false,

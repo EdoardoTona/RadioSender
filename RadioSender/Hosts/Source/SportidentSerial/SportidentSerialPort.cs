@@ -338,6 +338,8 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       var dt = new DateTime(now.Year, now.Month, now.Day) + time;
 
       return new Punch(
+
+                      ReceivedAt: DateTimeOffset.UtcNow,
         Card: cardNumber.ToString(),
         Time: dt,
         Control: controlCode,
