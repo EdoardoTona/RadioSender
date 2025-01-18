@@ -11,7 +11,7 @@
     <GenerateBootstrapperOnBuild>true</GenerateBootstrapperOnBuild>
     <!--<PublishSingleFile>true</PublishSingleFile>-->
 
-    <Version>1.5.4</Version>
+    <Version>1.5.5</Version>
   </PropertyGroup>
 
   <ItemGroup>
