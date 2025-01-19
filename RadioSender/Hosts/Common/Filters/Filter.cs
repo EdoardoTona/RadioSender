@@ -35,7 +35,6 @@ namespace RadioSender.Hosts.Common.Filters
       // control 0 means discard
       if ((controlBeforeInt != 0 && control == 0) || (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control)))
       {
-        Log.Warning("Discarded: {@punch}", punch);
         return null; // discard
       }
 
