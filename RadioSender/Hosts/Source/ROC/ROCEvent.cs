@@ -83,7 +83,9 @@ namespace RadioSender.Hosts.Source.ROC
           return;
         }
 
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/getPunches.asp?unitId={_configuration.EventId}&lastId={_lastReceivedId}");
+        var path = _configuration.Path.Replace("{EventId}", _configuration.EventId.ToString()).Replace("{LastId}", _lastReceivedId.ToString());
+
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
         var sw = new Stopwatch();
         sw.Start();
         var response = await _httpClient.SendAsync(request, ct);

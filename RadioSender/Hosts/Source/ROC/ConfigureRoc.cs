@@ -12,8 +12,9 @@ namespace RadioSender.Hosts.Source.ROC
   public record Event : FilterableConfiguration
   {
     public int? EventId { get; init; }
-    public int RefreshMs { get; init; } = 1000;
+    public int RefreshMs { get; init; } = 2000;
     public string Host { get; init; } = "https://roc.olresultat.se/";
+    public string Path { get; init; } = "/getpunches.asp?unitId={EventId}&lastId={LastId}";
   }
 
   public static class ConfigureRoc
