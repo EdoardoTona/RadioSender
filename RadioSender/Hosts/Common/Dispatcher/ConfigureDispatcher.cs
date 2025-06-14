@@ -19,7 +19,7 @@ namespace RadioSender.Hosts.Common
         var conf = context.Configuration.GetSection("Dispatcher").Get<DispatcherConfiguration>();
 
         services.AddSingleton(sp => new DispatcherService(
-          sp.GetRequiredService<IOptionsMonitor<FiltersConfiguration>>(),
+          sp.GetRequiredService<FilterService>(),
           sp.GetServices<ITarget>(),
           conf!));
       });

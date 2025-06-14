@@ -9,44 +9,20 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Common;
 
-public sealed class DispatcherService : IDisposable
+public sealed class DispatcherService(
+  FilterService filterService,
+  IEnumerable<ITarget> targets,
+  DispatcherConfiguration configuration
+    ) : IDisposable
 {
-  private readonly DispatcherConfiguration _configuration;
-  private readonly IOptionsMonitor<FiltersConfiguration> _optionsMonitorFilters;
-
-  private IFilter _filter;
-  private readonly IEnumerable<ITarget> _targets;
-
   private readonly HashSet<Punch> _punches = [];
 
   public event EventHandler? RequestPing;
   private readonly List<IDisposable> _subscriptions = [];
 
-  public DispatcherService(
-    IOptionsMonitor<FiltersConfiguration> optionsMonitorFilters,
-    IEnumerable<ITarget> targets,
-    DispatcherConfiguration configuration
-    )
-  {
-    _targets = targets;
-    _configuration = configuration;
-
-    _optionsMonitorFilters = optionsMonitorFilters;
-
-    _subscriptions.Add(_optionsMonitorFilters.OnChange((filtersConfig, name) => UpdateFilter())!);
-    UpdateFilter();
-  }
-
-  public void UpdateFilter()
-  {
-    Log.Information("Updated filters");
-    var filters = _optionsMonitorFilters.CurrentValue.List;
-    _filter = filters.GetFilter(_configuration.Filter);
-  }
-
   public void ResendPunches()
   {
-    _ = Task.WhenAll(_targets.Select(t => t.SendDispatch(new PunchDispatch([.. _punches], null), default)));
+    _ = Task.WhenAll(targets.Select(t => t.SendDispatch(new PunchDispatch([.. _punches], null), default)));
   }
 
   public void Ping()
@@ -58,7 +34,7 @@ public sealed class DispatcherService : IDisposable
   {
     if (dispatch.Punches != null)
     {
-      var punches = _filter.Transform(dispatch.Punches);
+      var punches = filterService.Transform(configuration.Filter, dispatch.Punches);
 
       var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
@@ -76,7 +52,7 @@ public sealed class DispatcherService : IDisposable
       dispatch = dispatch with { Punches = toBeForwardedPunch };
     }
 
-    _ = Task.WhenAll(_targets.Select(t => t.SendDispatch(dispatch, default)));
+    _ = Task.WhenAll(targets.Select(t => t.SendDispatch(dispatch, default)));
   }
 
   public void PushDispatches(IEnumerable<PunchDispatch> dispatches)
@@ -87,7 +63,7 @@ public sealed class DispatcherService : IDisposable
       if (dispatch.Punches == null)
         continue;
 
-      var punches = _filter.Transform(dispatch.Punches);
+      var punches = filterService.Transform(configuration.Filter, dispatch.Punches);
 
       var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
@@ -105,7 +81,7 @@ public sealed class DispatcherService : IDisposable
       toBeForwardedDispatcher.Add(dispatch with { Punches = toBeForwardedPunch });
     }
 
-    _ = Task.WhenAll(_targets.Select(t => t.SendDispatches(toBeForwardedDispatcher, default)));
+    _ = Task.WhenAll(targets.Select(t => t.SendDispatches(toBeForwardedDispatcher, default)));
   }
 
   public void Dispose()
