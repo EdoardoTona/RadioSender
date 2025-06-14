@@ -1,5 +1,4 @@
 using CliWrap;
-using Common;
 using Hangfire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -88,6 +87,9 @@ public static class Program
       builder.Services.AddSignalR()
                       .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
       builder.Services.AddSingleton<HubEvents>();
+
+      /////////////////////////////////////////////////////////////////////////////////
+
 
       var app = builder.Build();
       var env = app.Environment;
