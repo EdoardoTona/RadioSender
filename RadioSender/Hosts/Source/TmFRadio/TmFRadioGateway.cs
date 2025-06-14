@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public sealed class TmFRadioGateway : ISource, IHostedService, IDisposable
+  public sealed class TmFRadioGateway : ISource, IHostedService, IAsyncDisposable
   {
     public const uint BROADCAST = 0xffffffff;
 
@@ -144,9 +144,9 @@ namespace RadioSender.Hosts.Source.TmFRadio
       _port.Dispose();
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-      StopAsync(default).Wait();
+      await StopAsync(default);
     }
 
     public async Task CheckPathAndStatus(bool delay = false)

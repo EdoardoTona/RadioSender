@@ -17,7 +17,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
   public sealed class SportidentSerialPort(
     FilterService filterService,
     DispatcherService dispatcherService,
-    Port configuration) : ISource, IHostedService, IDisposable
+    Port configuration) : ISource, IHostedService, IAsyncDisposable
   {
 #pragma warning disable IDE0051 // Rimuovi i membri privati inutilizzati
     private const byte WAKEUP = 0xFF;
@@ -125,9 +125,9 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-      StopAsync(default).Wait();
+      await StopAsync(default);
     }
 
 
