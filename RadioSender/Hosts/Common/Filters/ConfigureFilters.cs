@@ -13,9 +13,12 @@ namespace RadioSender.Hosts.Common.Filters
       {
         var filters = context.Configuration.GetSection("Filters").Get<IEnumerable<Filter>>();
 
-        foreach (var filter in filters)
+        if (filters != null)
         {
-          services.AddSingleton<IFilter>(filter);
+          foreach (var filter in filters)
+          {
+            services.AddSingleton<IFilter>(filter);
+          }
         }
 
       });

@@ -32,16 +32,17 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
         var events = context.Configuration.GetSection("Source:SportidentCenter:Events").Get<IEnumerable<Event>>();
 
-        foreach (var ev in events)
-        {
-          services.AddHostedService(sp =>
-           new SportidentCenterEvent(
-             sp.GetServices<IFilter>(),
-             sp.GetRequiredService<IHttpClientFactory>(),
-             sp.GetRequiredService<DispatcherService>(),
-             ev)
-         );
-        }
+        if (events != null)
+          foreach (var ev in events)
+          {
+            services.AddHostedService(sp =>
+             new SportidentCenterEvent(
+               sp.GetServices<IFilter>(),
+               sp.GetRequiredService<IHttpClientFactory>(),
+               sp.GetRequiredService<DispatcherService>(),
+               ev)
+           );
+          }
 
       });
 

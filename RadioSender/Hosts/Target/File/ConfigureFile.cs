@@ -30,10 +30,11 @@ namespace RadioSender.Hosts.Target.File
 
         var files = context.Configuration.GetSection("Target:File:Files").Get<IEnumerable<FileConfiguration>>();
 
-        foreach (var file in files)
-        {
-          services.AddSingleton<ITarget, FileTarget>(s => new FileTarget(s.GetServices<IFilter>(), file));
-        }
+        if (files != null)
+          foreach (var file in files)
+          {
+            services.AddSingleton<ITarget, FileTarget>(s => new FileTarget(s.GetServices<IFilter>(), file));
+          }
 
       });
 

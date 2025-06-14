@@ -7,14 +7,14 @@ using System.Text.RegularExpressions;
 
 namespace RadioSender.Helpers
 {
-  public static class FormatStringHelper
+  public static partial class FormatStringHelper
   {
 
     static object MapKey(Punch punch, string key)
     {
       return key switch
       {
-        "Card" or "card" or "Bib" or "bib"=> punch.Card,
+        "Card" or "card" or "Bib" or "bib" => punch.Card,
         "Control" or "control" => punch.Control,
         "ControlType" or "controltype" => punch.ControlType,
         "Type" or "type" => punch.ControlTypeShort ?? "",
@@ -28,11 +28,9 @@ namespace RadioSender.Helpers
       };
     }
 
-    static readonly Regex FormatterPattern = new(@"\{([^\{\}]+?)(?:\:([^\{\}]*))?\}", RegexOptions.Multiline);
-
     public static string GetString(Punch punch, string format)
     {
-      return FormatterPattern.Replace(format, (match) =>
+      return FormatterRegex().Replace(format, (match) =>
       {
         var capture = match.Groups?.OfType<Group>().Skip(1).Select((group) => group.Value).ToArray();
         if (!(capture?.FirstOrDefault() is string key && MapKey(punch, key) is object value))
@@ -46,5 +44,8 @@ namespace RadioSender.Helpers
     {
       return Encoding.UTF8.GetBytes(GetString(punch, format));
     }
+
+    [GeneratedRegex(@"\{([^\{\}]+?)(?:\:([^\{\}]*))?\}", RegexOptions.Multiline)]
+    private static partial Regex FormatterRegex();
   }
 }

@@ -99,7 +99,7 @@ namespace RadioSender.Hosts.Source.ROC
 
           var list = csv.GetRecords<ROCPunch>().OrderBy(p => p.Time).ToList();
           IEnumerable<Punch>? punches = null;
-          if (list.Any())
+          if (list.Count != 0)
           {
             punches = _filter.Transform(
                         list.Select(p =>
@@ -120,8 +120,8 @@ namespace RadioSender.Hosts.Source.ROC
           _dispatcherService.PushDispatch(
                       new PunchDispatch(
                         Punches: punches,
-                        Nodes: new[] { new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) },
-                        Hops: new[] { new Hop(HTTPCLIENT_NAME, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) }
+                        Nodes: [new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1)],
+                        Hops: [new Hop(HTTPCLIENT_NAME, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _refreshInterval_ms, 1)]
                       )
             );
 

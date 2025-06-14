@@ -1,6 +1,7 @@
 using Hangfire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hubs;
@@ -34,9 +35,9 @@ namespace RadioSender
         OnPrepareResponse = context =>
         {
           if (env.IsDevelopment())
-            context.Context.Response.Headers.Add("Cache-Control", "no-cache");
+            context.Context.Response.Headers.Append("Cache-Control", "no-cache");
           else
-            context.Context.Response.Headers.Add("Cache-Control", "private, max-age=86400"); // 1 day
+            context.Context.Response.Headers.Append("Cache-Control", "private, max-age=86400"); // 1 day
         }
       });
 

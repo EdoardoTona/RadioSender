@@ -28,22 +28,23 @@ namespace RadioSender.Hosts.Source.ROC
 
         var events = context.Configuration.GetSection("Source:ROC:Events").Get<IEnumerable<Event>>();
 
-        foreach (var ev in events)
-        {
-          services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME, c => // TODO if added twice
+        if (events != null)
+          foreach (var ev in events)
           {
-            c.BaseAddress = new Uri(ev.Host);
-          });
+            services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME, c => // TODO if added twice
+            {
+              c.BaseAddress = new Uri(ev.Host);
+            });
 
-          services.AddHostedService(sp =>
-            new ROCEvent(
-              sp.GetServices<IFilter>(),
-              sp.GetRequiredService<IHttpClientFactory>(),
-              sp.GetRequiredService<DispatcherService>(),
-              ev
-              )
-          );
-        }
+            services.AddHostedService(sp =>
+              new ROCEvent(
+                sp.GetServices<IFilter>(),
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<DispatcherService>(),
+                ev
+                )
+            );
+          }
 
       });
 

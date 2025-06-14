@@ -164,12 +164,12 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         var length = (byte)ms.ReadByte();
 
         byte[] data = new byte[length];
-        ms.Read(data, 0, length);
+        ms.ReadExactly(data, 0, length);
 
         var myCrc = CalculateCrc(cmd, data);
 
         byte[] crc = new byte[2];
-        ms.Read(crc, 0, 2);
+        ms.ReadExactly(crc, 0, 2);
 
         if (!myCrc.SequenceEqual(crc))
         {
@@ -221,7 +221,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           var punch = _filter.Transform(MessageToPunch(data, _port.PortName));
 
           if (punch != null)
-            _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+            _dispatcherService.PushDispatch(new PunchDispatch([punch]));
         }
         catch (OperationCanceledException)
         {
@@ -311,14 +311,14 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         return null;
       }
 
-      var controlCode = BinaryPrimitives.ReadUInt16BigEndian(new byte[] { (byte)(buffer[3] & 0b_0111_1111), buffer[4] });
+      var controlCode = BinaryPrimitives.ReadUInt16BigEndian([(byte)(buffer[3] & 0b_0111_1111), buffer[4]]);
 
       int cardNumber;
       if (buffer[6] > 0x04)
-        cardNumber = (int)BinaryPrimitives.ReadUInt32BigEndian(new byte[] { 0, buffer[6], buffer[7], buffer[8] });
+        cardNumber = (int)BinaryPrimitives.ReadUInt32BigEndian([0, buffer[6], buffer[7], buffer[8]]);
       else
       {
-        cardNumber = BinaryPrimitives.ReadUInt16BigEndian(new byte[] { buffer[7], buffer[8] }) + buffer[6] * 100000;
+        cardNumber = BinaryPrimitives.ReadUInt16BigEndian([buffer[7], buffer[8]]) + buffer[6] * 100000;
       }
 
 #pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
@@ -326,7 +326,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       var dayOfWeek = (buffer[9] << 4) >> 5; // from 0 (sunday) to 6 (saturday)
 #pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
 
-      var time_s = BinaryPrimitives.ReadUInt16BigEndian(new byte[] { buffer[10], buffer[11] });
+      var time_s = BinaryPrimitives.ReadUInt16BigEndian([buffer[10], buffer[11]]);
 
       var subseconds = buffer[12] / 256d;
 

@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Hosting;
-using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Source.SportidentSerial;
@@ -10,11 +9,9 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
@@ -25,7 +22,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
     private readonly IFilter _filter;
     private readonly DispatcherService _dispatcherService;
     private readonly Gateway _configuration;
-    private SerialPortStream _port;
+    private readonly SerialPortStream _port;
     //private readonly SerialPortStream _serialPort;
     private readonly CancellationTokenSource _cts = new();
 
@@ -34,7 +31,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
     private Timer? _timer_path;
     private Timer? _timer_status;
 
-    private bool disposed = false;
+    private bool disposed;
 
     public TmFRadioGateway(
       IEnumerable<IFilter> filters,
@@ -44,32 +41,34 @@ namespace RadioSender.Hosts.Source.TmFRadio
       _dispatcherService = dispatcherService;
       _configuration = gateway;
       _filter = filters.GetFilter(_configuration.Filter);
-      _port = new SerialPortStream(_configuration.PortName, _configuration.Baudrate, 8,Parity.None,StopBits.One);
-      //_port.PortName = _configuration.PortName!;
-      //_port.BaudRate = _configuration.Baudrate;
-      //_port.Parity = Parity.None;
-      //_port.StopBits = StopBits.One;
-      //_port.Handshake = Handshake.None;
-      //_port.DataBits = 8;
-      _port.WriteTimeout = 500;
-      _port.RtsEnable = true;
-      _port.DtrEnable = true;
+      _port = new SerialPortStream(_configuration.PortName, _configuration.Baudrate, 8, Parity.None, StopBits.One)
+      {
+        //_port.PortName = _configuration.PortName!;
+        //_port.BaudRate = _configuration.Baudrate;
+        //_port.Parity = Parity.None;
+        //_port.StopBits = StopBits.One;
+        //_port.Handshake = Handshake.None;
+        //_port.DataBits = 8;
+        WriteTimeout = 500,
+        RtsEnable = true,
+        DtrEnable = true
+      };
 
-            //_port.ErrorReceived += _port_ErrorReceived;
-            //_port.DataReceived += _port_DataReceived;
+      //_port.ErrorReceived += _port_ErrorReceived;
+      //_port.DataReceived += _port_DataReceived;
 
-      _dispatcherService.RequestPing += _dispatcherService_RequestPing;
+      _dispatcherService.RequestPing += DispatcherService_RequestPing;
     }
 
-    private void _dispatcherService_RequestPing(object? sender, EventArgs e)
+    private void DispatcherService_RequestPing(object? sender, EventArgs e)
     {
       try
       {
-          _ = CheckPathAndStatus(delay:false);
+        _ = CheckPathAndStatus(delay: false);
       }
       catch
       {
-          // quiet
+        // quiet
       }
     }
 
@@ -90,21 +89,21 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         _port.OpenDirect();
 
-        _ = CheckPathAndStatus(delay:true);
+        _ = CheckPathAndStatus(delay: true);
 
         Log.Information("{port} Port connected", _configuration.PortName);
       }
-      catch (UnauthorizedAccessException e)
+      catch (UnauthorizedAccessException)
       {
         Log.Error("{port} Port occupied by another program", _configuration.PortName);
       }
-      catch (FileNotFoundException e)
+      catch (FileNotFoundException)
       {
         Log.Error("{port} Port not found", _configuration.PortName);
       }
       catch (IOException e)
       {
-        if(e.Message.Contains("Port not found"))
+        if (e.Message.Contains("Port not found"))
         {
           Log.Error("{port} Port not found", _configuration.PortName);
         }
@@ -154,7 +153,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
     {
       try
       {
-        if(delay)
+        if (delay)
           await Task.Delay(2000, _cts.Token);
 
         await CheckStatus();
@@ -259,7 +258,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
               await Task.Delay(150, _cts.Token);
               if (_port.BytesToRead < length - 1)
               {
-                length = (byte) _port.BytesToRead;
+                length = (byte)_port.BytesToRead;
                 Log.Warning("{port} Expected {length} bytes, reading {bytesToRead}", _configuration.PortName, length - 1, _port.BytesToRead);
               }
             }
@@ -270,7 +269,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
             var data = new byte[length];
             data[0] = (byte)Math.Min(byte.MaxValue, length);
 
-            await _port.ReadAsync(data,1,length - 1, _cts.Token).ConfigureAwait(false);
+            await _port.ReadAsync(data.AsMemory(1, length - 1), _cts.Token).ConfigureAwait(false);
 
             ProcessReceivedMessage(data);
           }
@@ -309,8 +308,8 @@ namespace RadioSender.Hosts.Source.TmFRadio
         if (data[17] == 0x09)
         {
           var packet = new RxGetStatus(header, data);
-          Log.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, header.OrigID, packet.EventDetailString, header.RSSI_Percent, header.Latency, packet.Temperat_C,packet.Voltage_V);
-          _dispatcherService.PushDispatch(new PunchDispatch(Nodes: new[] { new NodeNew(header.OrigID.ToString(), null, header.Latency, header.RSSI_Percent) }));
+          Log.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, header.OrigID, packet.EventDetailString, header.RSSI_Percent, header.Latency, packet.Temperat_C, packet.Voltage_V);
+          _dispatcherService.PushDispatch(new PunchDispatch(Nodes: [new NodeNew(header.OrigID.ToString(), null, header.Latency, header.RSSI_Percent)]));
         }
         else if (data[17] == 0x20)
         {
@@ -321,7 +320,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
           var hops = new List<Hop>();
           var nodes = new List<NodeNew>()
                 {
-                  new NodeNew(from.ToString(), null, header.Latency, header.RSSI_Percent)
+                  new(from.ToString(), null, header.Latency, header.RSSI_Percent)
                 };
           int i = 1;
           foreach (var jump in (packet as RxGetPath)!.Jumps)
@@ -332,8 +331,8 @@ namespace RadioSender.Hosts.Source.TmFRadio
             i++;
           }
 
-          Log.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, header.OrigID, hops.Count, string.Join('-',nodes.Select(n => n.Id)));
-         _dispatcherService.PushDispatch(new PunchDispatch(Hops: hops, Nodes: nodes));
+          Log.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, header.OrigID, hops.Count, string.Join('-', nodes.Select(n => n.Id)));
+          _dispatcherService.PushDispatch(new PunchDispatch(Hops: hops, Nodes: nodes));
         }
         else
         {
@@ -346,7 +345,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         var sportidentMsg = SportidentSerialPort.MessageToPunch(packet.RxSerData, header.OrigID.ToString());
 
-        if(sportidentMsg == null)
+        if (sportidentMsg == null)
         {
           if (HasNotPrintableChars(packet.RxSerData))
             Log.Verbose("{port} Source {source} says: {ascii} [HEX: {hex}]", _configuration.PortName, header.OrigID, Encoding.ASCII.GetString(packet.RxSerData), BitConverter.ToString(data));
@@ -359,11 +358,13 @@ namespace RadioSender.Hosts.Source.TmFRadio
         var punch = _filter.Transform(sportidentMsg);
 
         if (punch != null)
-          _dispatcherService.PushDispatch(new PunchDispatch(Punches: new[] { punch }));
+          _dispatcherService.PushDispatch(new PunchDispatch(Punches: [punch]));
       }
     }
 
-    private bool HasNotPrintableChars(byte[] inputList) =>
-    inputList.Any(s => s != 0x0D && s != 0x0A && (s < 0x20 || s > 0x7E));
+    private static bool HasNotPrintableChars(byte[] inputList)
+    {
+      return inputList.Any(s => s != 0x0D && s != 0x0A && (s < 0x20 || s > 0x7E));
+    }
   }
 }

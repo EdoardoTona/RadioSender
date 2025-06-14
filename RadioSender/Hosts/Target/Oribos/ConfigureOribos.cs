@@ -12,7 +12,7 @@ namespace RadioSender.Hosts.Target.Oribos
   public record OribosServer : FilterableConfiguration
   {
     public string? Host { get; init; }
-    public bool UseStartNumbers { get; init; } = false;
+    public bool UseStartNumbers { get; init; }
   }
 
   public static class ConfigureOribos
@@ -29,14 +29,15 @@ namespace RadioSender.Hosts.Target.Oribos
         if (servers!.Any())
           services.AddHttpClient();
 
-        foreach (var server in servers)
-        {
-          services.AddSingleton<ITarget>(s => new OribosService(
-            s.GetServices<IFilter>(),
-            s.GetRequiredService<IBackgroundJobClient>(),
-            s.GetRequiredService<IHttpClientFactory>(),
-            server));
-        }
+        if (servers != null)
+          foreach (var server in servers)
+          {
+            services.AddSingleton<ITarget>(s => new OribosService(
+              s.GetServices<IFilter>(),
+              s.GetRequiredService<IBackgroundJobClient>(),
+              s.GetRequiredService<IHttpClientFactory>(),
+              server));
+          }
 
       });
 

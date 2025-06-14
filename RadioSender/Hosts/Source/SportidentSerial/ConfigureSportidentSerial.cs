@@ -24,13 +24,14 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
         var ports = context.Configuration.GetSection("Source:SportidentSerial:Ports").Get<IEnumerable<Port>>();
 
-        foreach (var port in ports)
-        {
-          services.AddHostedService(sp => new SportidentSerialPort(
-            sp.GetServices<IFilter>(),
-            sp.GetRequiredService<DispatcherService>(),
-            port));
-        }
+        if (ports != null)
+          foreach (var port in ports)
+          {
+            services.AddHostedService(sp => new SportidentSerialPort(
+              sp.GetServices<IFilter>(),
+              sp.GetRequiredService<DispatcherService>(),
+              port));
+          }
 
       });
 

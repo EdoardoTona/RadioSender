@@ -26,17 +26,18 @@ public static class ConfigureHttpTarget
 
       var clients = context.Configuration.GetSection("Target:HTTP:Targets").Get<IEnumerable<HttpTargetConfiguration>>();
 
-      foreach (var client in clients)
-      {
-        services.AddSingleton<ITarget>(sp =>
-          new HttpTarget(
-            sp.GetServices<IFilter>(),
-            sp.GetRequiredService<IHttpClientFactory>(),
-            sp.GetRequiredService<IBackgroundJobClient>(),
-            client
-            )
-        );
-      }
+      if (clients != null)
+        foreach (var client in clients)
+        {
+          services.AddSingleton<ITarget>(sp =>
+            new HttpTarget(
+              sp.GetServices<IFilter>(),
+              sp.GetRequiredService<IHttpClientFactory>(),
+              sp.GetRequiredService<IBackgroundJobClient>(),
+              client
+              )
+          );
+        }
 
     });
 

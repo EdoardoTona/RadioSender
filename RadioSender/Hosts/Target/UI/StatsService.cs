@@ -12,20 +12,14 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Target.UI
 {
   public record ConnectedClient(string Id, string Group, string? Ip, string? UserAgent);
-  public class StatsService : IHostedService
+  public class StatsService(
+    IHubContext<DeviceHub, IDeviceHub> hubContext,
+    HubEvents hubEvents) : IHostedService
   {
-    private readonly IHubContext<DeviceHub, IDeviceHub> _hubContext;
-    private readonly HubEvents _hubEvents;
+    private readonly IHubContext<DeviceHub, IDeviceHub> _hubContext = hubContext;
+    private readonly HubEvents _hubEvents = hubEvents;
 
-    private static readonly Dictionary<string, ConnectedClient> _connections = new();
-
-    public StatsService(
-      IHubContext<DeviceHub, IDeviceHub> hubContext,
-      HubEvents hubEvents)
-    {
-      _hubContext = hubContext;
-      _hubEvents = hubEvents;
-    }
+    private static readonly Dictionary<string, ConnectedClient> _connections = [];
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -75,7 +69,7 @@ namespace RadioSender.Hosts.Target.UI
 
         var feature = sender.Features.Get<IHttpConnectionFeature>();
 
-        var conn = new ConnectedClient(sender.ConnectionId, group, feature.RemoteIpAddress?.MapToIPv4().ToString(), userAgent?.ToString());
+        var conn = new ConnectedClient(sender.ConnectionId, group, feature?.RemoteIpAddress?.MapToIPv4().ToString(), userAgent?.ToString());
         _connections.Add(sender.ConnectionId, conn);
         await _hubContext.Clients.Group(DeviceHub.GROUP_STATS).Connection(conn).ConfigureAwait(false);
 

@@ -26,15 +26,16 @@ namespace RadioSender.Hosts.Target.SIRAP
 
         var clients = context.Configuration.GetSection("Target:SIRAP:Clients").Get<IEnumerable<SirapClientConfiguration>>();
 
-        foreach (var client in clients)
-        {
-          services.AddSingleton<ITarget>(sp =>
-            new SirapClient(
-              sp.GetServices<IFilter>(),
-              client
-              )
-          );
-        }
+        if (clients != null)
+          foreach (var client in clients)
+          {
+            services.AddSingleton<ITarget>(sp =>
+              new SirapClient(
+                sp.GetServices<IFilter>(),
+                client
+                )
+            );
+          }
 
       });
 

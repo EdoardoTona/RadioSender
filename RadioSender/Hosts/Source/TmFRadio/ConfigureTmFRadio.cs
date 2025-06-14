@@ -24,13 +24,16 @@ namespace RadioSender.Hosts.Source.TmFRadio
         if (!context.Configuration.GetValue("Source:TmFRadio:Enable", false))
           return;
 
-        foreach (var gateway in context.Configuration.GetSection("Source:TmFRadio:Gateways").Get<IEnumerable<Gateway>>())
-        {
-          services.AddSingleton<IHostedService, TmFRadioGateway>(sp => new TmFRadioGateway(
-            sp.GetServices<IFilter>(),
-            sp.GetRequiredService<DispatcherService>(),
-            gateway));
-        }
+        var gateways = context.Configuration.GetSection("Source:TmFRadio:Gateways").Get<IEnumerable<Gateway>>();
+
+        if (gateways != null)
+          foreach (var gateway in gateways)
+          {
+            services.AddSingleton<IHostedService, TmFRadioGateway>(sp => new TmFRadioGateway(
+              sp.GetServices<IFilter>(),
+              sp.GetRequiredService<DispatcherService>(),
+              gateway));
+          }
 
       });
 
