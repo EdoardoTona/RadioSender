@@ -23,16 +23,12 @@ public sealed class FilterService : IDisposable
 
   public Punch? Transform(string? filterName, Punch? punch)
   {
-    filterName ??= "Default";
-
     var filter = _optionsMonitorFilters.CurrentValue.List.GetFilter(filterName);
     return filter.Transform(punch);
   }
 
   public IEnumerable<Punch> Transform(string? filterName, IEnumerable<Punch>? punches)
   {
-    filterName ??= "Default";
-
     var filter = _optionsMonitorFilters.CurrentValue.List.GetFilter(filterName);
     return filter.Transform(punches);
   }

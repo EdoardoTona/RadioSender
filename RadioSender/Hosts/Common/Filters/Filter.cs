@@ -83,6 +83,8 @@ namespace RadioSender.Hosts.Common.Filters
   {
     public static IFilter GetFilter(this IEnumerable<IFilter> filters, string? name)
     {
+      // filter name null = no filter (invariant)
+
       if (!string.IsNullOrWhiteSpace(name) && filters.Any(f => f.Name == name))
         return filters.First(f => f.Name == name);
 
