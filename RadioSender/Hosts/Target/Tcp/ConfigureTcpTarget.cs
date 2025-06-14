@@ -36,7 +36,8 @@ namespace RadioSender.Hosts.Target.Tcp
                 target
                 ));
 
-            services.AddHostedService(sp => (TcpTargetServer)sp.GetServices<ITarget>().Where(t => t is TcpTargetServer).First()); // TODO
+            services.AddSingleton<IHostedService, TcpTargetServer>(sp =>
+            (TcpTargetServer)sp.GetServices<ITarget>().First(t => (t as TcpTargetServer)?.GetConfiguration() == target));
 
           }
           else

@@ -28,8 +28,7 @@ public static class ConfigureMicroplusServer
 
       foreach (var server in servers)
       {
-        services.AddHostedService(sp =>
-          new MicroplusServer(
+        services.AddSingleton<IHostedService, MicroplusServer>(sp => new MicroplusServer(
             sp.GetServices<IFilter>(),
             sp.GetRequiredService<DispatcherService>(),
             server

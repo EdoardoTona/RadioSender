@@ -4,7 +4,6 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,7 +23,7 @@ namespace RadioSender.Hosts.Target.Tcp
       _configuration = configuration;
       UpdateConfiguration(filters, configuration);
     }
-
+    public TcpTargetConfiguration GetConfiguration() => _configuration;
     public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
     {
       Interlocked.Exchange(ref _configuration!, configuration as TcpTargetConfiguration);

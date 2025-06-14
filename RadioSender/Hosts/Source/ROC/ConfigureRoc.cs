@@ -36,8 +36,7 @@ namespace RadioSender.Hosts.Source.ROC
               c.BaseAddress = new Uri(ev.Host);
             });
 
-            services.AddHostedService(sp =>
-              new ROCEvent(
+            services.AddSingleton<IHostedService, ROCEvent>(sp => new ROCEvent(
                 sp.GetServices<IFilter>(),
                 sp.GetRequiredService<IHttpClientFactory>(),
                 sp.GetRequiredService<DispatcherService>(),
