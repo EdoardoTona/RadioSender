@@ -1,22 +1,43 @@
 ﻿using Microsoft.IO;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.SIRAP
 {
-  public sealed class SirapClient(
-    FilterService filterService,
-    SirapClientConfiguration configuration) : ITarget, IDisposable
+  public sealed class SirapClient : ITarget, IDisposable
   {
     private static readonly RecyclableMemoryStreamManager _memoryManager = new();
     private readonly TcpClient? _tcpClient;
+
+    private readonly FilterService _filterService;
+    private readonly SirapClientConfiguration _configuration;
+    public SirapClient(
+    FilterService filterService,
+    SirapClientConfiguration configuration)
+    {
+
+      _filterService = filterService;
+      _configuration = configuration;
+
+      if (_configuration.Address == null || _configuration.Port == null)
+      {
+        Log.Warning("Invalid TcpTargetClient configuration");
+        return;
+      }
+
+      var address = _configuration.Address == "localhost" ? "127.0.0.1" : _configuration.Address;
+
+      _tcpClient = new TcpClient(address, _configuration.Port.Value);
+      _tcpClient.ConnectAsync();
+
+    }
 
     public async Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
