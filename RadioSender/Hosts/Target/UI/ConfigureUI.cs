@@ -36,8 +36,7 @@ namespace RadioSender.Hosts.Target.UI
 
           services.AddHostedService(sp => sp.GetRequiredService<UIService>());
 
-        })
-        .ConfigureWebHostDefaults(webBuilder => webBuilder.UseStartup<Startup>());
+        });
 
       return builder;
     }
