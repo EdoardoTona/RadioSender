@@ -12,19 +12,7 @@ namespace RadioSender.Hosts.Common.Filters
       builder.ConfigureServices((context, services) =>
       {
         services.Configure<FiltersConfiguration>(context.Configuration.GetSection("Filters"));
-
         services.AddSingleton<FilterService>();
-
-        // // TODO remove:
-        var filters = context.Configuration.GetSection("Filters").Get<FiltersConfiguration>();
-
-        if (filters != null)
-        {
-          foreach (var filter in filters.List)
-          {
-            services.AddSingleton<IFilter>(filter);
-          }
-        }
 
       });
 

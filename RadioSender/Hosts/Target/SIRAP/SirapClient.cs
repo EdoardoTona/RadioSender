@@ -11,45 +11,12 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.SIRAP
 {
-  public sealed class SirapClient : ITarget, IDisposable
+  public sealed class SirapClient(
+    FilterService filterService,
+    SirapClientConfiguration configuration) : ITarget, IDisposable
   {
     private static readonly RecyclableMemoryStreamManager _memoryManager = new();
-
-    private IFilter _filter = Filter.Invariant;
-    private SirapClientConfiguration _configuration;
-
-    private TcpClient? _tcpClient;
-
-    public SirapClient(
-      IEnumerable<IFilter> filters,
-      SirapClientConfiguration configuration)
-    {
-      _configuration = configuration;
-      UpdateConfiguration(filters, configuration);
-    }
-
-    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
-    {
-      Interlocked.Exchange(ref _configuration!, configuration as SirapClientConfiguration);
-      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
-
-      if (_configuration.Address == null || _configuration.Port == null)
-        return;
-
-      var address = _configuration.Address == "localhost" ? "127.0.0.1" : _configuration.Address;
-
-      var newClient = new TcpClient(address, _configuration.Port.Value);
-      newClient.ConnectAsync();
-
-      var oldClient = Interlocked.Exchange(ref _tcpClient, newClient);
-
-      if (oldClient != null)
-      {
-        oldClient.DisconnectAndStop();
-        oldClient.Dispose();
-      }
-
-    }
+    private readonly TcpClient? _tcpClient;
 
     public async Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
@@ -62,11 +29,11 @@ namespace RadioSender.Hosts.Target.SIRAP
       if (dispatch.Punches == null || _tcpClient == null || !_tcpClient.IsConnected)
         return Task.CompletedTask;
 
-      var punches = _filter.Transform(dispatch.Punches);
+      var punches = filterService.Transform(configuration.Filter, dispatch.Punches);
 
       foreach (var punch in punches)
       {
-        var buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
+        var buffer = GetBytes(punch, configuration.Version, configuration.ZeroTime);
 
         if (buffer == null || buffer.Length == 0)
           continue;

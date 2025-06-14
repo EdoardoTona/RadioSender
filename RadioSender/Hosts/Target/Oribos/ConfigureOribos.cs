@@ -33,7 +33,7 @@ namespace RadioSender.Hosts.Target.Oribos
           foreach (var server in servers)
           {
             services.AddSingleton<ITarget>(s => new OribosService(
-              s.GetServices<IFilter>(),
+              s.GetRequiredService<FilterService>(),
               s.GetRequiredService<IBackgroundJobClient>(),
               s.GetRequiredService<IHttpClientFactory>(),
               server));

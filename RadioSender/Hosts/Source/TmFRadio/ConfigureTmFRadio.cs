@@ -30,7 +30,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
           foreach (var gateway in gateways)
           {
             services.AddSingleton<IHostedService, TmFRadioGateway>(sp => new TmFRadioGateway(
-              sp.GetServices<IFilter>(),
+              sp.GetRequiredService<FilterService>(),
               sp.GetRequiredService<DispatcherService>(),
               gateway));
           }

@@ -31,7 +31,7 @@ namespace RadioSender.Hosts.Target.SIRAP
           {
             services.AddSingleton<ITarget>(sp =>
               new SirapClient(
-                sp.GetServices<IFilter>(),
+                sp.GetRequiredService<FilterService>(),
                 client
                 )
             );

@@ -36,7 +36,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           foreach (var ev in events)
           {
             services.AddSingleton<IHostedService, SportidentCenterEvent>(sp => new SportidentCenterEvent(
-               sp.GetServices<IFilter>(),
+               sp.GetRequiredService<FilterService>(),
                sp.GetRequiredService<IHttpClientFactory>(),
                sp.GetRequiredService<DispatcherService>(),
                ev)

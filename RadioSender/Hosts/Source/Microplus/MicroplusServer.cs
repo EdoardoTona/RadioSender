@@ -4,7 +4,6 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -14,22 +13,12 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.Microplus;
 
-public class MicroplusServer : UdpServer, ISource, IHostedService
+public class MicroplusServer(
+  FilterService filterService,
+  DispatcherService dispatcherService,
+  MicroplusServerConfiguration configuration)
+  : UdpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IHostedService
 {
-  private readonly IFilter _filter = Filter.Invariant;
-  private readonly MicroplusServerConfiguration _configuration;
-  private readonly DispatcherService _dispatcherService;
-
-  public MicroplusServer(
-    IEnumerable<IFilter> filters,
-    DispatcherService dispatcherService,
-    MicroplusServerConfiguration configuration) : base(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration)))
-  {
-    _dispatcherService = dispatcherService;
-    _configuration = configuration;
-    _filter = filters.GetFilter(_configuration.Filter);
-  }
-
   public Task StartAsync(CancellationToken cancellationToken)
   {
     Start();
@@ -104,7 +93,8 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
         dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, hh, mm, ss, fff);
       }
 
-      var punch = _filter.Transform(
+      var punch = filterService.Transform(
+                    configuration.Filter,
                     new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
                     Card: bib.ToString(),
@@ -117,9 +107,9 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
                     )
                  );
 
-      if (_configuration.IgnoreCommands != null)
+      if (configuration.IgnoreCommands != null)
       {
-        if (_configuration.IgnoreCommands.Any(c => c == cmd.ToString()))
+        if (configuration.IgnoreCommands.Any(c => c == cmd.ToString()))
         {
           Log.Information("Cmd {cmd} ignored. Received: {@punch}", cmd, punch);
           return;
@@ -127,7 +117,7 @@ public class MicroplusServer : UdpServer, ISource, IHostedService
       }
 
       if (punch != null)
-        _dispatcherService.PushDispatch(new PunchDispatch([punch]));
+        dispatcherService.PushDispatch(new PunchDispatch([punch]));
     }
     catch (Exception e)
     {

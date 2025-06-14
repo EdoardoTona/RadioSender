@@ -33,7 +33,7 @@ namespace RadioSender.Hosts.Target.File
         if (files != null)
           foreach (var file in files)
           {
-            services.AddSingleton<ITarget, FileTarget>(s => new FileTarget(s.GetServices<IFilter>(), file));
+            services.AddSingleton<ITarget, FileTarget>(s => new FileTarget(s.GetRequiredService<FilterService>(), file));
           }
 
       });

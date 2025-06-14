@@ -19,8 +19,8 @@ namespace RadioSender.Hosts.Source.TmFRadio
   {
     public const uint BROADCAST = 0xffffffff;
 
-    private readonly IFilter _filter;
     private readonly DispatcherService _dispatcherService;
+    private readonly FilterService _filterService;
     private readonly Gateway _configuration;
     private readonly SerialPortStream _port;
     //private readonly SerialPortStream _serialPort;
@@ -34,13 +34,13 @@ namespace RadioSender.Hosts.Source.TmFRadio
     private bool disposed;
 
     public TmFRadioGateway(
-      IEnumerable<IFilter> filters,
+      FilterService filterService,
       DispatcherService dispatcherService,
-      Gateway gateway)
+      Gateway configuration)
     {
+      _filterService = filterService;
       _dispatcherService = dispatcherService;
-      _configuration = gateway;
-      _filter = filters.GetFilter(_configuration.Filter);
+      _configuration = configuration;
       _port = new SerialPortStream(_configuration.PortName, _configuration.Baudrate, 8, Parity.None, StopBits.One)
       {
         //_port.PortName = _configuration.PortName!;
@@ -355,7 +355,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
           return;
         }
 
-        var punch = _filter.Transform(sportidentMsg);
+        var punch = _filterService.Transform(_configuration.Filter, sportidentMsg);
 
         if (punch != null)
           _dispatcherService.PushDispatch(new PunchDispatch(Punches: [punch]));

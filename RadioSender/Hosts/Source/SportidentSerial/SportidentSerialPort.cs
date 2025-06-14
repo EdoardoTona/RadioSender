@@ -6,7 +6,6 @@ using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -15,7 +14,10 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
-  public sealed class SportidentSerialPort : ISource, IHostedService, IDisposable
+  public sealed class SportidentSerialPort(
+    FilterService filterService,
+    DispatcherService dispatcherService,
+    Port configuration) : ISource, IHostedService, IDisposable
   {
 #pragma warning disable IDE0051 // Rimuovi i membri privati inutilizzati
     private const byte WAKEUP = 0xFF;
@@ -34,26 +36,11 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 #pragma warning restore IDE0051 // Rimuovi i membri privati inutilizzati
 
     private static readonly RecyclableMemoryStreamManager _memoryManager = new();
-
-    private readonly IFilter _filter;
-    private readonly DispatcherService _dispatcherService;
-    private readonly Port _configuration;
-    private readonly SerialPort _port;
+    private readonly SerialPort _port = new();
     private readonly CancellationTokenSource _cts = new();
 
     private SportidentProduct? _stationInfo;
     private Task? _readTask;
-
-    public SportidentSerialPort(
-      IEnumerable<IFilter> filters,
-      DispatcherService dispatcherService,
-      Port portInfo)
-    {
-      _dispatcherService = dispatcherService;
-      _configuration = portInfo;
-      _port = new SerialPort();
-      _filter = filters.GetFilter(_configuration.Filter);
-    }
 
     public async Task StartAsync(CancellationToken st)
     {
@@ -62,7 +49,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         if (_port.IsOpen)
           _port.Close();
 
-        _port.PortName = _configuration.PortName;
+        _port.PortName = configuration.PortName;
         _port.BaudRate = 38400;
         //_port.RtsEnable = true;
         _port.DtrEnable = true;
@@ -85,29 +72,29 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           {
             // BSM3/4/6 at 4800 baud with old protocol (unsupported)
             unknownStation = true;
-            Log.Warning("SI Port {port}: unable to get station info", _configuration.PortName);
+            Log.Warning("SI Port {port}: unable to get station info", configuration.PortName);
           }
         }
 
         if (!unknownStation)
         {
           _stationInfo = await GetStationInfo();
-          Log.Information("SI Port {port} baudrate {baudrate} device: {info}", _configuration.PortName, _port.BaudRate, _stationInfo);
+          Log.Information("SI Port {port} baudrate {baudrate} device: {info}", configuration.PortName, _port.BaudRate, _stationInfo);
         }
         else
         {
-          Log.Information("SI Port {port} baudrate {baudrate} device unknown", _configuration.PortName, _port.BaudRate);
+          Log.Information("SI Port {port} baudrate {baudrate} device unknown", configuration.PortName, _port.BaudRate);
         }
 
         _readTask = ReadData();
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Error("SI Port {port} occupied by another program", _configuration.PortName);
+        Log.Error("SI Port {port} occupied by another program", configuration.PortName);
       }
       catch (FileNotFoundException)
       {
-        Log.Error("SI Port {port} doesn't exist", _configuration.PortName);
+        Log.Error("SI Port {port} doesn't exist", configuration.PortName);
       }
       catch (IOException)
       {
@@ -115,7 +102,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       }
       catch (Exception e)
       {
-        Log.Error(e, "Error starting port {port}", _configuration.PortName);
+        Log.Error(e, "Error starting port {port}", configuration.PortName);
       }
     }
 
@@ -218,10 +205,10 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           Buffer.BlockCopy(buffer, 0, data, 3, buffer.Length);
 
 
-          var punch = _filter.Transform(MessageToPunch(data, _port.PortName));
+          var punch = filterService.Transform(configuration.Filter, MessageToPunch(data, _port.PortName));
 
           if (punch != null)
-            _dispatcherService.PushDispatch(new PunchDispatch([punch]));
+            dispatcherService.PushDispatch(new PunchDispatch([punch]));
         }
         catch (OperationCanceledException)
         {

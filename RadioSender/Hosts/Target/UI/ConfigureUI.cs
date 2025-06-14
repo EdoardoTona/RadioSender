@@ -27,7 +27,7 @@ namespace RadioSender.Hosts.Target.UI
             return;
 
           services.AddSingleton(sp => new UIService(
-            sp.GetServices<IFilter>(),
+            sp.GetRequiredService<FilterService>(),
             sp.GetRequiredService<IHubContext<DeviceHub, IDeviceHub>>(),
             sp.GetRequiredService<HubEvents>(),
             conf));

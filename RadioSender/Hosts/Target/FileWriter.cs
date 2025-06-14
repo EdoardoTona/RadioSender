@@ -20,8 +20,10 @@ namespace RadioSender.Hosts.Target
         Directory.CreateDirectory(_fileInfo.DirectoryName);
 
       // TODO: handle network files (with broken connection)
-      _sr = new(_fileInfo.FullName, append: true, Encoding.UTF8);
-      _sr.AutoFlush = true;
+      _sr = new(_fileInfo.FullName, append: true, Encoding.UTF8)
+      {
+        AutoFlush = true
+      };
     }
 
     public void Dispose()

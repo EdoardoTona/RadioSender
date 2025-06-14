@@ -19,44 +19,30 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.SportidentCenter
 {
   public record SimplePunch(long Id, long Card, long Time, int Code, string Mode);
-  public class SportidentCenterEvent : BackgroundService, ISource
+  public class SportidentCenterEvent(
+    FilterService filterService,
+    IHttpClientFactory clientFactory,
+    DispatcherService dispatcherService,
+    Event configuration) : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "sportident";
-    private readonly IFilter _filter;
-    private readonly HttpClient _httpClient;
-    private readonly Event _configuration;
-    private readonly DispatcherService _dispatcherService;
-    private readonly int _refreshInterval_ms;
+    private readonly HttpClient _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
+    private readonly int _refreshInterval_ms = configuration.RefreshMs;
 
     private long _lastReceivedId;
 
-    private readonly CsvConfiguration _csvReaderConfiguration;
-
-    public SportidentCenterEvent(
-      IEnumerable<IFilter> filters,
-      IHttpClientFactory clientFactory,
-      DispatcherService dispatcherService,
-      Event siEvent)
+    private readonly CsvConfiguration _csvReaderConfiguration = new(CultureInfo.InvariantCulture)
     {
-      _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
-      _configuration = siEvent;
-      _dispatcherService = dispatcherService;
-
-      _csvReaderConfiguration = new CsvConfiguration(CultureInfo.InvariantCulture)
-      {
-        PrepareHeaderForMatch = args => args.Header.ToLower(CultureInfo.InvariantCulture)
-      };
-      _refreshInterval_ms = siEvent.RefreshMs;
-      _filter = filters.GetFilter(_configuration.Filter);
-    }
+      PrepareHeaderForMatch = args => args.Header.ToLower(CultureInfo.InvariantCulture)
+    };
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
       await Task.Yield();
 
-      Log.Information("Sportident center listening event {event}. Frequency {frequency}", _configuration.EventId, _configuration.RefreshMs);
+      Log.Information("Sportident center listening event {event}. Frequency {frequency}", configuration.EventId, configuration.RefreshMs);
 
-      if (_configuration.EventId == 0 || _configuration.EventId == null || string.IsNullOrEmpty(_configuration.ApiKey))
+      if (configuration.EventId == 0 || configuration.EventId == null || string.IsNullOrEmpty(configuration.ApiKey))
       {
         Log.Error("Sportident center: EventId/ApiKey missing");
       }
@@ -83,13 +69,13 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     {
       try
       {
-        if (_configuration.EventId == 0 || _configuration.EventId == null || string.IsNullOrEmpty(_configuration.ApiKey))
+        if (configuration.EventId == 0 || configuration.EventId == null || string.IsNullOrEmpty(configuration.ApiKey))
         {
           return;
         }
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{_configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
 
-        request.Headers.Add("apikey", _configuration.ApiKey);
+        request.Headers.Add("apikey", configuration.ApiKey);
         request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("text/csv"));
 
         var sw = new Stopwatch();
@@ -108,7 +94,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           IEnumerable<Punch>? punches = null;
           if (list.Any())
           {
-            punches = _filter.Transform(
+            punches = filterService.Transform(
+                      configuration.Filter,
                         list.Select(p =>
                               new Punch(
 
@@ -125,18 +112,18 @@ namespace RadioSender.Hosts.Source.SportidentCenter
             _lastReceivedId = list.Last().Id;
           }
 
-          _dispatcherService.PushDispatch(
+          dispatcherService.PushDispatch(
                       new PunchDispatch(
                         Punches: punches,
-                        Nodes: new[] { new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) },
-                        Hops: new[] { new Hop(HTTPCLIENT_NAME, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _refreshInterval_ms, 1) }
+                        Nodes: [new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1)],
+                        Hops: [new Hop(HTTPCLIENT_NAME, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _refreshInterval_ms, 1)]
                       )
             );
 
         }
         else
         {
-          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", _configuration, response.StatusCode);
+          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", configuration, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -145,7 +132,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
       }
       catch (Exception e)
       {
-        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", _configuration, e.Message);
+        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", configuration, e.Message);
       }
     }
 

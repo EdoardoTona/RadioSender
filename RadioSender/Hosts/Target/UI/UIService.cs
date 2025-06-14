@@ -16,7 +16,7 @@ namespace RadioSender.Hosts.Target.UI
 {
   public sealed class UIService : IHostedService, ITarget, IDisposable
   {
-    private IFilter _filter = Filter.Invariant;
+    private readonly FilterService _filterService;
     private UIConfiguration _configuration;
     private readonly IHubContext<DeviceHub, IDeviceHub> _hubContext;
     private readonly HubEvents _hubEvents;
@@ -33,11 +33,12 @@ namespace RadioSender.Hosts.Target.UI
     private Timer? _timer;
 
     public UIService(
-      IEnumerable<IFilter> filters,
+      FilterService filterService,
       IHubContext<DeviceHub, IDeviceHub> hubContext,
       HubEvents hubEvents,
       UIConfiguration configuration)
     {
+      _filterService = filterService;
       _configuration = configuration;
       _hubContext = hubContext;
       _hubEvents = hubEvents;
@@ -50,7 +51,6 @@ namespace RadioSender.Hosts.Target.UI
                         .Do(_ => Notify())
                         .Subscribe();
 
-      UpdateConfiguration(filters, configuration);
     }
 
     public void Dispose()
@@ -111,12 +111,6 @@ namespace RadioSender.Hosts.Target.UI
       }
     }
 
-    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
-    {
-      Interlocked.Exchange(ref _configuration!, configuration as UIConfiguration);
-      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
-    }
-
     public async Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
 
@@ -144,7 +138,7 @@ namespace RadioSender.Hosts.Target.UI
 
       if (dispatch.Punches == null)
         return;
-      var punches = _filter.Transform(dispatch.Punches);
+      var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
       foreach (var punch in punches)
       {

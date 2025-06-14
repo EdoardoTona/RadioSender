@@ -13,26 +13,21 @@ namespace RadioSender.Hosts.Target.Http;
 public class HttpTarget : ITarget
 {
 
+  private readonly FilterService _filterService;
   private readonly IBackgroundJobClient _backgroundJobClient;
-  private IFilter _filter = Filter.Invariant;
   private HttpTargetConfiguration _configuration;
   private static IHttpClientFactory? _httpClientFactory;
 
   public HttpTarget(
-    IEnumerable<IFilter> filters,
+    FilterService filterService,
     IHttpClientFactory httpClientFactory,
     IBackgroundJobClient backgroundJobClient,
     HttpTargetConfiguration configuration)
   {
     _configuration = configuration;
     _httpClientFactory = httpClientFactory;
-    UpdateConfiguration(filters, configuration);
     _backgroundJobClient = backgroundJobClient;
-  }
-  public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
-  {
-    Interlocked.Exchange(ref _configuration!, configuration as HttpTargetConfiguration);
-    Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
+    _filterService = filterService;
   }
   public Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
   {
@@ -46,7 +41,7 @@ public class HttpTarget : ITarget
     if (dispatch.Punches == null)
       return Task.CompletedTask;
 
-    var punches = _filter.Transform(dispatch.Punches);
+    var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
     foreach (var punch in punches)
     {

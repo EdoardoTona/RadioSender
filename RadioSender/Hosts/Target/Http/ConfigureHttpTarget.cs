@@ -31,7 +31,7 @@ public static class ConfigureHttpTarget
         {
           services.AddSingleton<ITarget>(sp =>
             new HttpTarget(
-              sp.GetServices<IFilter>(),
+              sp.GetRequiredService<FilterService>(),
               sp.GetRequiredService<IHttpClientFactory>(),
               sp.GetRequiredService<IBackgroundJobClient>(),
               client

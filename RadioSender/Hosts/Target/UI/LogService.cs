@@ -9,27 +9,18 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.UI
 {
-  public class LogService : IHostedService
+  public class LogService(
+    IHubContext<DeviceHub, IDeviceHub> hubContext,
+    HubEvents hubEvents) : IHostedService
   {
-    private readonly IHubContext<DeviceHub, IDeviceHub> _hubContext;
-    private readonly HubEvents _hubEvents;
-    private readonly EventLogSink? _eventLogSink;
+    private readonly EventLogSink? _eventLogSink = EventLogSink.Instance;
 
     private static readonly CircularBuffer<LogMessage> history = new(1000);
-
-    public LogService(
-      IHubContext<DeviceHub, IDeviceHub> hubContext,
-      HubEvents hubEvents)
-    {
-      _hubContext = hubContext;
-      _hubEvents = hubEvents;
-      _eventLogSink = EventLogSink.Instance;
-    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
       _eventLogSink?.AddHandler(CustomLogSink_NewLogEvent);
-      _hubEvents.GroupJoined += HubEvents_GroupJoined;
+      hubEvents.GroupJoined += HubEvents_GroupJoined;
 
       return Task.CompletedTask;
     }
@@ -37,7 +28,7 @@ namespace RadioSender.Hosts.Target.UI
     public Task StopAsync(CancellationToken cancellationToken)
     {
       _eventLogSink?.RemoveHandler(CustomLogSink_NewLogEvent);
-      _hubEvents.GroupJoined -= HubEvents_GroupJoined;
+      hubEvents.GroupJoined -= HubEvents_GroupJoined;
 
       return Task.CompletedTask;
     }
@@ -46,16 +37,16 @@ namespace RadioSender.Hosts.Target.UI
     {
       history.Put(message);
 
-      if (_hubContext == null) return;
+      if (hubContext == null) return;
 
-      _ = _hubContext.Clients.Group(DeviceHub.GROUP_LOG).Log(message);
+      _ = hubContext.Clients.Group(DeviceHub.GROUP_LOG).Log(message);
     }
 
     private async void HubEvents_GroupJoined(HubCallerContext sender, string group)
     {
       try
       {
-        if (group != DeviceHub.GROUP_LOG || _hubContext == null) return;
+        if (group != DeviceHub.GROUP_LOG || hubContext == null) return;
 
         try
         {
@@ -64,7 +55,7 @@ namespace RadioSender.Hosts.Target.UI
             sender.ConnectionAborted.ThrowIfCancellationRequested();
 
             var message = history.PeekAt(i);
-            await _hubContext.Clients.Client(sender.ConnectionId).Log(message).ConfigureAwait(false);
+            await hubContext.Clients.Client(sender.ConnectionId).Log(message).ConfigureAwait(false);
           }
         }
         catch
@@ -72,7 +63,7 @@ namespace RadioSender.Hosts.Target.UI
           Log.Error("Exception loading LOG history");
         }
 
-        await _hubContext.Groups.AddToGroupAsync(sender.ConnectionId, DeviceHub.GROUP_LOG);
+        await hubContext.Groups.AddToGroupAsync(sender.ConnectionId, DeviceHub.GROUP_LOG);
       }
       catch (OperationCanceledException)
       {

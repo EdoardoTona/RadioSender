@@ -1,6 +1,7 @@
 ﻿using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
@@ -18,38 +19,40 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.ROC
 {
   public record ROCPunch(long Id, int Code, long Card, DateTime Time);
-  public class ROCEvent : BackgroundService, ISource
+  public sealed class ROCEvent : BackgroundService, ISource
   {
     public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;
-    private readonly Event _configuration;
     private readonly DispatcherService _dispatcherService;
-    private readonly int _refreshInterval_ms;
-    private readonly IFilter _filter = Filter.Invariant;
+    private readonly FilterService _filterService;
+    private readonly int _eventId;
+
+    private readonly Event? _configuration;
 
     private long _lastReceivedId;
 
     private readonly CsvConfiguration _csvReaderConfiguration;
 
     public ROCEvent(
-      IEnumerable<IFilter> filters,
       IHttpClientFactory clientFactory,
       DispatcherService dispatcherService,
-      Event rocEvent)
+      FilterService filterService,
+      Event configuration,
+      int eventId)
     {
-      _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
-      _configuration = rocEvent;
+      _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME + eventId);
       _dispatcherService = dispatcherService;
-
+      _filterService = filterService;
+      _eventId = eventId;
       _csvReaderConfiguration = new CsvConfiguration(CultureInfo.InvariantCulture)
       {
         HasHeaderRecord = false,
         Delimiter = ";"
       };
-      _refreshInterval_ms = rocEvent.RefreshMs;
-      _filter = filters.GetFilter(_configuration.Filter);
-    }
 
+      _configuration = configuration;
+
+    }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -60,7 +63,7 @@ namespace RadioSender.Hosts.Source.ROC
         try
         {
           await GetData(ct);
-          await Task.Delay(_refreshInterval_ms, ct);
+          await Task.Delay(_configuration?.RefreshMs ?? 10_000, ct);
         }
         catch (OperationCanceledException)
         {
@@ -77,11 +80,14 @@ namespace RadioSender.Hosts.Source.ROC
     {
       try
       {
-        if (_configuration.EventId == null)
+        if (_configuration == null || _configuration.EventId == null)
         {
           Log.Error("No EventId");
           return;
         }
+
+        if (!_configuration.Enable)
+          return;
 
         var path = _configuration.Path.Replace("{EventId}", _configuration.EventId.ToString()).Replace("{LastId}", _lastReceivedId.ToString());
 
@@ -101,7 +107,8 @@ namespace RadioSender.Hosts.Source.ROC
           IEnumerable<Punch>? punches = null;
           if (list.Count != 0)
           {
-            punches = _filter.Transform(
+            punches = _filterService.Transform(
+                        _configuration.Filter,
                         list.Select(p =>
                         new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
@@ -109,7 +116,7 @@ namespace RadioSender.Hosts.Source.ROC
                           Time: p.Time,
                           Control: p.Code,
                           ControlType: PunchControlType.Unknown,
-                          SourceId: HTTPCLIENT_NAME
+                          SourceId: HTTPCLIENT_NAME + _eventId
                         )
                       )
                     );
@@ -120,8 +127,8 @@ namespace RadioSender.Hosts.Source.ROC
           _dispatcherService.PushDispatch(
                       new PunchDispatch(
                         Punches: punches,
-                        Nodes: [new NodeNew(HTTPCLIENT_NAME, HTTPCLIENT_NAME, sw.ElapsedMilliseconds + _refreshInterval_ms, 1)],
-                        Hops: [new Hop(HTTPCLIENT_NAME, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _refreshInterval_ms, 1)]
+                        Nodes: [new NodeNew(HTTPCLIENT_NAME + _eventId, HTTPCLIENT_NAME + _eventId, sw.ElapsedMilliseconds + _configuration.RefreshMs, 1)],
+                        Hops: [new Hop(HTTPCLIENT_NAME + _eventId, NodeNew.Localhost.Id, sw.ElapsedMilliseconds + _configuration.RefreshMs, 1)]
                       )
             );
 

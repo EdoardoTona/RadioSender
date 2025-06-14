@@ -6,10 +6,8 @@ using System.Net.Sockets;
 
 namespace RadioSender.Hosts.Target
 {
-  public class TcpServer : NetCoreServer.TcpServer
+  public class TcpServer(int port) : NetCoreServer.TcpServer(IPAddress.Any, port)
   {
-    public TcpServer(int port) : base(IPAddress.Any, port) { }
-
     public ConcurrentDictionary<Guid, NetCoreServer.TcpSession> GetSessions() { return Sessions; }
 
     protected override NetCoreServer.TcpSession CreateSession() { return new TcpServerTcpSession(this); }

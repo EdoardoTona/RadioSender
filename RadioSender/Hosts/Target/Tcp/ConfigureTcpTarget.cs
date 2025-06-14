@@ -32,7 +32,7 @@ namespace RadioSender.Hosts.Target.Tcp
           if (target.AsServer)
           {
             services.AddSingleton<ITarget>(sp => new TcpTargetServer(
-                sp.GetServices<IFilter>(),
+                sp.GetRequiredService<FilterService>(),
                 target
                 ));
 
@@ -44,7 +44,7 @@ namespace RadioSender.Hosts.Target.Tcp
           {
             services.AddSingleton<ITarget>(sp =>
               new TcpTargetClient(
-                sp.GetServices<IFilter>(),
+                sp.GetRequiredService<FilterService>(),
                 target
                 )
             );

@@ -15,23 +15,19 @@ public class OribosService : ITarget
   private readonly IBackgroundJobClient _backgroundJobClient;
   private static IHttpClientFactory? _httpClientFactory; // static for hangfire
   private OribosServer _configuration;
-  private IFilter _filter = Filter.Invariant;
+  private readonly FilterService _filterService;
+
   public OribosService(
-    IEnumerable<IFilter> filters,
+    FilterService filterService,
     IBackgroundJobClient backgroundJobClient,
     IHttpClientFactory httpClientFactory,
     OribosServer configuration)
   {
+    _filterService = filterService;
     _configuration = configuration;
     _backgroundJobClient = backgroundJobClient;
     _httpClientFactory = httpClientFactory;
 
-    UpdateConfiguration(filters, configuration);
-  }
-  public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
-  {
-    Interlocked.Exchange(ref _configuration!, configuration as OribosServer);
-    Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
   }
 
   public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
@@ -39,7 +35,7 @@ public class OribosService : ITarget
     if (dispatch.Punches == null)
       return Task.CompletedTask;
 
-    var punches = _filter.Transform(dispatch.Punches);
+    var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
     foreach (var punch in punches)
     {

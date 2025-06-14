@@ -9,41 +9,13 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.Tcp
 {
-  public sealed class TcpTargetServer : IHostedService, ITarget, IDisposable
+  public sealed class TcpTargetServer(
+     FilterService filterService,
+    TcpTargetConfiguration configuration) : IHostedService, ITarget, IDisposable
   {
-    private IFilter _filter = Filter.Invariant;
-    private TcpTargetConfiguration _configuration;
+    private readonly TcpServer? _tcpServer;
 
-    private TcpServer? _tcpServer;
-
-    public TcpTargetServer(
-      IEnumerable<IFilter> filters,
-      TcpTargetConfiguration configuration)
-    {
-      _configuration = configuration;
-      UpdateConfiguration(filters, configuration);
-    }
-    public TcpTargetConfiguration GetConfiguration() => _configuration;
-    public void UpdateConfiguration(IEnumerable<IFilter> filters, Configuration configuration)
-    {
-      Interlocked.Exchange(ref _configuration!, configuration as TcpTargetConfiguration);
-      Interlocked.Exchange(ref _filter, filters.GetFilter(_configuration.Filter));
-
-      if (_configuration.Address == null || _configuration.Port == null)
-        return;
-
-      var newServer = new TcpServer(_configuration.Port.Value);
-      newServer.Start();
-
-      var oldServer = Interlocked.Exchange(ref _tcpServer, newServer);
-
-      if (oldServer != null)
-      {
-        oldServer.Stop();
-        oldServer.Dispose();
-      }
-
-    }
+    public TcpTargetConfiguration GetConfiguration() => configuration;
 
     public async Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
     {
@@ -53,14 +25,14 @@ namespace RadioSender.Hosts.Target.Tcp
 
     public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
-      if (dispatch.Punches == null || _tcpServer == null || _tcpServer.ConnectedSessions == 0 || string.IsNullOrWhiteSpace(_configuration.Format))
+      if (dispatch.Punches == null || _tcpServer == null || _tcpServer.ConnectedSessions == 0 || string.IsNullOrWhiteSpace(configuration.Format))
         return Task.CompletedTask;
 
-      var punches = _filter.Transform(dispatch.Punches);
+      var punches = filterService.Transform(configuration.Filter, dispatch.Punches);
 
       foreach (var punch in punches)
       {
-        byte[] buffer = FormatStringHelper.GetBytes(punch, _configuration.Format);
+        byte[] buffer = FormatStringHelper.GetBytes(punch, configuration.Format);
 
         if (buffer == null || buffer.Length == 0)
           continue;

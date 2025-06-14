@@ -4,14 +4,9 @@ using System.Threading;
 namespace RadioSender.Hosts.Target
 {
 
-  public class TcpClient : NetCoreServer.TcpClient
+  public class TcpClient(string address, int port) : NetCoreServer.TcpClient(address, port)
   {
     private bool _stop;
-
-    public TcpClient(string address, int port) : base(address, port)
-    {
-
-    }
 
     public void DisconnectAndStop()
     {

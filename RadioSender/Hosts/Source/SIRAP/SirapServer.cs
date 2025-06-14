@@ -13,21 +13,12 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.SIRAP
 {
-  public sealed class SirapServer : TcpServer, ISource, IHostedService, IDisposable
+  public sealed class SirapServer(
+    FilterService filterService,
+    DispatcherService dispatcherService,
+    SirapServerConfiguration configuration)
+    : TcpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IHostedService, IDisposable
   {
-    private readonly IFilter _filter = Filter.Invariant;
-    private readonly SirapServerConfiguration _configuration;
-    private readonly DispatcherService _dispatcherService;
-
-    public SirapServer(
-      IEnumerable<IFilter> filters,
-      DispatcherService dispatcherService,
-      SirapServerConfiguration configuration) : base(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration)))
-    {
-      _dispatcherService = dispatcherService;
-      _configuration = configuration;
-      _filter = filters.GetFilter(_configuration.Filter);
-    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -90,7 +81,8 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
-      var punch = _filter.Transform(
+      var punch = filterService.Transform(
+                    configuration.Filter,
                      new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
                      Card: chipNo.ToString(),
@@ -104,7 +96,7 @@ namespace RadioSender.Hosts.Source.SIRAP
                   );
 
       if (punch != null)
-        _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+        dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
     }
 
     internal void OnReceivedV2(TcpSirapSession session, ReadOnlySpan<byte> buffer)
@@ -131,7 +123,8 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
-      var punch = _filter.Transform(
+      var punch = filterService.Transform(
+                    configuration.Filter,
                      new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
                      Card: chipNo.ToString(),
@@ -145,7 +138,7 @@ namespace RadioSender.Hosts.Source.SIRAP
                   );
 
       if (punch != null)
-        _dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+        dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
     }
 
     internal static bool ManageSpecialFlags(int codeDay,
