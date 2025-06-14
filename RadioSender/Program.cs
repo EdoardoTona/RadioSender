@@ -44,7 +44,7 @@ public static class Program
 
       var configuration = new ConfigurationBuilder()
                               .SetBasePath(Directory.GetCurrentDirectory())
-                              .AddJsonFile(appsettings, optional: true)
+                              .AddJsonFile(appsettings, optional: true, reloadOnChange: true)
                               .Build();
 
       Log.Logger = new LoggerConfiguration()

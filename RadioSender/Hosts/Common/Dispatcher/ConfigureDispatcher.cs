@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Target;
 
@@ -17,7 +18,10 @@ namespace RadioSender.Hosts.Common
       {
         var conf = context.Configuration.GetSection("Dispatcher").Get<DispatcherConfiguration>();
 
-        services.AddSingleton(sp => new DispatcherService(sp.GetServices<IFilter>(), sp.GetServices<ITarget>(), conf!));
+        services.AddSingleton(sp => new DispatcherService(
+          sp.GetRequiredService<IOptionsMonitor<FiltersConfiguration>>(),
+          sp.GetServices<ITarget>(),
+          conf!));
       });
 
       return builder;

@@ -1,4 +1,5 @@
-﻿using RadioSender.Hosts.Common.Filters;
+﻿using Microsoft.Extensions.Options;
+using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Target;
 using Serilog;
 using System;
@@ -8,26 +9,39 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Common;
 
-public class DispatcherService
+public sealed class DispatcherService : IDisposable
 {
   private readonly DispatcherConfiguration _configuration;
-  private readonly IFilter _filter;
+  private readonly IOptionsMonitor<FiltersConfiguration> _optionsMonitorFilters;
+
+  private IFilter _filter;
   private readonly IEnumerable<ITarget> _targets;
 
   private readonly HashSet<Punch> _punches = [];
 
   public event EventHandler? RequestPing;
+  private readonly List<IDisposable> _subscriptions = [];
 
   public DispatcherService(
-    IEnumerable<IFilter> filters,
+    IOptionsMonitor<FiltersConfiguration> optionsMonitorFilters,
     IEnumerable<ITarget> targets,
     DispatcherConfiguration configuration
     )
   {
     _targets = targets;
     _configuration = configuration;
-    _filter = filters.GetFilter(_configuration.Filter);
 
+    _optionsMonitorFilters = optionsMonitorFilters;
+
+    _subscriptions.Add(_optionsMonitorFilters.OnChange((filtersConfig, name) => UpdateFilter())!);
+    UpdateFilter();
+  }
+
+  public void UpdateFilter()
+  {
+    Log.Information("Updated filters");
+    var filters = _optionsMonitorFilters.CurrentValue.List;
+    _filter = filters.GetFilter(_configuration.Filter);
   }
 
   public void ResendPunches()
@@ -94,4 +108,9 @@ public class DispatcherService
     _ = Task.WhenAll(_targets.Select(t => t.SendDispatches(toBeForwardedDispatcher, default)));
   }
 
+  public void Dispose()
+  {
+    foreach (var item in _subscriptions)
+      item.Dispose();
+  }
 }

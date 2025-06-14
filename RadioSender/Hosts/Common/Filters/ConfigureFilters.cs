@@ -11,7 +11,10 @@ namespace RadioSender.Hosts.Common.Filters
     {
       builder.ConfigureServices((context, services) =>
       {
-        var filters = context.Configuration.GetSection("Filters").Get<IEnumerable<Filter>>();
+        services.Configure<FiltersConfiguration>(context.Configuration.GetSection("Filters"));
+
+        // // TODO remove:
+        var filters = context.Configuration.GetSection("Filters").Get<FiltersConfiguration>();
 
         if (filters != null)
         {
