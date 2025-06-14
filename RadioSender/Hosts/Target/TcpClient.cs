@@ -23,12 +23,12 @@ namespace RadioSender.Hosts.Target
 
     protected override void OnConnected()
     {
-      Log.Information("TcpTargetClient {id} connected", Id.ToString());
+      Log.Information("TcpTargetClient {address}:{port} connected", Address, Port);
     }
 
     protected override void OnDisconnected()
     {
-      Log.Information("TcpTargetClient {id} disconnected", Id.ToString());
+      Log.Information("TcpTargetClient {address}:{port} disconnected", Address, Port);
 
       // Wait for a while...
       Thread.Sleep(1000);

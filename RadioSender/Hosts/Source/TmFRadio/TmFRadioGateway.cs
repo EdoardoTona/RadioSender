@@ -91,30 +91,30 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         _ = CheckPathAndStatus(delay: true);
 
-        Log.Information("{port} Port connected", _configuration.PortName);
+        Log.Information("Tmf Radio port {port} connected", _configuration.PortName);
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Error("{port} Port occupied by another program", _configuration.PortName);
+        Log.Error("Tmf Radio port {port} occupied by another program", _configuration.PortName);
       }
       catch (FileNotFoundException)
       {
-        Log.Error("{port} Port not found", _configuration.PortName);
+        Log.Error("Tmf Radio port {port} not found", _configuration.PortName);
       }
       catch (IOException e)
       {
         if (e.Message.Contains("Port not found"))
         {
-          Log.Error("{port} Port not found", _configuration.PortName);
+          Log.Error("Tmf Radio port {port} not found", _configuration.PortName);
         }
         else
         {
-          Log.Error(e, "Error opening the serial port {port}", _configuration.PortName);
+          Log.Error(e, "Tmf Radio error opening the serial port {port}", _configuration.PortName);
         }
       }
       catch (Exception e)
       {
-        Log.Error(e, "Error starting port {port}", _configuration.PortName);
+        Log.Error(e, "Tmf Radio error starting port {port}", _configuration.PortName);
       }
 
       return Task.CompletedTask;

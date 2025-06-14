@@ -85,29 +85,29 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           {
             // BSM3/4/6 at 4800 baud with old protocol (unsupported)
             unknownStation = true;
-            Log.Warning("Unable to get station info");
+            Log.Warning("SI Port {port}: unable to get station info", _configuration.PortName);
           }
         }
 
         if (!unknownStation)
         {
           _stationInfo = await GetStationInfo();
-          Log.Information("Port {port} baudrate {baudrate} device: {info}", _configuration.PortName, _port.BaudRate, _stationInfo);
+          Log.Information("SI Port {port} baudrate {baudrate} device: {info}", _configuration.PortName, _port.BaudRate, _stationInfo);
         }
         else
         {
-          Log.Information("Port {port} baudrate {baudrate} device unknown", _configuration.PortName, _port.BaudRate);
+          Log.Information("SI Port {port} baudrate {baudrate} device unknown", _configuration.PortName, _port.BaudRate);
         }
 
         _readTask = ReadData();
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Error("Port {port} occupied by another program", _configuration.PortName);
+        Log.Error("SI Port {port} occupied by another program", _configuration.PortName);
       }
       catch (FileNotFoundException)
       {
-        Log.Error("Port {port} doesn't exist", _configuration.PortName);
+        Log.Error("SI Port {port} doesn't exist", _configuration.PortName);
       }
       catch (IOException)
       {

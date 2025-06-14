@@ -229,12 +229,12 @@ namespace RadioSender.Hosts.Source.SIRAP
 
     protected override void OnConnected()
     {
-      Log.Information("Sirap client {id} connected", Id.ToString());
+      Log.Information("Sirap client {address}:{port} ({name}) connected", Server.Address, Server.Port, Name);
     }
 
     protected override void OnDisconnected()
     {
-      Log.Information("Sirap client {id} disconnected", Name ?? Id.ToString());
+      Log.Information("Sirap client {address}:{port} ({name}) disconnected", Server.Address, Server.Port, Name);
     }
 
     protected override void OnReceived(byte[] buffer, long offset, long size)

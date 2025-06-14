@@ -28,12 +28,12 @@ namespace RadioSender.Hosts.Target
 
     protected override void OnConnected()
     {
-      Log.Information("TcpTargetServer client {id} connected", Id.ToString());
+      Log.Information("TcpTargetServer client {address}:{port} connected", Server.Address, Server.Port);
     }
 
     protected override void OnDisconnected()
     {
-      Log.Information("TcpTargetServer client {id} disconnected", Id.ToString());
+      Log.Information("TcpTargetServer client {address}:{port} disconnected", Server.Address, Server.Port);
     }
 
     protected override void OnReceived(byte[] buffer, long offset, long size)
