@@ -83,13 +83,11 @@ public static class Program
                   .ToTcp()
                   .ToHttp();
 
-      // --- Startup.cs migration ---
       builder.Services.AddHealthChecks();
       builder.Services.AddRazorPages();
       builder.Services.AddSignalR()
                       .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
       builder.Services.AddSingleton<HubEvents>();
-      // --- end Startup.cs migration ---
 
       var app = builder.Build();
       var env = app.Environment;
