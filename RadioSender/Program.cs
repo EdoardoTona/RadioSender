@@ -1,9 +1,13 @@
 using CliWrap;
 using Common;
+using Hangfire;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RadioSender.Hubs;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Source.Microplus;
@@ -24,134 +28,156 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 
-namespace RadioSender
+namespace RadioSender;
+
+public static class Program
 {
-  public static class Program
+  public static int Main(string[] args)
   {
-    public static int Main(string[] args)
+    try
     {
-      try
+      var appsettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+
+      if (!File.Exists(appsettings))
+        throw new FileNotFoundException("Configuration file not found at " + appsettings);
+
+      var configuration = new ConfigurationBuilder()
+                              .SetBasePath(Directory.GetCurrentDirectory())
+                              .AddJsonFile(appsettings, optional: true)
+                              .Build();
+
+      Log.Logger = new LoggerConfiguration()
+                    .ReadFrom.Configuration(configuration)
+                    .Enrich.FromLogContext()
+                    .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+                    .WriteTo.EventLogSink()
+                    .CreateLogger();
+
+      var assembly = Assembly.GetExecutingAssembly().GetName();
+
+      Log.Information("**** Starting up {application} {version} ****", assembly.Name, assembly.Version);
+
+      var builder = WebApplication.CreateBuilder(args);
+      builder.Host.UseSerilog();
+      builder.Host.UseHangfire();
+      builder.Host.UseFilters();
+      builder.Host.ActivatePhotino();
+      builder.Services.AddHttpClient();
+
+      // Sources
+      builder.Host.FromRoc()
+                  .FromSportidentCenter()
+                  .FromSportidentSerial()
+                  .FromTmFRadio()
+                  .FromSirap()
+                  .FromMicroplus()
+      // Middleware
+                  .ThroughDispatcher()
+      // Targets
+                  .ToUI()
+                  .ToOribos()
+                  .ToFile()
+                  .ToSirap()
+                  .ToTcp()
+                  .ToHttp();
+
+      // --- Startup.cs migration ---
+      builder.Services.AddHealthChecks();
+      builder.Services.AddRazorPages();
+      builder.Services.AddSignalR()
+                      .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+      builder.Services.AddSingleton<HubEvents>();
+      // --- end Startup.cs migration ---
+
+      var app = builder.Build();
+      var env = app.Environment;
+
+      if (env.IsDevelopment())
       {
-        var appsettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-
-        if (!File.Exists(appsettings))
-          throw new FileNotFoundException("Configuration file not found at " + appsettings);
-
-        var configuration = new ConfigurationBuilder()
-                                .SetBasePath(Directory.GetCurrentDirectory())
-                                .AddJsonFile(appsettings, optional: true)
-                                .Build();
-
-        Log.Logger = new LoggerConfiguration()
-                      .ReadFrom.Configuration(configuration)
-                      .Enrich.FromLogContext()
-                      .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
-                      .WriteTo.EventLogSink()
-                      .CreateLogger();
-
-        var assembly = Assembly.GetExecutingAssembly().GetName();
-
-        Log.Information("**** Starting up {application} {version} ****", assembly.Name, assembly.Version);
-
-        CreateHostBuilder(args).Build().Run();
-
-        Log.Information("**** Shutting down ****");
-
-        return 0;
-
+        app.UseDeveloperExceptionPage();
       }
-      catch (OperationCanceledException)
+
+      app.UseStaticFiles(new StaticFileOptions
       {
-        return 0;
-      }
-      catch (Exception e)
-      {
-        PopupException(e);
-        return 1;
-      }
-      finally
-      {
-        Log.CloseAndFlush();
-      }
+        OnPrepareResponse = context =>
+        {
+          if (env.IsDevelopment())
+            context.Context.Response.Headers.Append("Cache-Control", "no-cache");
+          else
+            context.Context.Response.Headers.Append("Cache-Control", "private, max-age=86400"); // 1 day
+        }
+      });
 
+      app.UseHangfireDashboard();
+      app.UseRouting();
+      app.MapHealthChecks("healthz");
+      app.MapRazorPages();
+      app.MapHub<DeviceHub>("/deviceHub");
+      app.MapHangfireDashboard();
+      app.Run();
+
+      Log.Information("**** Shutting down ****");
+      return 0;
     }
-
-    public static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-
-            .UseSerilog()
-            .UseHangfire()
-            .UseFilters()
-
-            .ActivatePhotino()
-            .ConfigureServices(s => s.AddHttpClient())
-
-            // Sources
-            .FromRoc()
-            .FromSportidentCenter()
-            .FromSportidentSerial()
-            .FromTmFRadio()
-            .FromSirap()
-            .FromMicroplus()
-
-            // Middleware
-            .ThroughDispatcher()
-
-            // Targets
-            .ToUI()
-            .ToOribos()
-            .ToFile()
-            .ToSirap()
-            .ToTcp()
-            .ToHttp();
-
-    public static void PopupException(Exception e)
+    catch (OperationCanceledException)
     {
-      Log.Error(e, "**** Main Exception ****");
+      return 0;
+    }
+    catch (Exception e)
+    {
+      PopupException(e);
+      return 1;
+    }
+    finally
+    {
+      Log.CloseAndFlush();
+    }
+  }
 
-      try
+  public static void PopupException(Exception e)
+  {
+    Log.Error(e, "**** Main Exception ****");
+    try
+    {
+      var message = e.Message.Replace("'", "\"") +
+                    Environment.NewLine +
+                    Environment.NewLine +
+                    e.GetType().ToString() +
+                    Environment.NewLine +
+                    e.StackTrace?.Replace("'", "\"");
+      if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
       {
-        var message = e.Message.Replace("'", "\"") +
-                      Environment.NewLine +
-                      Environment.NewLine +
-                      e.GetType().ToString() +
-                      Environment.NewLine +
-                      e.StackTrace?.Replace("'", "\"");
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-          Cli.Wrap("powershell")
-             .WithArguments(
-                "Add-Type -AssemblyName PresentationCore,PresentationFramework; " +
-                "[System.Windows.MessageBox]::Show('" + message + "','Radiosender','Ok','Error')")
-             .ExecuteAsync()
-             .Task.Wait();
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-          // TODO test
-          Cli.Wrap("bash")
-             .WithArguments(
-                "osascript -e 'tell app \"Finder\" to display dialog \"" + message + "\" buttons {\"OK\"} with icon stop'")
-             .ExecuteAsync()
-             .Task.Wait();
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-          // TODO test
-          Cli.Wrap("bash")
-             .WithArguments(
-                "xmessage - center \"" + message + "\"")
-             .ExecuteAsync()
-             .Task.Wait();
-        }
+        Cli.Wrap("powershell")
+           .WithArguments(
+              "Add-Type -AssemblyName PresentationCore,PresentationFramework; " +
+              "[System.Windows.MessageBox]::Show('" + message + "','Radiosender','Ok','Error')")
+           .ExecuteAsync()
+           .Task.Wait();
       }
-      catch
+      else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
       {
-        // quiet
+        // TODO test
+        Cli.Wrap("bash")
+           .WithArguments(
+              "osascript -e 'tell app \"Finder\" to display dialog \"" + message + "\" buttons {\"OK\"} with icon stop'")
+           .ExecuteAsync()
+           .Task.Wait();
+      }
+      else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+      {
+        // TODO test
+        Cli.Wrap("bash")
+           .WithArguments(
+              "xmessage - center \"" + message + "\"")
+           .ExecuteAsync()
+           .Task.Wait();
       }
     }
-
+    catch
+    {
+      // quiet
+    }
   }
 }
