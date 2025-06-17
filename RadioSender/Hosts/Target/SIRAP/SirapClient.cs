@@ -50,11 +50,11 @@ namespace RadioSender.Hosts.Target.SIRAP
       if (dispatch.Punches == null || _tcpClient == null || !_tcpClient.IsConnected)
         return Task.CompletedTask;
 
-      var punches = filterService.Transform(configuration.Filter, dispatch.Punches);
+      var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
       foreach (var punch in punches)
       {
-        var buffer = GetBytes(punch, configuration.Version, configuration.ZeroTime);
+        var buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
 
         if (buffer == null || buffer.Length == 0)
           continue;

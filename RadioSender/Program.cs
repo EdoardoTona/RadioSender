@@ -72,6 +72,7 @@ public static class Program
                   .FromTmFRadio()
                   .FromSirap()
                   .FromMicroplus()
+                  .FromMicrogate()
       // Middleware
                   .ThroughDispatcher()
       // Targets
