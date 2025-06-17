@@ -174,6 +174,16 @@ public class MicrogateSource : TcpClient, ISource, IHostedService, IDisposable
     if (data.CompetitorNumber == null || data.Timestamp == null || data.IsNetTime)
       return;
 
+    var status = data.Info switch
+    {
+      InfoExtEnum.DSQ => CompetitorStatus.DSQ,
+      InfoExtEnum.DNS => CompetitorStatus.DNS,
+      InfoExtEnum.DNF => CompetitorStatus.DNF,
+      _ => CompetitorStatus.Unknown
+    };
+
+
+
     var punch = _filterService.Transform(
                    _configuration.Filter,
                     new Punch(
@@ -186,7 +196,7 @@ public class MicrogateSource : TcpClient, ISource, IHostedService, IDisposable
                     Time: data.Timestamp.Value,
                     SourceId: "Microgate", // TODO
                     Cancellation: data.Info == InfoExtEnum.Annulled,
-                    CompetitorStatus: CompetitorStatus.Unknown
+                    CompetitorStatus: status
                     )
                  );
 
