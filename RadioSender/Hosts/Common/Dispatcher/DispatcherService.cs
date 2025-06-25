@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Options;
-using RadioSender.Hosts.Common.Filters;
+﻿using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Target;
 using Serilog;
 using System;
