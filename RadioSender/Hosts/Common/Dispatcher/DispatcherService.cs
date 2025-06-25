@@ -3,6 +3,7 @@ using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Target;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -15,14 +16,14 @@ public sealed class DispatcherService(
   DispatcherConfiguration configuration
     ) : IDisposable
 {
-  private readonly HashSet<Punch> _punches = [];
+  private readonly ConcurrentDictionary<string, Punch> _punches = [];
 
   public event EventHandler? RequestPing;
   private readonly List<IDisposable> _subscriptions = [];
 
   public void ResendPunches()
   {
-    _ = Task.WhenAll(targets.Select(t => t.SendDispatch(new PunchDispatch([.. _punches], null), default)));
+    _ = Task.WhenAll(targets.Select(t => t.SendDispatch(new PunchDispatch([.. _punches.Values], null), default)));
   }
 
   public void Ping()
@@ -39,13 +40,14 @@ public sealed class DispatcherService(
       var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
       {
-        if (_punches.Contains(punch))
+        var key = punch.ToString();
+        if (_punches.ContainsKey(key))
         {
           Log.Verbose("Detected duplicated punch " + punch);
           continue;
         }
 
-        _punches.Add(punch);
+        _punches.TryAdd(key, punch);
         toBeForwardedPunch.Add(punch);
       }
 
@@ -68,13 +70,14 @@ public sealed class DispatcherService(
       var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
       {
-        if (_punches.Contains(punch))
+        var key = punch.ToString();
+        if (_punches.ContainsKey(key))
         {
           Log.Information("Detected duplicated punch " + punch);
           continue;
         }
 
-        _punches.Add(punch);
+        _punches.TryAdd(key, punch);
         toBeForwardedPunch.Add(punch);
       }
 
