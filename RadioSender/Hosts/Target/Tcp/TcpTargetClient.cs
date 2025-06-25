@@ -54,8 +54,19 @@ namespace RadioSender.Hosts.Target.Tcp
 
       foreach (var punch in punches)
       {
+        var p = punch;
+        if (p.CompetitorStatus == CompetitorStatus.DNS)
+          p = p with { Time = new DateTime(1, 1, 1, 0, 0, 1) };
+        if (p.CompetitorStatus == CompetitorStatus.DNF)
+          p = p with { Time = new DateTime(1, 1, 1, 0, 0, 2) };
+        if (p.CompetitorStatus == CompetitorStatus.MP)
+          p = p with { Time = new DateTime(1, 1, 1, 0, 0, 3) };
+        if (p.CompetitorStatus == CompetitorStatus.DSQ)
+          p = p with { Time = new DateTime(1,1,1, 0, 0, 4) };
+        if (p.CompetitorStatus == CompetitorStatus.OverTime)
+          p = p with { Time = new DateTime(1,1,1, 0, 0, 5) };
 
-        byte[] buffer = FormatStringHelper.GetBytes(punch, _configuration.Format);
+        byte[] buffer = FormatStringHelper.GetBytes(p, _configuration.Format);
 
         if (buffer == null || buffer.Length == 0)
           continue;

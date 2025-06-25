@@ -219,17 +219,28 @@ namespace RadioSender.Hosts.Source.SIRAP
     }
     public TcpSirapSession(SirapServer server) : base(server) { }
 
+    string? remoteEndpoint;
+
     protected override void OnConnected()
     {
-      Log.Information("Sirap client {endpoint} connected", Socket.RemoteEndPoint);
+      try
+      {
+        remoteEndpoint = Socket.RemoteEndPoint?.ToString();
+        Log.Information("Sirap client {endpoint} connected", remoteEndpoint);
+      }
+      catch { }
     }
 
     protected override void OnDisconnected()
     {
-      if (string.IsNullOrEmpty(Name))
-        Log.Information("Sirap client {endpoint} disconnected", Socket.RemoteEndPoint);
-      else
-        Log.Information("Sirap client {endpoint} (Name: {name}) disconnected", Socket.RemoteEndPoint, Name);
+      try
+      {
+        if (string.IsNullOrEmpty(Name))
+          Log.Information("Sirap client {endpoint} disconnected", remoteEndpoint);
+        else
+          Log.Information("Sirap client {endpoint} (Name: {name}) disconnected", remoteEndpoint, Name);
+      }
+      catch { }
     }
 
     protected override void OnReceived(byte[] buffer, long offset, long size)
@@ -240,7 +251,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
     protected override void OnError(SocketError error)
     {
-      Log.Warning("Sirap client {endpoint} socket error {error}", Socket.RemoteEndPoint, error);
+      Log.Warning("Sirap client {endpoint} socket error {error}", remoteEndpoint, error);
     }
   }
 
