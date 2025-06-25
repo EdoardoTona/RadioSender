@@ -28,6 +28,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         services.AddHttpClient(SportidentCenterEvent.HTTPCLIENT_NAME, c =>
         {
           c.BaseAddress = new Uri("https://center.sportident.com/");
+          c.Timeout = TimeSpan.FromSeconds(5);
         });
 
         var events = context.Configuration.GetSection("Source:SportidentCenter:Events").Get<IEnumerable<Event>>();

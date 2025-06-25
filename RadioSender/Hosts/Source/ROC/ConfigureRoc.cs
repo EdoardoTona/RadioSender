@@ -36,6 +36,7 @@ namespace RadioSender.Hosts.Source.ROC
             services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME + ev.EventId, c =>
             {
               c.BaseAddress = new Uri(ev.Host);
+              c.Timeout = TimeSpan.FromSeconds(5);
             });
 
             services.AddSingleton<IRadioSenderHost, ROCEvent>(sp => new ROCEvent(

@@ -1,9 +1,11 @@
 ﻿using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,8 +15,6 @@ namespace RadioSender.Hosts.Target.File
   {
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
-    private FileWriter? _fileWriter;
-
     private readonly FilterService _filterService;
     private readonly FileConfiguration _configuration;
     public FileTarget(
@@ -23,30 +23,17 @@ namespace RadioSender.Hosts.Target.File
     {
       _filterService = filterService;
       _configuration = configuration;
-
-      _semaphore.Wait();
-
-      try
-      {
-        _fileWriter?.Dispose();
-        if (!string.IsNullOrEmpty(_configuration.Path))
-          _fileWriter = new FileWriter(_configuration.Path);
-      }
-      finally
-      {
-        _semaphore.Release();
-      }
     }
 
     public void Dispose()
     {
-      _fileWriter?.Dispose();
+      _semaphore?.Dispose();
     }
 
     public async Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
     {
       await Task.Yield();
-      if (dispatch.Punches == null || _fileWriter == null || string.IsNullOrWhiteSpace(_configuration.Format))
+      if (dispatch.Punches == null || _configuration.Path == null || string.IsNullOrWhiteSpace(_configuration.Format))
         return;
 
       var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
@@ -57,11 +44,18 @@ namespace RadioSender.Hosts.Target.File
       await _semaphore.WaitAsync(ct);
       try
       {
+        using var file = System.IO.File.Open(_configuration.Path, System.IO.FileMode.Append, System.IO.FileAccess.Write, System.IO.FileShare.Read);
+
         foreach (var punch in punches)
         {
           string record = FormatStringHelper.GetString(punch, _configuration.Format);
-          _fileWriter.Write(record);
+          file.Write(Encoding.UTF8.GetBytes(record));
         }
+      }
+      catch (Exception ex)
+      {
+        // Log the exception or handle it as needed
+        Log.Error($"Error writing to file: {_configuration.Path}");
       }
       finally
       {

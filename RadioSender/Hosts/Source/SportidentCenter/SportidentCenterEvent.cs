@@ -5,6 +5,7 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -38,6 +39,10 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
     private CancellationTokenSource _cts = new CancellationTokenSource();
     private Task? _executingtask;
+
+    private DateTimeOffset lastDiagnosticReport;
+    private ConcurrentBag<long> diagnosticTimes = [];
+    private bool wasError = false;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -98,16 +103,39 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         var response = await _httpClient.SendAsync(request, ct);
         sw.Stop();
 
+        try
+        {
+          diagnosticTimes.Add(sw.ElapsedMilliseconds);
+          if (DateTimeOffset.UtcNow - lastDiagnosticReport > TimeSpan.FromMinutes(2))
+          {
+            Log.Information("SportidentCenter diagnostic report for event {event}: count {count}, avg {avg:0}ms, min {min}ms, max {max}ms",
+              configuration.EventId, diagnosticTimes.Count, diagnosticTimes.Average(), diagnosticTimes.Min(), diagnosticTimes.Max());
+
+            lastDiagnosticReport = DateTimeOffset.UtcNow;
+            diagnosticTimes.Clear();
+          }
+        }
+        catch
+        {
+          Log.Warning("Error writing diagnostic report for SportidentCenter event {event}", configuration.EventId);
+        }
+
         if (response.IsSuccessStatusCode)
         {
           using var responseStream = await response.Content.ReadAsStreamAsync(ct);
 
           using var reader = new StreamReader(responseStream, Encoding.UTF8);
           using var csv = new CsvReader(reader, _csvReaderConfiguration);
-          IEnumerable<SimplePunch> list = csv.GetRecords<SimplePunch>().OrderBy(p => p.Time).ToList();
+          var list = csv.GetRecords<SimplePunch>().OrderBy(p => p.Time).ToList();
+
+          if (wasError)
+          {
+            Log.Information("SportidentCenter event {event} recovered", configuration.EventId);
+            wasError = false;
+          }
 
           IEnumerable<Punch>? punches = null;
-          if (list.Any())
+          if (list.Count != 0)
           {
             punches = filterService.Transform(
                       configuration.Filter,
@@ -138,7 +166,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         }
         else
         {
-          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", configuration, response.StatusCode);
+          wasError = true;
+          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", configuration.EventId, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -147,7 +176,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
       }
       catch (Exception e)
       {
-        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", configuration, e.Message);
+        wasError = true;
+        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", configuration.EventId, e.Message);
       }
     }
 

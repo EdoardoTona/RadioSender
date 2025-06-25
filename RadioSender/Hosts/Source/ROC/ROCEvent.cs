@@ -6,6 +6,7 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -35,6 +36,10 @@ namespace RadioSender.Hosts.Source.ROC
 
     private CancellationTokenSource _cts = new CancellationTokenSource();
     private Task? _executingtask;
+
+    private DateTimeOffset lastDiagnosticReport;
+    private ConcurrentBag<long> diagnosticTimes = [];
+    private bool wasError = false;
 
     public ROCEvent(
       IHttpClientFactory clientFactory,
@@ -113,12 +118,36 @@ namespace RadioSender.Hosts.Source.ROC
         sw.Start();
         var response = await _httpClient.SendAsync(request, ct);
         sw.Stop();
+
+        try
+        {
+          diagnosticTimes.Add(sw.ElapsedMilliseconds);
+          if (DateTimeOffset.UtcNow - lastDiagnosticReport > TimeSpan.FromMinutes(2))
+          {
+            Log.Information("ROC diagnostic report for event {event}: count {count}, avg {avg:0}ms, min {min}ms, max {max}ms",
+              _configuration.EventId, diagnosticTimes.Count, diagnosticTimes.Average(), diagnosticTimes.Min(), diagnosticTimes.Max());
+
+            lastDiagnosticReport = DateTimeOffset.UtcNow;
+            diagnosticTimes.Clear();
+          }
+        }
+        catch
+        {
+          Log.Warning("Error writing diagnostic report for ROC event {event}", _configuration.EventId);
+        }
         if (response.IsSuccessStatusCode)
         {
+
           using var responseStream = await response.Content.ReadAsStreamAsync(ct);
 
           using var reader = new StreamReader(responseStream, Encoding.UTF8);
           using var csv = new CsvReader(reader, _csvReaderConfiguration);
+
+          if (wasError)
+          {
+            Log.Information("ROC event {event} recovered", _configuration.EventId);
+            wasError = false;
+          }
 
           var list = csv.GetRecords<ROCPunch>().OrderBy(p => p.Time).ToList();
           IEnumerable<Punch>? punches = null;
@@ -152,7 +181,8 @@ namespace RadioSender.Hosts.Source.ROC
         }
         else
         {
-          Log.Error("Error getting data from ROC (event {event}): response code {code}", _configuration, response.StatusCode);
+          wasError = true;
+          Log.Error("Error getting data from ROC (event {event}): response code {code}", _configuration.EventId, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -161,6 +191,7 @@ namespace RadioSender.Hosts.Source.ROC
       }
       catch (Exception e)
       {
+        wasError = true;
         Log.Error("Error getting data from ROC (event {event}): {message}", _configuration, e.Message);
       }
     }
