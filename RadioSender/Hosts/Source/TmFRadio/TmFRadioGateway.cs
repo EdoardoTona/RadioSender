@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.TmFRadio
 {
-  public sealed class TmFRadioGateway : ISource, IHostedService, IAsyncDisposable
+  public sealed class TmFRadioGateway : ISource, IRadioSenderHost, IAsyncDisposable
   {
     public const uint BROADCAST = 0xffffffff;
 

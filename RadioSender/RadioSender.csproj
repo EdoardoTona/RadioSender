@@ -45,6 +45,7 @@
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="System.IO.Ports" Version="9.0.6" />
     <PackageReference Include="System.Reactive" Version="6.0.1" />
+    <PackageReference Include="Microgate.Common.Protocol.Rei2" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Configuration)' == 'Release'">
@@ -54,4 +55,8 @@
   <ItemGroup>
     <EmbeddedResource Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <RestoreSources>$(RestoreSources);$(MSBuildThisFileDirectory)</RestoreSources>
+  </PropertyGroup>
 </Project>

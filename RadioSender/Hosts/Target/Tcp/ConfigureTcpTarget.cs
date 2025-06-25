@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,7 +37,7 @@ namespace RadioSender.Hosts.Target.Tcp
                 target
                 ));
 
-            services.AddSingleton<IHostedService, TcpTargetServer>(sp =>
+            services.AddSingleton<IRadioSenderHost, TcpTargetServer>(sp =>
             (TcpTargetServer)sp.GetServices<ITarget>().First(t => (t as TcpTargetServer)?.GetConfiguration() == target));
 
           }

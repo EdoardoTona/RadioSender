@@ -27,7 +27,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         if (ports != null)
           foreach (var port in ports)
           {
-            services.AddSingleton<IHostedService, SportidentSerialPort>(sp => new SportidentSerialPort(
+            services.AddSingleton<IRadioSenderHost, SportidentSerialPort>(sp => new SportidentSerialPort(
               sp.GetRequiredService<FilterService>(),
               sp.GetRequiredService<DispatcherService>(),
               port));

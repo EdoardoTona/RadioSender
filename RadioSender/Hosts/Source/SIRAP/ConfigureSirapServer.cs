@@ -26,7 +26,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
         foreach (var server in servers)
         {
-          services.AddSingleton<IHostedService, SirapServer>(sp => new SirapServer(
+          services.AddSingleton<IRadioSenderHost, SirapServer>(sp => new SirapServer(
               sp.GetRequiredService<FilterService>(),
               sp.GetRequiredService<DispatcherService>(),
               server

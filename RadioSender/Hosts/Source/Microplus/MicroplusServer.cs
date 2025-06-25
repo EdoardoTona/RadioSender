@@ -17,7 +17,7 @@ public class MicroplusServer(
   FilterService filterService,
   DispatcherService dispatcherService,
   MicroplusServerConfiguration configuration)
-  : UdpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IHostedService
+  : UdpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IRadioSenderHost
 {
   public Task StartAsync(CancellationToken cancellationToken)
   {

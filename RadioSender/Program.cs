@@ -65,6 +65,8 @@ public static class Program
       builder.Host.ActivatePhotino();
       builder.Services.AddHttpClient();
 
+      builder.Services.AddHostedService<HostOrchestrator>();
+
       // Sources
       builder.Host.FromRoc()
                   .FromSportidentCenter()

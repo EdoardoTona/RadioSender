@@ -23,7 +23,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     FilterService filterService,
     IHttpClientFactory clientFactory,
     DispatcherService dispatcherService,
-    Event configuration) : BackgroundService, ISource
+    Event configuration) : IRadioSenderHost, ISource, IDisposable
   {
     public const string HTTPCLIENT_NAME = "sportident";
     private readonly HttpClient _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME);
@@ -36,7 +36,22 @@ namespace RadioSender.Hosts.Source.SportidentCenter
       PrepareHeaderForMatch = args => args.Header.ToLower(CultureInfo.InvariantCulture)
     };
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    private CancellationTokenSource _cts = new CancellationTokenSource();
+    private Task? _executingtask;
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+      _executingtask = ExecuteAsync(_cts.Token);
+      return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+      _cts.Cancel();
+      return _executingtask ?? Task.CompletedTask;
+    }
+
+    private async Task ExecuteAsync(CancellationToken ct)
     {
       await Task.Yield();
 
@@ -156,6 +171,14 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         return PunchControlType.Clear;
 
       return PunchControlType.Unknown;
+    }
+
+    public void Dispose()
+    {
+      _cts.Cancel();
+      _cts.Dispose();
+      _httpClient.Dispose();
+
     }
   }
 }

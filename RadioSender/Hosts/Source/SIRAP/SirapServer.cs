@@ -16,7 +16,7 @@ namespace RadioSender.Hosts.Source.SIRAP
     FilterService filterService,
     DispatcherService dispatcherService,
     SirapServerConfiguration configuration)
-    : TcpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IHostedService, IDisposable
+    : TcpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IRadioSenderHost, IDisposable
   {
 
     public Task StartAsync(CancellationToken cancellationToken)

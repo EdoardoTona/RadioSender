@@ -9,11 +9,10 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace RadioSender.Hosts.Source.Microplus;
 
-public class MicrogateSource : TcpClient, ISource, IHostedService, IDisposable
+public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
 {
   public readonly FilterService _filterService;
   public readonly DispatcherService _dispatcherService;

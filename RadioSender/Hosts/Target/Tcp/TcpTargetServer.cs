@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.Tcp
 {
-  public sealed class TcpTargetServer : IHostedService, ITarget, IDisposable
+  public sealed class TcpTargetServer : IRadioSenderHost, ITarget, IDisposable
   {
     private readonly FilterService _filterService;
     private readonly TcpTargetConfiguration _configuration;

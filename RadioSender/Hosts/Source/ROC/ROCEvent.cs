@@ -19,7 +19,7 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.ROC
 {
   public record ROCPunch(long Id, int Code, long Card, DateTime Time);
-  public sealed class ROCEvent : BackgroundService, ISource
+  public sealed class ROCEvent : IRadioSenderHost, ISource, IDisposable
   {
     public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;
@@ -32,6 +32,9 @@ namespace RadioSender.Hosts.Source.ROC
     private long _lastReceivedId;
 
     private readonly CsvConfiguration _csvReaderConfiguration;
+
+    private CancellationTokenSource _cts = new CancellationTokenSource();
+    private Task? _executingtask;
 
     public ROCEvent(
       IHttpClientFactory clientFactory,
@@ -54,9 +57,23 @@ namespace RadioSender.Hosts.Source.ROC
 
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+      _executingtask = ExecuteAsync(_cts.Token);
+      return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+      _cts.Cancel();
+      return _executingtask ?? Task.CompletedTask;
+    }
+
+    private async Task ExecuteAsync(CancellationToken ct)
     {
       await Task.Yield();
+
+      Log.Information("ROC center listening event {event} on {server}. Frequency {frequency}", _configuration?.EventId, _configuration.Host, _configuration?.RefreshMs);
 
       while (!ct.IsCancellationRequested)
       {
@@ -148,5 +165,12 @@ namespace RadioSender.Hosts.Source.ROC
       }
     }
 
+    public void Dispose()
+    {
+      _cts.Cancel();
+      _cts.Dispose();
+      _httpClient.Dispose();
+      _executingtask?.Dispose();
+    }
   }
 }

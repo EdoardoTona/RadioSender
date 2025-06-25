@@ -29,7 +29,7 @@ public static class ConfigureMicrogateSource
 
       foreach (var source in sources)
       {
-        services.AddSingleton<IHostedService, MicrogateSource>(sp => new MicrogateSource(
+        services.AddSingleton<IRadioSenderHost, MicrogateSource>(sp => new MicrogateSource(
             sp.GetRequiredService<FilterService>(),
             sp.GetRequiredService<DispatcherService>(),
             source
