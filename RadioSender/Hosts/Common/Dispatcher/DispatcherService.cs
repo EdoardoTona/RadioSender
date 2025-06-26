@@ -39,10 +39,10 @@ public sealed class DispatcherService(
       var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
       {
-        var key = punch.ToString();
+        var key = punch.ComparisonKey;
         if (_punches.ContainsKey(key))
         {
-          Log.Verbose("Detected duplicated punch " + punch);
+          Log.Verbose("Detected duplicated punch {key}", key);
           continue;
         }
 
@@ -69,10 +69,10 @@ public sealed class DispatcherService(
       var toBeForwardedPunch = new List<Punch>();
       foreach (var punch in punches)
       {
-        var key = punch.ToString();
+        var key = punch.ComparisonKey;
         if (_punches.ContainsKey(key))
         {
-          Log.Information("Detected duplicated punch " + punch);
+          Log.Verbose("Detected duplicated punch {key}", key);
           continue;
         }
 
