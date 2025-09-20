@@ -1,30 +1,43 @@
 using ESC_POS_USB_NET.Printer;
+using Microsoft.Extensions.Hosting;
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.Runtime.Versioning;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.PosPrinter;
 
-[SupportedOSPlatform("windows")]
 public class PrinterTarget : ITarget, IDisposable
 {
   private readonly FilterService _filterService;
   private readonly PrinterTargetConfiguration _configuration;
+  private readonly IHostApplicationLifetime _hostApplicationLifetime;
 
   public PrinterTarget(
       FilterService filterService,
-      PrinterTargetConfiguration configuration)
+      PrinterTargetConfiguration configuration,
+      IHostApplicationLifetime hostApplicationLifetime)
   {
     _filterService = filterService;
     _configuration = configuration;
+    _hostApplicationLifetime = hostApplicationLifetime;
     InitializePrinter();
+
+    _hostApplicationLifetime.ApplicationStopping.Register(() =>
+    {
+      var printer = new Printer(_configuration.PrinterName);
+      printer.NewLine();
+      printer.Separator();
+      printer.NewLine();
+      printer.NewLine();
+      printer.FullPaperCut();
+      printer.PrintDocument();
+    });
   }
 
   private void InitializePrinter()
@@ -37,12 +50,18 @@ public class PrinterTarget : ITarget, IDisposable
         return;
       }
 
-      // Crea il printer usando ESC-POS-USB-NET
-      System.Text.EncodingProvider ppp = System.Text.CodePagesEncodingProvider.Instance;
+      EncodingProvider ppp = CodePagesEncodingProvider.Instance;
       Encoding.RegisterProvider(ppp);
 
       var printer = new Printer(_configuration.PrinterName);
-      printer.Append("Printer Initialized");
+      printer.Separator();
+      printer.DoubleWidth3();
+      printer.AlignCenter();
+      printer.Append("Radiosender");
+      printer.NormalWidth();
+      printer.Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss,fff"));
+      printer.Separator();
+
       printer.PrintDocument();
 
       Log.Information($"ESC/POS USB Printer '{_configuration.PrinterName}' initialized successfully");
@@ -76,6 +95,8 @@ public class PrinterTarget : ITarget, IDisposable
     return Task.CompletedTask;
   }
 
+  DateTimeOffset previous;
+
   private void PrintPunch(Punch punch)
   {
     try
@@ -85,10 +106,15 @@ public class PrinterTarget : ITarget, IDisposable
 
       var _printer = new Printer(_configuration.PrinterName);
 
-      // Stampa la riga
+      if (punch.Time - previous > TimeSpan.FromMinutes(1) || punch.Time.Minute != previous.Minute)
+      {
+        _printer.NewLine();
+      }
 
       _printer.Append(line);
       _printer.PrintDocument();
+
+      previous = punch.Time;
 
 
     }
