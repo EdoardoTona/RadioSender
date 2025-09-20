@@ -83,35 +83,18 @@ public class PrinterTarget : ITarget, IDisposable
       var format = _configuration.Format ?? "{Card} {Control} {Time:HH:mm:ss}";
       var line = FormatStringHelper.GetString(punch, format);
 
-      // Stampa usando ESC/POS
-      PrintEscPosLine(line);
-      Log.Debug($"Printed: {line}");
+      var _printer = new Printer(_configuration.PrinterName);
+
+      // Stampa la riga
+
+      _printer.Append(line);
+      _printer.PrintDocument();
+
+
     }
     catch (Exception ex)
     {
       Log.Error(ex, $"Failed to print punch: {punch}");
-    }
-  }
-
-  private void PrintEscPosLine(string line)
-  {
-    try
-    {
-      var _printer = new Printer(_configuration.PrinterName);
-
-      if (_printer == null) return;
-
-      // Inizializza la stampante
-      _printer.InitializePrint();
-
-      // Stampa la riga
-      _printer.Append(line);
-      _printer.PrintDocument();
-
-    }
-    catch (Exception ex)
-    {
-      Log.Error(ex, $"Failed to print ESC/POS line: {line}");
     }
   }
 

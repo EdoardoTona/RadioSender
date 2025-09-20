@@ -21,6 +21,7 @@ namespace RadioSender.Helpers
         "Time" or "time" => punch.Time,
         "Source" or "source" => punch.SourceId,
         "Cancellation" or "cancellation" => punch.Cancellation ? "ANN" : "",
+        "Status" or "status" => punch.CompetitorStatus == CompetitorStatus.Unknown ? "" : punch.CompetitorStatus.ToString(),
         "NetTime" or "nettime" => punch.NetTime,
         "UnixS" or "unixs" => new DateTimeOffset(punch.Time).ToUnixTimeSeconds(),
         "UnixMs" or "unims" => new DateTimeOffset(punch.Time).ToUnixTimeMilliseconds(),
