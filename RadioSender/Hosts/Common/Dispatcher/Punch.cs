@@ -25,6 +25,7 @@ namespace RadioSender.Hosts.Common
     bool NetTime = false
     )
   {
+    public string ComparisonKey => $"{Card}-{Control}-{Time:O}-{SourceId}-{ControlType}-{CompetitorStatus}-{Cancellation}-{NetTime}";
     public string? ControlTypeShort => ControlType switch
     {
       PunchControlType.Control => "CN",

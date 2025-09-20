@@ -25,14 +25,17 @@ namespace RadioSender.Hosts.Common.Filters
       if (!punch.NetTime && IgnoreOlderThan != default && DateTime.Now - punch.Time > IgnoreOlderThan)
         return null;
 
-      var controlBefore = punch.Control.ToString();
+      var controlBeforeFilter_string = punch.Control.ToString();
 
-      var controlBeforeInt = int.Parse(controlBefore);
+      var controlBeforeFilter_int = int.Parse(controlBeforeFilter_string);
 
-      var control = MapControls.ContainsKey(controlBefore) ? MapControls[controlBefore] : punch.Control;
+      var control = MapControls.ContainsKey(controlBeforeFilter_string) ? MapControls[controlBeforeFilter_string] : punch.Control;
 
-      // control 0 means discard
-      if ((controlBeforeInt != 0 && control == 0) || (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control)))
+      // 0 is a valid code for some systems
+      // 0 is discarded only when came from the filter
+      if (
+        (controlBeforeFilter_int != 0 && control <= 0) ||
+        (IncludeOnlyControls.Count != 0 && !IncludeOnlyControls.Contains(control)))
       {
         return null; // discard
       }

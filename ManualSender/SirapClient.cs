@@ -1,15 +1,10 @@
 ﻿using RadioSender.Hosts.Common;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Net;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.SIRAP
 {
-  public sealed class SirapClient
+  public sealed class SirapClient : IDisposable
   {
     TcpClient? tcpClient;
 
@@ -191,6 +186,10 @@ namespace RadioSender.Hosts.Target.SIRAP
       return ms.ToArray();
     }
 
+    public void Dispose()
+    {
+      tcpClient?.Dispose();
+    }
   }
 
 
