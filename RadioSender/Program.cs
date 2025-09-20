@@ -18,6 +18,7 @@ using RadioSender.Hosts.Source.TmFRadio;
 using RadioSender.Hosts.Target.File;
 using RadioSender.Hosts.Target.Http;
 using RadioSender.Hosts.Target.Oribos;
+using RadioSender.Hosts.Target.PosPrinter;
 using RadioSender.Hosts.Target.SIRAP;
 using RadioSender.Hosts.Target.Tcp;
 using RadioSender.Hosts.Target.UI;
@@ -27,6 +28,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text.Json.Serialization;
 
 namespace RadioSender;
@@ -84,6 +86,12 @@ public static class Program
                   .ToSirap()
                   .ToTcp()
                   .ToHttp();
+
+      // Platform-specific targets
+      if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+      {
+        builder.Host.ToPrinter();
+      }
 
       builder.Services.AddHealthChecks();
       builder.Services.AddRazorPages();
