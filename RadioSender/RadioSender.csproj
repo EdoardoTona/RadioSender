@@ -12,8 +12,7 @@
     <GenerateBootstrapperOnBuild>true</GenerateBootstrapperOnBuild>
     <!--<PublishSingleFile>true</PublishSingleFile>-->
 
-    <Version>1.6.1</Version>
-    <DefaultItemExcludes>wwwroot/**</DefaultItemExcludes>
+<DefaultItemExcludes>wwwroot/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

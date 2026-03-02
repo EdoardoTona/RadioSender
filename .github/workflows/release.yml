@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+env:
+  MAJOR: 1
+  MINOR: 7
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Compute version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Version: $version"
+
+      - name: Publish win-x64 self-contained
+        shell: pwsh
+        run: |
+          dotnet publish RadioSender/RadioSender.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -o ./publish
+
+      - name: Zip artifact
+        shell: pwsh
+        run: |
+          $zip = "RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.zip"
+          Compress-Archive -Path ./publish/* -DestinationPath "./$zip"
+          Write-Host "Created: $zip"
+
+      - name: Create git tag
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag v${{ steps.version.outputs.VERSION }}
+          git push origin v${{ steps.version.outputs.VERSION }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: RadioSender v${{ steps.version.outputs.VERSION }}
+          body: |
+            Portable Windows x64 build — self-contained, nessuna installazione di .NET richiesta.
+          files: RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.zip
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
