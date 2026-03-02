@@ -13,10 +13,9 @@ env:
   MINOR: 7
 
 jobs:
-  release:
-    name: Build and Release
+  build-windows:
+    name: Build Windows x64
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,7 +32,6 @@ jobs:
         run: |
           $version = "${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}"
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Version: $version"
 
       - name: Publish win-x64 self-contained single file
         shell: pwsh
@@ -52,10 +50,125 @@ jobs:
         run: |
           $exe = "RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.exe"
           Copy-Item ./publish/RadioSender.exe "./$exe"
-          Write-Host "Artifact: $exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-x64
+          path: RadioSender-win-x64-v*.exe
+
+  build-macos:
+    name: Build macOS ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Compute version
+        id: version
+        run: |
+          echo "VERSION=${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish macOS ARM64 self-contained
+        run: |
+          dotnet publish RadioSender/RadioSender.csproj \
+            -c Release \
+            -r osx-arm64 \
+            --self-contained true \
+            -p:Version=${{ steps.version.outputs.VERSION }} \
+            -p:PublishSingleFile=true \
+            -o ./publish
+
+      - name: Create .app bundle
+        run: |
+          APP_NAME="RadioSender"
+          APP_BUNDLE="./${APP_NAME}.app"
+
+          mkdir -p "${APP_BUNDLE}/Contents/MacOS"
+          mkdir -p "${APP_BUNDLE}/Contents/Resources"
+
+          cp -R ./publish/* "${APP_BUNDLE}/Contents/MacOS/"
+
+          # Generate .icns from favicon.png
+          ICONSET="${APP_NAME}.iconset"
+          mkdir -p "${ICONSET}"
+          SRC="RadioSender/wwwroot/favicon.png"
+          sips -z 16 16   "$SRC" --out "${ICONSET}/icon_16x16.png"
+          sips -z 32 32   "$SRC" --out "${ICONSET}/icon_16x16@2x.png"
+          sips -z 32 32   "$SRC" --out "${ICONSET}/icon_32x32.png"
+          sips -z 64 64   "$SRC" --out "${ICONSET}/icon_32x32@2x.png"
+          iconutil -c icns "${ICONSET}" -o "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+          rm -rf "${ICONSET}"
+
+          cat > "${APP_BUNDLE}/Contents/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>RadioSender</string>
+              <key>CFBundleDisplayName</key>
+              <string>RadioSender</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.radiosender.app</string>
+              <key>CFBundleVersion</key>
+              <string>${{ steps.version.outputs.VERSION }}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${{ steps.version.outputs.VERSION }}</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleExecutable</key>
+              <string>RadioSender</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSSupportsAutomaticGraphicsSwitching</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          chmod +x "${APP_BUNDLE}/Contents/MacOS/RadioSender"
+
+      - name: Create ZIP
+        run: |
+          zip -r "RadioSender-osx-arm64-v${{ steps.version.outputs.VERSION }}.zip" RadioSender.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: osx-arm64
+          path: RadioSender-osx-arm64-v*.zip
+
+  release:
+    name: Create Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          echo "VERSION=${{ env.MAJOR }}.${{ env.MINOR }}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Create git tag
-        shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -68,8 +181,12 @@ jobs:
           tag_name: v${{ steps.version.outputs.VERSION }}
           name: RadioSender v${{ steps.version.outputs.VERSION }}
           body: |
-            Portable Windows x64 build — self-contained, nessuna installazione di .NET richiesta.
-          files: RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.exe
+            ## Downloads
+            - **Windows x64** — `.exe` self-contained, nessuna installazione di .NET richiesta
+            - **macOS ARM64** — `.app` bundle in ZIP, nessuna installazione di .NET richiesta
+          files: |
+            artifacts/win-x64/RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.exe
+            artifacts/osx-arm64/RadioSender-osx-arm64-v${{ steps.version.outputs.VERSION }}.zip
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

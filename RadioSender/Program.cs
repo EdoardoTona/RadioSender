@@ -125,7 +125,11 @@ public static class Program
 
   private static WebApplication BuildApp(string[] args)
   {
-    var builder = WebApplication.CreateBuilder(args);
+    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+    {
+      Args = args,
+      ContentRootPath = AppContext.BaseDirectory
+    });
     builder.Host.UseSerilog();
     builder.Host.UseHangfire();
     builder.Host.UseFilters();

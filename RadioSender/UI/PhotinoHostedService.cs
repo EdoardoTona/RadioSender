@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Photino.NET;
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -85,9 +86,10 @@ namespace RadioSender.UI
 
     private static void RunPhotinoWindow(string port)
     {
-      var iconFile = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+      var iconFile = Path.Combine(AppContext.BaseDirectory,
+          RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
           ? "wwwroot/favicon.ico"
-          : "wwwroot/favicon.png";
+          : "wwwroot/favicon.png");
 
       var window = new PhotinoWindow()
         .SetIconFile(iconFile)
