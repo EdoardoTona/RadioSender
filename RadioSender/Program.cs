@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hubs;
@@ -178,8 +179,15 @@ public static class Program
       app.UseDeveloperExceptionPage();
     }
 
+    var wwwrootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+    var embeddedProvider = new EmbeddedFileProvider(Assembly.GetExecutingAssembly(), "RadioSender.wwwroot");
+    IFileProvider staticFileProvider = Directory.Exists(wwwrootPath)
+      ? new CompositeFileProvider(new PhysicalFileProvider(wwwrootPath), embeddedProvider)
+      : embeddedProvider;
+
     app.UseStaticFiles(new StaticFileOptions
     {
+      FileProvider = staticFileProvider,
       OnPrepareResponse = context =>
       {
         if (env.IsDevelopment())
