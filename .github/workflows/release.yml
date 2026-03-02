@@ -35,7 +35,7 @@ jobs:
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Version: $version"
 
-      - name: Publish win-x64 self-contained
+      - name: Publish win-x64 self-contained single file
         shell: pwsh
         run: |
           dotnet publish RadioSender/RadioSender.csproj `
@@ -43,14 +43,16 @@ jobs:
             -r win-x64 `
             --self-contained true `
             -p:Version=${{ steps.version.outputs.VERSION }} `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
             -o ./publish
 
-      - name: Zip artifact
+      - name: Rename exe with version
         shell: pwsh
         run: |
-          $zip = "RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.zip"
-          Compress-Archive -Path ./publish/* -DestinationPath "./$zip"
-          Write-Host "Created: $zip"
+          $exe = "RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.exe"
+          Copy-Item ./publish/RadioSender.exe "./$exe"
+          Write-Host "Artifact: $exe"
 
       - name: Create git tag
         shell: pwsh
@@ -67,7 +69,7 @@ jobs:
           name: RadioSender v${{ steps.version.outputs.VERSION }}
           body: |
             Portable Windows x64 build — self-contained, nessuna installazione di .NET richiesta.
-          files: RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.zip
+          files: RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.exe
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

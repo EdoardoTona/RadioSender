@@ -45,7 +45,12 @@ public static class Program
       var appsettings = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
       if (!File.Exists(appsettings))
-        throw new FileNotFoundException("Configuration file not found at " + appsettings);
+      {
+        using var stream = Assembly.GetExecutingAssembly()
+                             .GetManifestResourceStream("RadioSender.appsettings.json")!;
+        using var dest = File.Create(appsettings);
+        stream.CopyTo(dest);
+      }
 
       var configuration = new ConfigurationBuilder()
                               .SetBasePath(Directory.GetCurrentDirectory())
