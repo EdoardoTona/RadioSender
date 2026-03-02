@@ -63,6 +63,6 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <RestoreSources>$(RestoreSources);$(MSBuildThisFileDirectory)</RestoreSources>
+    <RestoreAdditionalProjectSources>$(MSBuildThisFileDirectory)</RestoreAdditionalProjectSources>
   </PropertyGroup>
 </Project>
