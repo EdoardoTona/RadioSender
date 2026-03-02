@@ -182,8 +182,15 @@ jobs:
           name: RadioSender v${{ steps.version.outputs.VERSION }}
           body: |
             ## Downloads
-            - **Windows x64** — `.exe` self-contained, nessuna installazione di .NET richiesta
-            - **macOS ARM64** — `.app` bundle in ZIP, nessuna installazione di .NET richiesta
+            - **Windows x64** — Self-contained `.exe`, no .NET installation required
+            - **macOS ARM64** — `.app` bundle (ZIP), no .NET installation required
+
+            ### macOS: "damaged" app warning
+            macOS blocks unsigned apps downloaded from the internet. To unblock, open Terminal and run:
+            ```
+            xattr -cr ~/Downloads/RadioSender.app
+            ```
+            Or: right-click the app > Open > confirm.
           files: |
             artifacts/win-x64/RadioSender-win-x64-v${{ steps.version.outputs.VERSION }}.exe
             artifacts/osx-arm64/RadioSender-osx-arm64-v${{ steps.version.outputs.VERSION }}.zip
