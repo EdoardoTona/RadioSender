@@ -52,6 +52,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="appsettings.json" />
   </ItemGroup>
 
   <ItemGroup>
