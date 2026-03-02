@@ -22,6 +22,7 @@ using RadioSender.Hosts.Target.PosPrinter;
 using RadioSender.Hosts.Target.SIRAP;
 using RadioSender.Hosts.Target.Tcp;
 using RadioSender.Hosts.Target.UI;
+using RadioSender.UI;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -30,6 +31,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace RadioSender;
 
@@ -60,74 +63,42 @@ public static class Program
 
       Log.Information("**** Starting up {application} {version} ****", assembly.Name, assembly.Version);
 
-      var builder = WebApplication.CreateBuilder(args);
-      builder.Host.UseSerilog();
-      builder.Host.UseHangfire();
-      builder.Host.UseFilters();
-      builder.Host.ActivatePhotino();
-      builder.Services.AddHttpClient();
+      var app = BuildApp(args);
 
-      builder.Services.AddHostedService<HostOrchestrator>();
-
-      // Sources
-      builder.Host.FromRoc()
-                  .FromSportidentCenter()
-                  .FromSportidentSerial()
-                  .FromTmFRadio()
-                  .FromSirap()
-                  .FromMicroplus()
-                  .FromMicrogate()
-      // Middleware
-                  .ThroughDispatcher()
-      // Targets
-                  .ToUI()
-                  .ToOribos()
-                  .ToFile()
-                  .ToSirap()
-                  .ToTcp()
-                  .ToHttp();
-
-      // Platform-specific targets
-      if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+      // On macOS, Photino must run on the main thread (AppKit requirement).
+      // We start the web host on a background thread and run Photino here.
+      if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
       {
-        builder.Host.ToPrinter();
-      }
+        var urls = configuration.GetSection("Urls").Get<string>() ?? "http://*:8082";
+        var port = Regex.Match(urls, @"(?<=:)\d{2,5}").Value;
 
-      builder.Services.AddHealthChecks();
-      builder.Services.AddRazorPages();
-      builder.Services.AddSignalR()
-                      .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-      builder.Services.AddSingleton<HubEvents>();
-
-      /////////////////////////////////////////////////////////////////////////////////
-
-
-      var app = builder.Build();
-      var env = app.Environment;
-
-      if (env.IsDevelopment())
-      {
-        app.UseDeveloperExceptionPage();
-      }
-
-      app.UseStaticFiles(new StaticFileOptions
-      {
-        OnPrepareResponse = context =>
+        // Start the web host on a background thread
+        var cts = new CancellationTokenSource();
+        var webHostThread = new Thread(() =>
         {
-          if (env.IsDevelopment())
-            context.Context.Response.Headers.Append("Cache-Control", "no-cache");
-          else
-            context.Context.Response.Headers.Append("Cache-Control", "private, max-age=86400"); // 1 day
-        }
-      });
+          try
+          {
+            app.Run();
+          }
+          catch (OperationCanceledException) { }
+        });
+        webHostThread.IsBackground = true;
+        webHostThread.Start();
 
-      app.UseHangfireDashboard();
-      app.UseRouting();
-      app.MapHealthChecks("healthz");
-      app.MapRazorPages();
-      app.MapHub<DeviceHub>("/deviceHub");
-      app.MapHangfireDashboard();
-      app.Run();
+        // Give the web host a moment to start listening
+        Thread.Sleep(1500);
+
+        // Run Photino on the main thread (blocks until window closes)
+        PhotinoHostedService.RunOnMainThread(port, () =>
+        {
+          cts.Cancel();
+          app.StopAsync().Wait();
+        });
+      }
+      else
+      {
+        app.Run();
+      }
 
       Log.Information("**** Shutting down ****");
       return 0;
@@ -145,6 +116,78 @@ public static class Program
     {
       Log.CloseAndFlush();
     }
+  }
+
+  private static WebApplication BuildApp(string[] args)
+  {
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Host.UseSerilog();
+    builder.Host.UseHangfire();
+    builder.Host.UseFilters();
+    builder.Host.ActivatePhotino();
+    builder.Services.AddHttpClient();
+
+    builder.Services.AddHostedService<HostOrchestrator>();
+
+    // Sources
+    builder.Host.FromRoc()
+                .FromSportidentCenter()
+                .FromSportidentSerial()
+                .FromTmFRadio()
+                .FromSirap()
+                .FromMicroplus()
+                .FromMicrogate()
+    // Middleware
+                .ThroughDispatcher()
+    // Targets
+                .ToUI()
+                .ToOribos()
+                .ToFile()
+                .ToSirap()
+                .ToTcp()
+                .ToHttp();
+
+    // Platform-specific targets
+    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    {
+      builder.Host.ToPrinter();
+    }
+
+    builder.Services.AddHealthChecks();
+    builder.Services.AddRazorPages();
+    builder.Services.AddSignalR()
+                    .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    builder.Services.AddSingleton<HubEvents>();
+
+    /////////////////////////////////////////////////////////////////////////////////
+
+    var app = builder.Build();
+    var env = app.Environment;
+
+    if (env.IsDevelopment())
+    {
+      app.UseDeveloperExceptionPage();
+    }
+
+    app.UseStaticFiles(new StaticFileOptions
+    {
+      OnPrepareResponse = context =>
+      {
+        if (env.IsDevelopment())
+          context.Context.Response.Headers.Append("Cache-Control", "no-cache");
+        else
+          context.Context.Response.Headers.Append("Cache-Control", "private, max-age=86400"); // 1 day
+      }
+    });
+
+    app.UseHangfireDashboard();
+    app.UseRouting();
+    app.MapHealthChecks("healthz");
+    app.MapRazorPages();
+    app.MapHub<DeviceHub>("/deviceHub");
+    app.MapHangfireDashboard();
+
+    return app;
   }
 
   public static void PopupException(Exception e)

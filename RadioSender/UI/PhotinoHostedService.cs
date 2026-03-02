@@ -15,6 +15,7 @@ namespace RadioSender.UI
 
     private static Action? _terminatePhotinoAction;
     private static Action? _terminateAppAction;
+    private static volatile bool _isTerminating;
 
     private Thread? _thread;
 
@@ -32,6 +33,11 @@ namespace RadioSender.UI
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+      // On macOS, Photino runs on the main thread (handled by Program.cs),
+      // so we only need to start a separate thread on Windows/Linux.
+      if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        return Task.CompletedTask;
+
       _thread = new Thread(new ParameterizedThreadStart(PhotinoThread));
 
       if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -50,6 +56,21 @@ namespace RadioSender.UI
       return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Runs Photino on the main thread (required for macOS).
+    /// Called directly from Program.cs on macOS.
+    /// </summary>
+    public static void RunOnMainThread(string port, Action stopApplication)
+    {
+      _terminateAppAction = stopApplication;
+      RunPhotinoWindow(port);
+    }
+
+    public static void StopWindow()
+    {
+      _terminatePhotinoAction?.Invoke();
+    }
+
     static void PhotinoThread(object? param)
     {
       if (param == null)
@@ -58,8 +79,12 @@ namespace RadioSender.UI
       dynamic p = param;
 
       var port = (string)p.Port;
-      var isDevelopment = (bool)p.IsDevelopment;
 
+      RunPhotinoWindow(port);
+    }
+
+    private static void RunPhotinoWindow(string port)
+    {
       var iconFile = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
           ? "wwwroot/favicon.ico"
           : "wwwroot/favicon.png";
@@ -68,13 +93,14 @@ namespace RadioSender.UI
         .SetIconFile(iconFile)
         .SetTitle("RadioSender")
         .SetChromeless(false)
+        .SetDevToolsEnabled(true)
         .SetUseOsDefaultSize(true)
         .SetResizable(true)
         .Center()
         .Load($"http://127.0.0.1:{port}/Log")
         .RegisterWindowClosingHandler(new PhotinoWindow.NetClosingDelegate(Window_WindowClosing));
 
-      _terminatePhotinoAction = () => { window?.Close(); };
+      _terminatePhotinoAction = () => { _isTerminating = true; window?.Close(); };
 
       window.WaitForClose();
 
@@ -83,6 +109,10 @@ namespace RadioSender.UI
 
     private static bool Window_WindowClosing(object sender, EventArgs e)
     {
+      // Skip confirmation dialog if app is already terminating (avoids macOS NSInternalInconsistencyException)
+      if (_isTerminating)
+        return false;
+
       var window = sender as PhotinoWindow;
 
       var res = window?.ShowMessage("Radiosender", "Do you want to close?", PhotinoDialogButtons.YesNo, PhotinoDialogIcon.Warning);
