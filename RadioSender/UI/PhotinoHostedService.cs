@@ -2,6 +2,7 @@
 using Photino.NET;
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -84,12 +85,31 @@ namespace RadioSender.UI
       RunPhotinoWindow(port);
     }
 
+    private static string ResolveIcon()
+    {
+      var fileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "favicon.ico" : "favicon.png";
+
+      var diskPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", fileName);
+      if (File.Exists(diskPath))
+        return diskPath;
+
+      // Single-file publish: extract from embedded resource
+      var tempPath = Path.Combine(Path.GetTempPath(), $"radiosender_{fileName}");
+      if (!File.Exists(tempPath))
+      {
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"RadioSender.wwwroot.{fileName}");
+        if (stream != null)
+        {
+          using var dest = File.Create(tempPath);
+          stream.CopyTo(dest);
+        }
+      }
+      return tempPath;
+    }
+
     private static void RunPhotinoWindow(string port)
     {
-      var iconFile = Path.Combine(AppContext.BaseDirectory,
-          RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-          ? "wwwroot/favicon.ico"
-          : "wwwroot/favicon.png");
+      var iconFile = ResolveIcon();
 
       var window = new PhotinoWindow()
         .SetIconFile(iconFile)
