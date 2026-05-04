@@ -45,8 +45,10 @@ namespace RadioSender.Hosts.Common.Filters
         return null; // discard
       }
 
+#pragma warning disable CS0618 // Type or member is obsolete
       var mapCompetitorIds = MapCompetitorIds.Count != 0 ? MapCompetitorIds : MapCards;
       var includeOnlyCompetitorIds = IncludeOnlyCompetitorIds.Count != 0 ? IncludeOnlyCompetitorIds : IncludeOnlyCards;
+#pragma warning restore CS0618 // Type or member is obsolete
 
       var competitorId = mapCompetitorIds.TryGetValue(punch.CompetitorId, out var mapped)
                         ? mapped

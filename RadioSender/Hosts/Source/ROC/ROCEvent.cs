@@ -78,7 +78,7 @@ namespace RadioSender.Hosts.Source.ROC
     {
       await Task.Yield();
 
-      Log.Information("ROC center listening event {event} on {server}. Frequency {frequency}", _configuration?.EventId, _configuration.Host, _configuration?.RefreshMs);
+      Log.Information("ROC center listening event {event} on {server}. Frequency {frequency}", _configuration?.EventId, _configuration?.Host, _configuration?.RefreshMs);
 
       while (!ct.IsCancellationRequested)
       {

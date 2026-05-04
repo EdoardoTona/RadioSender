@@ -12,8 +12,8 @@ public class TestFilter
     var filter = new Filter
     {
       Name = "test",
-      MapCompetitorId = new() { ["25"] = "250" },
-      IncludeOnlyCompetitorId = new() { "250" },
+      MapCompetitorIds = new() { ["25"] = "250" },
+      IncludeOnlyCompetitorIds = new() { "250" },
       OverrideCompetitorIdType = CompetitorIdType.BibNumber
     };
 
