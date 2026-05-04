@@ -10,6 +10,7 @@ public record PrinterTargetConfiguration : FilterableConfiguration
 {
   public string? PrinterName { get; set; }
   public string? Format { get; set; }
+  public int[]? ColumnWidths { get; set; }
 }
 
 public static class ConfigurePrinterTarget
