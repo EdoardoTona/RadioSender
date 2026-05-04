@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="ManualSender/ManualSender.csproj" />
+  <Project Path="RadioSender/RadioSender.csproj" />
+  <Project Path="Test.RadioSender/Test.RadioSender.csproj">
+    <Build Project="false" />
+  </Project>
+</Solution>
