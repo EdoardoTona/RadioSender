@@ -1,6 +1,6 @@
-﻿using System;
+using System;
 
-namespace RadioSender.Hosts.Source.TmFRadio
+namespace RadioSender.Hosts.Protocol.TmF
 {
   public record RxData : RxMsg
   {

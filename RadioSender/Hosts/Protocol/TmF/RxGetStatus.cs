@@ -1,6 +1,6 @@
-﻿using System;
+using System;
 
-namespace RadioSender.Hosts.Source.TmFRadio
+namespace RadioSender.Hosts.Protocol.TmF
 {
   public record RxGetStatus : RxMsg
   {
@@ -48,7 +48,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
             "Status message",                                   //  9
             "Channel is Busy with Similar System ID",           //  10
             "Channel is Free",                                  //  11
-            "Channel is Jammed",                                //  12    
+            "Channel is Jammed",                                //  12
             "Other Tinymesh™ System Active on this Channel",    //  13
             "Not used",
             "Not used",

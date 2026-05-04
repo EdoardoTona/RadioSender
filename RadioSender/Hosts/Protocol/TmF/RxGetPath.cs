@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 
-namespace RadioSender.Hosts.Source.TmFRadio
+namespace RadioSender.Hosts.Protocol.TmF
 {
   public record Jump(byte Rssid, uint ReceiverId)
   {

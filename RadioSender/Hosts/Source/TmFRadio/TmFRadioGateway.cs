@@ -1,7 +1,7 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Source.SportidentSerial;
+using RadioSender.Hosts.Protocol.TmF;
 using RJCP.IO.Ports;
 using Serilog;
 using System;
@@ -9,7 +9,6 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -291,80 +290,54 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     private void ProcessReceivedMessage(byte[] data)
     {
+      var dispatch = TmFProtocol.MessageToDispatch(data, out var message, out var serialText, out var error);
 
-      int length = data.Length;
-      if (length < 18)
+      if (error != null)
       {
-        Log.Error("{port} Received broken message of {count} bytes: {hex}", _configuration.PortName, length, BitConverter.ToString(data));
+        Log.Error("{port} {error}: {hex}", _configuration.PortName, error, BitConverter.ToString(data));
         return;
       }
 
-      var header = new RxHeader(data);
-
-
-
-      if (header.PacketType == PacketType.Event)
+      switch (message)
       {
-        if (data[17] == 0x09)
+        case RxGetStatus packet:
+          Log.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, packet.Header.OrigID, packet.EventDetailString, packet.Header.RSSI_Percent, packet.Header.Latency, packet.Temperat_C, packet.Voltage_V);
+          break;
+
+        case RxGetPath packet:
         {
-          var packet = new RxGetStatus(header, data);
-          Log.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, header.OrigID, packet.EventDetailString, header.RSSI_Percent, header.Latency, packet.Temperat_C, packet.Voltage_V);
-          _dispatcherService.PushDispatch(new PunchDispatch(Nodes: [new NodeNew(header.OrigID.ToString(), null, header.Latency, header.RSSI_Percent)]));
+          var nodes = dispatch?.Nodes ?? Array.Empty<NodeNew>();
+          Log.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, packet.Header.OrigID, packet.Jumps.Count, string.Join('-', nodes.Select(n => n.Id)));
+          break;
         }
-        else if (data[17] == 0x20)
+
+        case RxData packet when dispatch?.Punches == null:
         {
-          var packet = new RxGetPath(header, data);
-          var from = header.OrigID;
-          var hopsCount = header.HopCounter == 0 ? 1 : header.HopCounter;
+          if (serialText == null)
+            return;
 
-          var hops = new List<Hop>();
-          var nodes = new List<NodeNew>()
-                {
-                  new(from.ToString(), null, header.Latency, header.RSSI_Percent)
-                };
-          int i = 1;
-          foreach (var jump in (packet as RxGetPath)!.Jumps)
-          {
-            hops.Add(new Hop(from.ToString(), jump.ReceiverId.ToString(), header.Latency / hopsCount, jump.RSSI_Percent));
-            nodes.Add(new NodeNew(jump.ReceiverId.ToString(), null, header.Latency - ((header.Latency / hopsCount) * i), jump.RSSI_Percent));
-            from = jump.ReceiverId;
-            i++;
-          }
-
-          Log.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, header.OrigID, hops.Count, string.Join('-', nodes.Select(n => n.Id)));
-          _dispatcherService.PushDispatch(new PunchDispatch(Hops: hops, Nodes: nodes));
-        }
-        else
-        {
-          // do nothing
-        }
-      }
-      else
-      {
-        var packet = new RxData(header, data);
-
-        var sportidentMsg = SportidentSerialPort.MessageToPunch(packet.RxSerData, header.OrigID.ToString());
-
-        if (sportidentMsg == null)
-        {
-          if (HasNotPrintableChars(packet.RxSerData))
-            Log.Verbose("{port} Source {source} says: {ascii} [HEX: {hex}]", _configuration.PortName, header.OrigID, Encoding.ASCII.GetString(packet.RxSerData), BitConverter.ToString(data));
+          if (TmFProtocol.HasNotPrintableChars(packet.RxSerData))
+            Log.Verbose("{port} Source {source} says: {ascii} [HEX: {hex}]", _configuration.PortName, packet.Header.OrigID, serialText, BitConverter.ToString(data));
           else
-            Log.Information("{port} Source {source} says: {ascii}", _configuration.PortName, header.OrigID, Encoding.ASCII.GetString(packet.RxSerData));
+            Log.Information("{port} Source {source} says: {ascii}", _configuration.PortName, packet.Header.OrigID, serialText);
 
           return;
         }
-
-        var punch = _filterService.Transform(_configuration.Filter, sportidentMsg);
-
-        if (punch != null)
-          _dispatcherService.PushDispatch(new PunchDispatch(Punches: [punch]));
       }
-    }
 
-    private static bool HasNotPrintableChars(byte[] inputList)
-    {
-      return inputList.Any(s => s != 0x0D && s != 0x0A && (s < 0x20 || s > 0x7E));
+      if (dispatch == null)
+        return;
+
+      if (dispatch.Punches != null)
+      {
+        var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches).ToArray();
+        if (punches.Length == 0)
+          return;
+
+        dispatch = dispatch with { Punches = punches };
+      }
+
+      _dispatcherService.PushDispatch(dispatch);
     }
   }
 }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Buffers.Binary;
 
-namespace RadioSender.Hosts.Source.TmFRadio
+namespace RadioSender.Hosts.Protocol.TmF
 {
   public enum PacketType
   {

@@ -1,11 +1,10 @@
-﻿using Microsoft.Extensions.Hosting;
 using Microsoft.IO;
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
+using RadioSender.Hosts.Protocol.Sportident;
 using Serilog;
 using System;
-using System.Buffers.Binary;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -20,16 +19,16 @@ namespace RadioSender.Hosts.Source.SportidentSerial
     Port configuration) : ISource, IRadioSenderHost, IAsyncDisposable
   {
 #pragma warning disable IDE0051 // Rimuovi i membri privati inutilizzati
-    private const byte WAKEUP = 0xFF;
-    private const byte STX = 0x02;
-    private const byte ETX = 0x03;
+    private const byte WAKEUP = SportidentProtocol.Wakeup;
+    private const byte STX = SportidentProtocol.Stx;
+    private const byte ETX = SportidentProtocol.Etx;
     private const byte ACK = 0x06;
     private const byte NAK = 0x15;
 
     private const byte CMD_ExtendSetMsMode = 0xF0;
     private const byte CMD_SetMsMode = 0x70;
     private const byte CMD_GetSystemValue = 0x83;
-    private const byte CMD_TransmitRecord = 0xD3;
+    private const byte CMD_TransmitRecord = SportidentProtocol.CmdTransmitRecord;
 
     private const byte ARG_DirectCommunication = 0x4D;
     private const byte ARG_RemoteCommunication = 0x53;
@@ -153,7 +152,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         byte[] data = new byte[length];
         ms.ReadExactly(data, 0, length);
 
-        var myCrc = CalculateCrc(cmd, data);
+        var myCrc = SportidentProtocol.CalculateCrc(cmd, data);
 
         byte[] crc = new byte[2];
         ms.ReadExactly(crc, 0, 2);
@@ -205,7 +204,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           Buffer.BlockCopy(buffer, 0, data, 3, buffer.Length);
 
 
-          var punch = filterService.Transform(configuration.Filter, MessageToPunch(data, _port.PortName));
+          var punch = filterService.Transform(configuration.Filter, SportidentProtocol.MessageToPunch(data, _port.PortName));
 
           if (punch != null)
             dispatcherService.PushDispatch(new PunchDispatch([punch]));
@@ -224,7 +223,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     public async Task<byte[]?> SendCommand(byte command, params byte[] parameters)
     {
-      var crc = CalculateCrc(command, parameters);
+      var crc = SportidentProtocol.CalculateCrc(command, parameters);
 
       try
       {
@@ -265,143 +264,6 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         Log.Error("Error sending command SportidentSerial {msg}", e.Message);
       }
       return null;
-    }
-
-    public static Punch? MessageToPunch(byte[] buffer, string sourceId)
-    {
-      if (buffer[0] == WAKEUP)
-        Buffer.BlockCopy(buffer, 1, buffer, 0, buffer.Length - 1);
-
-      if (buffer[0] != STX)
-      {
-        // Log.Warning("Wrong STX");
-        return null;
-      }
-
-      if (buffer[1] != CMD_TransmitRecord)
-      {
-        Log.Warning("Wrong CMD");
-        return null;
-      }
-
-      var length = buffer[2];
-
-      var crcData = new byte[length + 2];
-      Buffer.BlockCopy(buffer, 1, crcData, 0, crcData.Length);
-
-      var crc = new byte[2];
-      Buffer.BlockCopy(buffer, crcData.Length + 1, crc, 0, 2);
-
-      if (!CalculateCrc(crcData).SequenceEqual(crc))
-      {
-        Log.Warning("CRC Error");
-        return null;
-      }
-
-      var controlCode = BinaryPrimitives.ReadUInt16BigEndian([(byte)(buffer[3] & 0b_0111_1111), buffer[4]]);
-
-      int cardNumber;
-      if (buffer[6] > 0x04)
-        cardNumber = (int)BinaryPrimitives.ReadUInt32BigEndian([0, buffer[6], buffer[7], buffer[8]]);
-      else
-      {
-        cardNumber = BinaryPrimitives.ReadUInt16BigEndian([buffer[7], buffer[8]]) + buffer[6] * 100000;
-      }
-
-#pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
-      var am = buffer[9] % 2 == 0; // antemeridian
-      var dayOfWeek = (buffer[9] << 4) >> 5; // from 0 (sunday) to 6 (saturday)
-#pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
-
-      var time_s = BinaryPrimitives.ReadUInt16BigEndian([buffer[10], buffer[11]]);
-
-      var subseconds = buffer[12] / 256d;
-
-      var time = TimeSpan.FromSeconds(time_s + subseconds);
-      if (!am)
-        time += TimeSpan.FromHours(12);
-
-      var now = DateTime.Now;
-      var dt = new DateTime(now.Year, now.Month, now.Day) + time;
-
-      return new Punch(
-
-                      ReceivedAt: DateTimeOffset.UtcNow,
-        Card: cardNumber.ToString(),
-        Time: dt,
-        Control: controlCode,
-        ControlType: PunchControlType.Unknown,
-        SourceId: sourceId
-        );
-    }
-
-
-    public static byte[] CalculateCrc(byte command, byte[] data, byte length = 0)
-    {
-      length = length == 0 ? (byte)data.Length : length;
-      using var ms = _memoryManager.GetStream();
-      ms.WriteByte(command);
-      ms.WriteByte(length);
-      ms.Write(data);
-      return CalculateCrc(ms.ToArray());
-    }
-
-    public static byte[] CalculateCrc(byte[] data)
-    {
-      var crcBytes = new byte[2];
-      // Return 0 for no or on-e data byte
-      if (data.Length < 2)
-      {
-        return crcBytes;
-      }
-
-      uint index = 0;
-      ushort crc = (ushort)((data[index] << 8) + data[index + 1]);
-      index += 2;
-      // Return crc for two data bytes
-      if (data.Length == 2)
-      {
-        BinaryPrimitives.WriteUInt16BigEndian(crcBytes, crc);
-        return crcBytes;
-      }
-
-      ushort value;
-      for (uint k = (uint)(data.Length >> 1); k > 0; k--)
-      {
-        if (k > 1)
-        {
-          value = (ushort)((data[index] << 8) + data[index + 1]);
-          index += 2;
-        }
-        else // If the number of bytes is odd, complete with 0.
-        {
-          value = (data.Length & 1) != 0 ? (ushort)(data[index] << 8) : (ushort)0;
-        }
-
-        for (int j = 0; j < 16; j++)
-        {
-          if ((crc & 0x8000) != 0)
-          {
-            crc <<= 1;
-            if ((value & 0x8000) != 0)
-            {
-              crc++;
-            }
-            crc ^= 0x8005;
-          }
-          else
-          {
-            crc <<= 1;
-            if ((value & 0x8000) != 0)
-            {
-              crc++;
-            }
-          }
-          value <<= 1;
-        }
-      }
-      BinaryPrimitives.WriteUInt16BigEndian(crcBytes, crc);
-      return crcBytes;
     }
   }
 }

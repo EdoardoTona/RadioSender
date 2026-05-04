@@ -1,4 +1,4 @@
-﻿namespace RadioSender.Hosts.Source.TmFRadio
+namespace RadioSender.Hosts.Protocol.TmF
 {
   public record RxMsg
   {
