@@ -12,7 +12,8 @@ public class TestFormatString
   public void Setup()
   {
     punch = new Punch(
-      Card: "1234",
+      CompetitorId: "1234",
+      CompetitorIdType: CompetitorIdType.PunchingCard,
       Control: 31,
       SourceId: "roc",
       ReceivedAt: new System.DateTimeOffset(2021, 08, 04, 21, 45, 59, 123, System.TimeSpan.Zero),
@@ -22,6 +23,8 @@ public class TestFormatString
   }
 
   [TestCase("1234", "{Card}")]
+  [TestCase("1234", "{CompetitorId}")]
+  [TestCase("PunchingCard", "{CompetitorIdType}")]
   [TestCase("31", "{Control}")]
   [TestCase("1234", "{card}")]
   [TestCase("31.00", "{Control:0.00}")]

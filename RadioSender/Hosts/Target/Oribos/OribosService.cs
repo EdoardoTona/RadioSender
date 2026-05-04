@@ -63,33 +63,33 @@ public class OribosService : ITarget
     httpClient.BaseAddress = new Uri(host);
 
     string? url;
-    if (!_configuration.UseStartNumbers)
+    if (punch.CompetitorIdType == CompetitorIdType.PunchingCard)
     {
       if (punch.NetTime)
       {
-        Log.Warning("Net time not supported in Oribos without bib numbers. Ignored");
+        Log.Warning("Net time not supported in Oribos with Sportident card numbers. Ignored");
         return;
       }
 
       url = punch.ControlType switch
       {
-        PunchControlType.Finish => $"/finish.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
-        PunchControlType.Start => $"/start.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-        PunchControlType.Clear => $"/clear.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-        PunchControlType.Check => $"/check.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-        _ => $"/radiotime.html?card={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        PunchControlType.Finish => $"/finish.html?card={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}",
+        PunchControlType.Start => $"/start.html?card={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        PunchControlType.Clear => $"/clear.html?card={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        PunchControlType.Check => $"/check.html?card={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+        _ => $"/radiotime.html?card={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
       };
     }
-    else
+    else if (punch.CompetitorIdType == CompetitorIdType.BibNumber)
     {
 
       if (punch.NetTime)
       {
         url = punch.ControlType switch
         {
-          PunchControlType.Finish => $"/algetime.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}",
-          PunchControlType.Control => $"/algetime.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
-          PunchControlType.Unknown => $"/algetime.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+          PunchControlType.Finish => $"/algetime.html?pett={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}",
+          PunchControlType.Control => $"/algetime.html?pett={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
+          PunchControlType.Unknown => $"/algetime.html?pett={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}",
           _ => null
         };
 
@@ -106,9 +106,9 @@ public class OribosService : ITarget
         {
           url = punch.CompetitorStatus switch
           {
-            CompetitorStatus.DNS => $"/changestate.html?pett={punch.Card}&state=np",
-            CompetitorStatus.Running => $"/changestate.html?pett={punch.Card}&state=ga",
-            CompetitorStatus.WaitingStart => $"/changestate.html?pett={punch.Card}&state=ip",
+            CompetitorStatus.DNS => $"/changestate.html?pett={punch.CompetitorId}&state=np",
+            CompetitorStatus.Running => $"/changestate.html?pett={punch.CompetitorId}&state=ga",
+            CompetitorStatus.WaitingStart => $"/changestate.html?pett={punch.CompetitorId}&state=ip",
             _ => null
           };
         }
@@ -116,8 +116,8 @@ public class OribosService : ITarget
         {
           url = punch.ControlType switch
           {
-            PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
-            PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time=00.00.00&type=1&abs=0",
+            PunchControlType.Finish => $"/cronofinish.html?pett={punch.CompetitorId}&time=00.00.00&type=1&abs=0",
+            PunchControlType.Start => $"/cronostart.html?pett={punch.CompetitorId}&time=00.00.00&type=1&abs=0",
             _ => null
           };
         }
@@ -125,15 +125,20 @@ public class OribosService : ITarget
         {
           url = punch.ControlType switch
           {
-            PunchControlType.Finish => $"/cronofinish.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
-            PunchControlType.Start => $"/cronostart.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&abs=1",
-            PunchControlType.Control => $"/cronoradio.html?pett={punch.Card}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}&abs=1",
+            PunchControlType.Finish => $"/cronofinish.html?pett={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&abs=1",
+            PunchControlType.Start => $"/cronostart.html?pett={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&abs=1",
+            PunchControlType.Control => $"/cronoradio.html?pett={punch.CompetitorId}&time={punch.Time:HH:mm:ss.fff}&point={punch.Control}&abs=1",
             _ => null
           };
         }
 
       }
 
+    }
+    else
+    {
+      Log.Warning("Oribos cannot choose card or bib endpoint for competitor id type {type}. Ignored", punch.CompetitorIdType);
+      return;
     }
 
     if (string.IsNullOrEmpty(url))

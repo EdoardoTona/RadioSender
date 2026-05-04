@@ -101,7 +101,7 @@ public class PrinterTarget : ITarget, IDisposable
   {
     try
     {
-      var format = _configuration.Format ?? "{Card} {Control} {Time:HH:mm:ss}";
+      var format = _configuration.Format ?? "{CompetitorId} {Type}{Control} {Time:HH:mm:ss,fff} {Source} {Status} {Cancellation}";
       var line = FormatStringHelper.GetString(punch, format);
 
       var _printer = new Printer(_configuration.PrinterName);

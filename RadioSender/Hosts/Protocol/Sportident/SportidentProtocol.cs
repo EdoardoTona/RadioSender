@@ -97,7 +97,8 @@ public static class SportidentProtocol
 
     return new Punch(
       ReceivedAt: receivedAt ?? DateTimeOffset.UtcNow,
-      Card: cardNumber.ToString(),
+      CompetitorId: cardNumber.ToString(),
+      CompetitorIdType: CompetitorIdType.PunchingCard,
       Time: dt,
       Control: controlCode,
       ControlType: PunchControlType.Unknown,

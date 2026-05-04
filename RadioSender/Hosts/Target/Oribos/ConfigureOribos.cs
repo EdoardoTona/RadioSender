@@ -12,6 +12,7 @@ namespace RadioSender.Hosts.Target.Oribos
   public record OribosServer : FilterableConfiguration
   {
     public string? Host { get; init; }
+    [System.Obsolete("Oribos now chooses the endpoint from Punch.CompetitorIdType.")]
     public bool UseStartNumbers { get; init; }
   }
 

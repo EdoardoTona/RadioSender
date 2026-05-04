@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Protocol.Sportident;
 using System;
 using System.Buffers.Binary;
@@ -22,7 +23,8 @@ public class TestProtocolSportident
     Assert.That(punch, Is.Not.Null);
     Assert.Multiple(() =>
     {
-      Assert.That(punch!.Card, Is.EqualTo("1234"));
+      Assert.That(punch!.CompetitorId, Is.EqualTo("1234"));
+      Assert.That(punch.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
       Assert.That(punch.Control, Is.EqualTo(31));
       Assert.That(punch.SourceId, Is.EqualTo("mqtt"));
       Assert.That(punch.ReceivedAt, Is.EqualTo(receivedAt));
@@ -36,7 +38,8 @@ public class TestProtocolSportident
     var punch = SportidentProtocol.MessageToPunch(CreateSportidentMessage(withWakeup: true), "serial");
 
     Assert.That(punch, Is.Not.Null);
-    Assert.That(punch!.Card, Is.EqualTo("1234"));
+    Assert.That(punch!.CompetitorId, Is.EqualTo("1234"));
+    Assert.That(punch.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
   }
 
   [Test]

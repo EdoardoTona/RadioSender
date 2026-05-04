@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Protocol.TmF;
 using System;
 using System.Buffers.Binary;
@@ -25,7 +26,8 @@ public class TestProtocolTmF
     var punch = dispatch!.Punches!.Single();
     Assert.Multiple(() =>
     {
-      Assert.That(punch.Card, Is.EqualTo("1234"));
+      Assert.That(punch.CompetitorId, Is.EqualTo("1234"));
+      Assert.That(punch.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
       Assert.That(punch.Control, Is.EqualTo(31));
       Assert.That(punch.SourceId, Is.EqualTo(sourceId.ToString()));
     });

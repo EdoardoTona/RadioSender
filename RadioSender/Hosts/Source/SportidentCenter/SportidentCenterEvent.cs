@@ -143,7 +143,8 @@ namespace RadioSender.Hosts.Source.SportidentCenter
                               new Punch(
 
                       ReceivedAt: DateTimeOffset.UtcNow,
-                               Card: p.Card.ToString(),
+                               CompetitorId: p.Card.ToString(),
+                               CompetitorIdType: CompetitorIdType.PunchingCard,
                                Control: p.Code,
                                ControlType: MapControlType(p.Mode),
                                Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,

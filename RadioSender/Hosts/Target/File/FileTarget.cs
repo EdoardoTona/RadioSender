@@ -52,7 +52,7 @@ namespace RadioSender.Hosts.Target.File
           file.Write(Encoding.UTF8.GetBytes(record));
         }
       }
-      catch (Exception ex)
+      catch (Exception)
       {
         // Log the exception or handle it as needed
         Log.Error($"Error writing to file: {_configuration.Path}");

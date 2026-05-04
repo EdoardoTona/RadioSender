@@ -11,10 +11,15 @@ namespace RadioSender.Hosts.Common.Filters
     public string Name { get; init; } = null!;
     public bool Enable { get; init; } = true;
     public HashSet<int> IncludeOnlyControls { get; init; } = new HashSet<int>();
+    public HashSet<string> IncludeOnlyCompetitorIds { get; init; } = new HashSet<string>();
+    [Obsolete("Use IncludeOnlyCompetitorIds instead")]
     public HashSet<string> IncludeOnlyCards { get; init; } = new HashSet<string>();
     public Dictionary<string, int> MapControls { get; init; } = new();
+    public Dictionary<string, string> MapCompetitorIds { get; init; } = new();
+    [Obsolete("Use MapCompetitorIds instead")]
     public Dictionary<string, string> MapCards { get; init; } = new();
     public Dictionary<PunchControlType, HashSet<int>> TypeFromCode { get; init; } = new();
+    public CompetitorIdType? OverrideCompetitorIdType { get; init; }
     public TimeSpan IgnoreOlderThan { get; init; }
 
     public Punch? Transform(Punch? punch)
@@ -40,9 +45,14 @@ namespace RadioSender.Hosts.Common.Filters
         return null; // discard
       }
 
-      var card = MapCards.ContainsKey(punch.Card) ? MapCards[punch.Card] : punch.Card;
+      var mapCompetitorIds = MapCompetitorIds.Count != 0 ? MapCompetitorIds : MapCards;
+      var includeOnlyCompetitorIds = IncludeOnlyCompetitorIds.Count != 0 ? IncludeOnlyCompetitorIds : IncludeOnlyCards;
 
-      if (string.IsNullOrEmpty(card) || (IncludeOnlyCards.Count != 0 && !IncludeOnlyCards.Contains(card)))
+      var competitorId = mapCompetitorIds.TryGetValue(punch.CompetitorId, out var mapped)
+                        ? mapped
+                        : punch.CompetitorId;
+
+      if (string.IsNullOrEmpty(competitorId) || (includeOnlyCompetitorIds.Count != 0 && !includeOnlyCompetitorIds.Contains(competitorId)))
       {
         return null; // discard
       }
@@ -63,7 +73,8 @@ namespace RadioSender.Hosts.Common.Filters
 
       return punch with
       {
-        Card = card,
+        CompetitorId = competitorId,
+        CompetitorIdType = OverrideCompetitorIdType ?? punch.CompetitorIdType,
         Control = control,
         ControlType = ctype,
       };

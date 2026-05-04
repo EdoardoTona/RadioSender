@@ -84,7 +84,8 @@ namespace RadioSender.Hosts.Source.SIRAP
                     configuration.Filter,
                      new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
-                     Card: chipNo.ToString(),
+                     CompetitorId: chipNo.ToString(),
+                     CompetitorIdType: CompetitorIdType.PunchingCard,
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
                      Time: dt,
@@ -126,7 +127,8 @@ namespace RadioSender.Hosts.Source.SIRAP
                     configuration.Filter,
                      new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
-                     Card: chipNo.ToString(),
+                     CompetitorId: chipNo.ToString(),
+                     CompetitorIdType: CompetitorIdType.PunchingCard,
                      Control: codeNo,
                      ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
                      Time: dt,

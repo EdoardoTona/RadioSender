@@ -14,7 +14,8 @@ namespace RadioSender.Helpers
     {
       return key switch
       {
-        "Card" or "card" or "Bib" or "bib" => punch.Card,
+        "Card" or "card" or "Bib" or "bib" or "CompetitorId" or "competitorid" => punch.CompetitorId,
+        "CompetitorIdType" or "competitoridtype" => punch.CompetitorIdType,
         "Control" or "control" => punch.Control,
         "ControlType" or "controltype" => punch.ControlType,
         "Type" or "type" => punch.ControlTypeShort ?? "",

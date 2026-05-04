@@ -344,7 +344,8 @@ public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
                    _configuration.Filter,
                     new Punch(
                      ReceivedAt: DateTimeOffset.UtcNow,
-                    Card: competitorNumber,
+                    CompetitorId: competitorNumber,
+                    CompetitorIdType: CompetitorIdType.BibNumber,
                     Control: logicalChannel,
                     ControlType: controlType,
                     Time: time,

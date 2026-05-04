@@ -97,7 +97,8 @@ public class MicroplusServer(
                     configuration.Filter,
                     new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
-                    Card: bib.ToString(),
+                    CompetitorId: bib.ToString(),
+                    CompetitorIdType: CompetitorIdType.BibNumber,
                     Control: control,
                     ControlType: PunchControlType.Unknown,
                     Time: dt,

@@ -14,18 +14,20 @@ namespace RadioSender.Hosts.Common
   }
   public record PunchDispatch(IEnumerable<Punch>? Punches = null, IEnumerable<Hop>? Hops = null, IEnumerable<NodeNew>? Nodes = null);
   public record Punch(
-    string Card,
+    string CompetitorId,
     DateTime Time,
     int Control,
     string SourceId,
     DateTimeOffset ReceivedAt,
+    CompetitorIdType CompetitorIdType = CompetitorIdType.Unknown,
     PunchControlType ControlType = PunchControlType.Unknown,
     CompetitorStatus CompetitorStatus = CompetitorStatus.Unknown,
     bool Cancellation = false,
     bool NetTime = false
     )
   {
-    public string ComparisonKey => $"{Card}-{Control}-{Time:O}-{SourceId}-{ControlType}-{CompetitorStatus}-{Cancellation}-{NetTime}";
+    public string Card => CompetitorId;
+    public string ComparisonKey => $"{CompetitorIdType}-{CompetitorId}-{ControlType}-{Control}-{Time:O}-{SourceId}-{CompetitorStatus}-{Cancellation}-{NetTime}";
     public string? ControlTypeShort => ControlType switch
     {
       PunchControlType.Control => "CN",
@@ -35,6 +37,13 @@ namespace RadioSender.Hosts.Common
       PunchControlType.Start => "STA",
       _ => null,
     };
+  }
+  public enum CompetitorIdType
+  {
+    Unknown = 0,
+    BibNumber,
+    TimingTransponder,
+    PunchingCard
   }
   public enum PunchControlType
   {

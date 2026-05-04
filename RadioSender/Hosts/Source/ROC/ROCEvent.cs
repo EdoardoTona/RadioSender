@@ -158,7 +158,8 @@ namespace RadioSender.Hosts.Source.ROC
                         list.Select(p =>
                         new Punch(
                       ReceivedAt: DateTimeOffset.UtcNow,
-                          Card: p.Card.ToString(),
+                          CompetitorId: p.Card.ToString(),
+                          CompetitorIdType: CompetitorIdType.PunchingCard,
                           Time: p.Time,
                           Control: p.Code,
                           ControlType: PunchControlType.Unknown,
