@@ -12,6 +12,7 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Source.Microplus;
 using RadioSender.Hosts.Source.Mqtt;
+using RadioSender.Hosts.Source.OBR;
 using RadioSender.Hosts.Source.ROC;
 using RadioSender.Hosts.Source.SIRAP;
 using RadioSender.Hosts.Source.SportidentCenter;
@@ -149,6 +150,7 @@ public static class Program
                 .FromSirap()
                 .FromMicroplus()
                 .FromMicrogate()
+                .FromObr()
     // Middleware
                 .ThroughDispatcher()
     // Targets
