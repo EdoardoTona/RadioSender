@@ -4,6 +4,7 @@ using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -44,17 +45,17 @@ namespace RadioSender.Hosts.Source.SIRAP
       Log.Warning("Sirap server socket error {error}", error);
     }
 
-    internal void OnReceived(TcpSirapSession session, ReadOnlySpan<byte> buffer)
+    internal void OnReceived(TcpSirapSession session, SirapFrame frame)
     {
       try
       {
-        if (buffer.Length < 20)
+        if (frame.Version == SirapProtocolVersion.V1)
         {
-          OnReceivedV1(session, buffer);
+          OnReceivedV1(session, frame.Data);
         }
         else
         {
-          OnReceivedV2(session, buffer);
+          OnReceivedV2(session, frame.Data);
         }
       }
       catch (Exception e)
@@ -204,8 +205,139 @@ namespace RadioSender.Hosts.Source.SIRAP
   }
 
 
+  internal enum SirapProtocolVersion
+  {
+    V1,
+    V2
+  }
+
+  internal readonly record struct SirapFrame(SirapProtocolVersion Version, byte[] Data);
+
+  internal static class SirapFrameReader
+  {
+    public const int V1RecordLength = 15;
+    public const int V2RecordLength = 36;
+    private const byte PunchRecordType = 0;
+    private const byte TriggeredTimeRecordType = 255;
+    private const int MaxV2NameLength = 20;
+
+    public static bool TryTakeFrame(List<byte> buffer,
+      ref SirapProtocolVersion? version,
+      out SirapFrame frame,
+      out int discardedBytes)
+    {
+      frame = default;
+      discardedBytes = 0;
+
+      while (buffer.Count > 0)
+      {
+        var frameInfo = GetFrameInfo(buffer, version);
+        if (frameInfo == null)
+        {
+          var invalidLength = CountInvalidStartBytes(buffer, version);
+          buffer.RemoveRange(0, invalidLength);
+          discardedBytes += invalidLength;
+          continue;
+        }
+
+        var (frameVersion, frameLength) = frameInfo.Value;
+        if (buffer.Count < frameLength)
+          return false;
+
+        var data = new byte[frameLength];
+        buffer.CopyTo(0, data, 0, frameLength);
+        buffer.RemoveRange(0, frameLength);
+
+        version ??= frameVersion;
+        frame = new SirapFrame(frameVersion, data);
+        return true;
+      }
+
+      return false;
+    }
+
+    private static (SirapProtocolVersion Version, int Length)? GetFrameInfo(List<byte> buffer, SirapProtocolVersion? version)
+    {
+      if (version == SirapProtocolVersion.V1)
+        return IsV1RecordType(buffer[0]) ? (SirapProtocolVersion.V1, V1RecordLength) : null;
+
+      if (version == SirapProtocolVersion.V2)
+        return IsValidV2NameLength(buffer[0]) ? (SirapProtocolVersion.V2, V2RecordLength) : null;
+
+      return GetInitialFrameInfo(buffer);
+    }
+
+    private static (SirapProtocolVersion Version, int Length)? GetInitialFrameInfo(List<byte> buffer)
+    {
+      var firstByte = buffer[0];
+
+      if (firstByte > 0 && IsValidV2NameLength(firstByte))
+        return (SirapProtocolVersion.V2, V2RecordLength);
+
+      if (firstByte == 0 && LooksLikeCompleteEmptyNameV2Frame(buffer))
+        return (SirapProtocolVersion.V2, V2RecordLength);
+
+      if (IsV1RecordType(firstByte))
+        return (SirapProtocolVersion.V1, V1RecordLength);
+
+      return null;
+    }
+
+    private static bool LooksLikeCompleteEmptyNameV2Frame(List<byte> buffer)
+    {
+      if (buffer.Count < V2RecordLength)
+        return false;
+
+      for (var i = 1; i <= MaxV2NameLength; i++)
+      {
+        if (buffer[i] != 0)
+          return false;
+      }
+
+      return IsV1RecordType(buffer[21]);
+    }
+
+    private static int CountInvalidStartBytes(List<byte> buffer, SirapProtocolVersion? version)
+    {
+      var count = 0;
+      while (count < buffer.Count && !IsPotentialStartByte(buffer[count], version))
+      {
+        count++;
+      }
+
+      return Math.Max(count, 1);
+    }
+
+    private static bool IsPotentialStartByte(byte value, SirapProtocolVersion? version)
+    {
+      if (version == SirapProtocolVersion.V1)
+        return IsV1RecordType(value);
+
+      if (version == SirapProtocolVersion.V2)
+        return IsValidV2NameLength(value);
+
+      return IsV1RecordType(value) || IsValidV2NameLength(value);
+    }
+
+    private static bool IsV1RecordType(byte value)
+    {
+      return value == PunchRecordType || value == TriggeredTimeRecordType;
+    }
+
+    private static bool IsValidV2NameLength(byte value)
+    {
+      return value <= MaxV2NameLength;
+    }
+  }
+
   class TcpSirapSession : TcpSession
   {
+    private const int MaxBufferSize = 8192;
+    private const int BufferTimeoutSeconds = 5;
+
+    private readonly List<byte> _receiveBuffer = [];
+    private DateTime _lastBufferUpdate = DateTime.MinValue;
+    private SirapProtocolVersion? _protocolVersion;
     private string? _name;
     public string? Name
     {
@@ -247,13 +379,59 @@ namespace RadioSender.Hosts.Source.SIRAP
 
     protected override void OnReceived(byte[] buffer, long offset, long size)
     {
+      if (size == 0)
+        return;
+
       var ros = new ReadOnlySpan<byte>(buffer, (int)offset, (int)size);
-      ((SirapServer)Server).OnReceived(this, ros);
+      var now = DateTime.UtcNow;
+
+      if (_receiveBuffer.Count > 0 &&
+          _lastBufferUpdate != DateTime.MinValue &&
+          (now - _lastBufferUpdate).TotalSeconds > BufferTimeoutSeconds)
+      {
+        Log.Warning("Sirap client {endpoint} buffer content is older than {timeout} seconds, clearing buffer",
+          remoteEndpoint,
+          BufferTimeoutSeconds);
+        ClearReceiveBuffer();
+      }
+
+      _receiveBuffer.AddRange(ros);
+      _lastBufferUpdate = now;
+
+      if (_receiveBuffer.Count > MaxBufferSize)
+      {
+        Log.Warning("Sirap client {endpoint} buffer exceeded maximum size of {maxSize} bytes, clearing buffer",
+          remoteEndpoint,
+          MaxBufferSize);
+        ClearReceiveBuffer();
+        return;
+      }
+
+      while (true)
+      {
+        var hasFrame = SirapFrameReader.TryTakeFrame(_receiveBuffer, ref _protocolVersion, out var frame, out var discardedBytes);
+        if (discardedBytes > 0)
+          Log.Warning("Sirap client {endpoint} discarded {count} invalid frame byte(s)", remoteEndpoint, discardedBytes);
+
+        if (!hasFrame)
+          break;
+
+        ((SirapServer)Server).OnReceived(this, frame);
+      }
+
+      if (_receiveBuffer.Count == 0)
+        _lastBufferUpdate = DateTime.MinValue;
     }
 
     protected override void OnError(SocketError error)
     {
       Log.Warning("Sirap client {endpoint} socket error {error}", remoteEndpoint, error);
+    }
+
+    private void ClearReceiveBuffer()
+    {
+      _receiveBuffer.Clear();
+      _lastBufferUpdate = DateTime.MinValue;
     }
   }
 
