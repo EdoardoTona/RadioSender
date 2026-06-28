@@ -33,6 +33,9 @@ namespace RadioSender.Hosts.Source.ROC
         if (events != null)
           foreach (var ev in events)
           {
+            if (!ev.Enable)
+              continue;
+
             services.AddHttpClient(ROCEvent.HTTPCLIENT_NAME + ev.EventId, c =>
             {
               c.BaseAddress = new Uri(ev.Host);
