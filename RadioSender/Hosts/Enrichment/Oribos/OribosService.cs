@@ -3,7 +3,6 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -15,7 +14,10 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Enrichment.Oribos
 {
   // Resolved competitor data kept in the lookup maps.
-  public record OribosEntry(string Bib, string? Card, string? Name, string? Class, DateTime? StartTime, string Status);
+  public record OribosEntry(
+    string Bib, string? Card, string? Card2, string? Name, string? Class,
+    string? Nation, string? ClubId, string? ClubName, string? ClubNation,
+    DateTime? StartTime, string Status);
 
   public sealed class OribosService : IEnrichmentSource, IRadioSenderHost, IDisposable
   {
@@ -25,7 +27,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     // Oribos status codes that mean "no longer racing" — used to disambiguate a card/bib
     // shared by more than one competitor.
     private static readonly HashSet<string> FinishedStatuses = new(StringComparer.OrdinalIgnoreCase)
-      { "CL", "NP", "SQ", "RI", "FT", "DI" };
+      { "CL", "NP", "SQ", "RI", "FT", "PE", "PM", "DI" };
 
     // Lazy to break the DI cycle: FilterService -> IEnrichmentSource (this) -> DispatcherService -> FilterService.
     // DispatcherService is only needed at runtime to publish status changes, not at construction.
@@ -46,6 +48,10 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     private Dictionary<string, string> _statusSnapshot = new();
     private bool _snapshotInitialized;
 
+    // card→bib snapshot to log changes in the mapping (skips the initial load)
+    private Dictionary<string, string> _cardBibSnapshot = new();
+    private bool _mappingInitialized;
+
     // keys already warned about (ambiguous), to log only once
     private readonly HashSet<string> _warnedKeys = [];
 
@@ -53,7 +59,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     private Task? _executingTask;
     private string? _lastUpdate;
 
-    private DateTimeOffset _lastDiagnosticReport;
+    private DateTimeOffset _lastFetch;
 
     public string Name => _configuration.Name;
 
@@ -82,16 +88,20 @@ namespace RadioSender.Hosts.Enrichment.Oribos
       if (entry == null)
         return punch; // best-effort: pass through unchanged, no log
 
-      return punch with
-      {
-        Competitor = new Competitor(
-          Bib: entry.Bib,
-          Card: entry.Card,
-          Name: entry.Name,
-          Class: entry.Class,
-          StartTime: entry.StartTime)
-      };
+      return punch with { Competitor = ToCompetitor(entry) };
     }
+
+    private static Competitor ToCompetitor(OribosEntry e) => new(
+      Bib: e.Bib,
+      Card: e.Card,
+      Card2: e.Card2,
+      Name: e.Name,
+      Class: e.Class,
+      Nation: e.Nation,
+      ClubId: e.ClubId,
+      ClubName: e.ClubName,
+      ClubNation: e.ClubNation,
+      StartTime: e.StartTime);
 
     private static OribosEntry? Lookup(IReadOnlyDictionary<string, OribosEntry> map, string? key)
       => key != null && map.TryGetValue(key, out var e) ? e : null;
@@ -153,7 +163,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
         $"{host}/ORServer.lastupdate.jsp?u={_lastUpdate}", _jsonOptions, ct);
 
       var changed = _lastUpdate != update?.Update;
-      var stale = DateTimeOffset.UtcNow - _lastDiagnosticReport > TimeSpan.FromMinutes(2);
+      var stale = DateTimeOffset.UtcNow - _lastFetch > TimeSpan.FromMinutes(2);
 
       if (changed || stale)
       {
@@ -167,28 +177,49 @@ namespace RadioSender.Hosts.Enrichment.Oribos
       using var client = _httpClientFactory.CreateClient();
       client.Timeout = TimeSpan.FromSeconds(10);
 
-      var sw = Stopwatch.StartNew();
       var merged = _configuration.Merged ? "true" : "false";
       var data = await client.GetFromJsonAsync<OrServer>(
         $"{host}/ORServer.fullweb.jsp?courses=true&merged={merged}", _jsonOptions, ct);
-      sw.Stop();
 
       if (data == null)
         return;
 
-      var (cardMap, bibMap, ambiguousKeys) = BuildLookups(data, _warnedKeys);
+      _lastFetch = DateTimeOffset.UtcNow;
+
+      var (cardMap, bibMap, _) = BuildLookups(data, _warnedKeys);
       _cardMap = cardMap;
       _bibMap = bibMap;
 
+      LogMappingChanges(cardMap);
+
       if (_configuration.EmitStatusChanges)
         DetectAndEmitStatusChanges(bibMap, data.Update);
+    }
 
-      if (DateTimeOffset.UtcNow - _lastDiagnosticReport > TimeSpan.FromMinutes(2))
+    // Logs additions/changes/removals in the card→bib mapping. The initial load is not logged.
+    private void LogMappingChanges(IReadOnlyDictionary<string, OribosEntry> cardMap)
+    {
+      var current = cardMap.ToDictionary(kv => kv.Key, kv => kv.Value.Bib);
+
+      if (_mappingInitialized)
       {
-        Log.Information("Oribos enrichment '{name}' diagnostic: {cards} cards, {bibs} bibs, {ambig} ambiguous keys, fetch {ms}ms, update {update:u}",
-          _configuration.Name, cardMap.Count, bibMap.Count, ambiguousKeys, sw.ElapsedMilliseconds, data.Update);
-        _lastDiagnosticReport = DateTimeOffset.UtcNow;
+        foreach (var (card, bib) in current)
+        {
+          if (!_cardBibSnapshot.TryGetValue(card, out var prevBib))
+            Log.Information("Oribos '{name}': card {card} mapped to bib {bib}", _configuration.Name, card, bib);
+          else if (prevBib != bib)
+            Log.Information("Oribos '{name}': card {card} remapped from bib {prev} to bib {bib}", _configuration.Name, card, prevBib, bib);
+        }
+
+        foreach (var (card, prevBib) in _cardBibSnapshot)
+        {
+          if (!current.ContainsKey(card))
+            Log.Information("Oribos '{name}': card {card} unmapped (was bib {prev})", _configuration.Name, card, prevBib);
+        }
       }
+
+      _cardBibSnapshot = current;
+      _mappingInitialized = true;
     }
 
     #endregion
@@ -204,6 +235,14 @@ namespace RadioSender.Hosts.Enrichment.Oribos
                    int ambiguousCount) BuildLookups(OrServer data, HashSet<string>? warnedKeys = null)
     {
       var competitors = data.Competitors?.Where(c => c.Bib != null).ToList() ?? [];
+
+      // clubId → club name (ClubId matches OrClub.CountryId)
+      var clubsById = new Dictionary<string, string>();
+      foreach (var club in data.Clubs ?? [])
+      {
+        if (!string.IsNullOrWhiteSpace(club.CountryId) && !string.IsNullOrWhiteSpace(club.Name))
+          clubsById[club.CountryId] = club.Name;
+      }
 
       // bib → entry
       var bibCandidates = new Dictionary<string, List<OrCompetitor>>();
@@ -231,8 +270,8 @@ namespace RadioSender.Hosts.Enrichment.Oribos
       }
 
       var ambiguous = 0;
-      var cardMap = Resolve(cardCandidates, data.Race.Startutc, "card", warnedKeys, ref ambiguous);
-      var bibMap = Resolve(bibCandidates, data.Race.Startutc, "bib", warnedKeys, ref ambiguous);
+      var cardMap = Resolve(cardCandidates, data.Race.Startutc, clubsById, "card", warnedKeys, ref ambiguous);
+      var bibMap = Resolve(bibCandidates, data.Race.Startutc, clubsById, "bib", warnedKeys, ref ambiguous);
 
       return (cardMap, bibMap, ambiguous);
     }
@@ -240,6 +279,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     private static IReadOnlyDictionary<string, OribosEntry> Resolve(
       Dictionary<string, List<OrCompetitor>> candidates,
       DateTimeOffset startutc,
+      IReadOnlyDictionary<string, string> clubsById,
       string keyKind,
       HashSet<string>? warnedKeys,
       ref int ambiguous)
@@ -270,22 +310,33 @@ namespace RadioSender.Hosts.Enrichment.Oribos
 
         // a previously-ambiguous key resolved → allow warning again if it recurs
         warnedKeys?.Remove($"{keyKind}:{key}");
-        map[key] = ToEntry(chosen, startutc);
+        map[key] = ToEntry(chosen, startutc, clubsById);
       }
 
       return map;
     }
 
-    private static OribosEntry ToEntry(OrCompetitor c, DateTimeOffset startutc)
+    private static OribosEntry ToEntry(OrCompetitor c, DateTimeOffset startutc, IReadOnlyDictionary<string, string> clubsById)
     {
       var bib = c.Bib!.Value.ToString(CultureInfo.InvariantCulture);
       var card = c.Card is int cv && cv > 0 ? cv.ToString(CultureInfo.InvariantCulture) : null;
+      var card2 = c.Card2 is int cv2 && cv2 > 0 ? cv2.ToString(CultureInfo.InvariantCulture) : null;
       var fullName = string.Join(" ", new[] { c.Name, c.Surname }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+      string? clubName = null;
+      if (!string.IsNullOrWhiteSpace(c.ClubId) && clubsById.TryGetValue(c.ClubId, out var n))
+        clubName = n;
+
       return new OribosEntry(
         Bib: bib,
         Card: card,
+        Card2: card2,
         Name: string.IsNullOrWhiteSpace(fullName) ? null : fullName,
         Class: c.Class,
+        Nation: string.IsNullOrWhiteSpace(c.Naz) ? null : c.Naz,
+        ClubId: string.IsNullOrWhiteSpace(c.ClubId) ? null : c.ClubId,
+        ClubName: clubName,
+        ClubNation: string.IsNullOrWhiteSpace(c.ClubCountry) ? null : c.ClubCountry,
         StartTime: AbsoluteStart(startutc, c.Start),
         Status: c.Status ?? "");
     }
@@ -305,7 +356,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     // Oribos status code → RadioSender CompetitorStatus. Null = ignored (no enum / no event).
     public static CompetitorStatus? MapStatus(string? status) => status?.ToUpperInvariant() switch
     {
-      "PM" => CompetitorStatus.MP,
+      "PE" or "PM" => CompetitorStatus.MP,
       "NP" => CompetitorStatus.DNS,
       "SQ" => CompetitorStatus.DSQ,
       "RI" => CompetitorStatus.DNF,
@@ -355,12 +406,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
           ReceivedAt: DateTimeOffset.UtcNow,
           CompetitorStatus: status,
           Cancellation: false,
-          Competitor: new Competitor(
-            Bib: entry.Bib,
-            Card: entry.Card,
-            Name: entry.Name,
-            Class: entry.Class,
-            StartTime: entry.StartTime)));
+          Competitor: ToCompetitor(entry)));
       }
 
       _statusSnapshot = newSnapshot;

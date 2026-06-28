@@ -61,13 +61,7 @@ public sealed class FilterService : System.IDisposable
       if (!_enrichers.TryGetValue(name, out var enricher))
         continue;
 
-      var enriched = enricher.Enrich(punch);
-
-      if (Log.IsEnabled(Serilog.Events.LogEventLevel.Debug) && !ReferenceEquals(enriched.Competitor, punch.Competitor))
-        Log.Debug("Enricher {enricher} on {source}/{competitorId}: bib={bib} name={name}",
-          name, enriched.SourceId, enriched.CompetitorId, enriched.Competitor?.Bib, enriched.Competitor?.Name);
-
-      punch = enriched;
+      punch = enricher.Enrich(punch);
     }
 
     return punch;

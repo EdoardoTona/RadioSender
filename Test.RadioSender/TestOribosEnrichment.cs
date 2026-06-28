@@ -11,6 +11,9 @@ public class TestOribosEnrichment
   private static OrServer Server(DateTimeOffset startutc, params OrCompetitor[] competitors)
     => new() { Update = startutc, Race = new OrRace { Startutc = startutc }, Competitors = competitors };
 
+  private static OrServer ServerWithClubs(DateTimeOffset startutc, OrClub[] clubs, params OrCompetitor[] competitors)
+    => new() { Update = startutc, Race = new OrRace { Startutc = startutc }, Competitors = competitors, Clubs = clubs };
+
   private static readonly DateTimeOffset RaceStart = new(2026, 06, 28, 10, 00, 00, TimeSpan.Zero);
 
   [Test]
@@ -27,6 +30,29 @@ public class TestOribosEnrichment
     Assert.That(cardMap["1234"].Bib, Is.EqualTo("101"));
     Assert.That(cardMap["5678"].Bib, Is.EqualTo("101"));
     Assert.That(bibMap["101"].Card, Is.EqualTo("1234"));
+    Assert.That(bibMap["101"].Card2, Is.EqualTo("5678")); // both cards exposed on the entry
+  }
+
+  [Test]
+  public void Entry_PopulatesNameClassNationAndClub()
+  {
+    var data = ServerWithClubs(RaceStart,
+      [new OrClub { CountryId = "7", Country = "ITA", Name = "ASD Foo" }],
+      new OrCompetitor
+      {
+        Bib = 101, Card = 1234, Name = "John", Surname = "Doe", Class = "H21",
+        Naz = "GBR", ClubId = "7", ClubCountry = "ITA", Status = "GA"
+      });
+
+    var (_, bibMap, _) = OribosService.BuildLookups(data);
+    var e = bibMap["101"];
+
+    Assert.That(e.Name, Is.EqualTo("John Doe"));
+    Assert.That(e.Class, Is.EqualTo("H21"));
+    Assert.That(e.Nation, Is.EqualTo("GBR"));      // athlete nation
+    Assert.That(e.ClubId, Is.EqualTo("7"));
+    Assert.That(e.ClubName, Is.EqualTo("ASD Foo")); // resolved from Clubs[]
+    Assert.That(e.ClubNation, Is.EqualTo("ITA"));   // club nation
   }
 
   [Test]
@@ -58,6 +84,7 @@ public class TestOribosEnrichment
   }
 
   [TestCase("PM", CompetitorStatus.MP)]
+  [TestCase("PE", CompetitorStatus.MP)]
   [TestCase("NP", CompetitorStatus.DNS)]
   [TestCase("SQ", CompetitorStatus.DSQ)]
   [TestCase("RI", CompetitorStatus.DNF)]

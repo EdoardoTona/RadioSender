@@ -18,9 +18,14 @@ namespace RadioSender.Hosts.Common
   public record Competitor(
     string? Bib = null,
     string? Card = null,
+    string? Card2 = null,       // seconda card assegnata all'atleta, se presente
     string? Name = null,
     string? Class = null,
-    DateTime? StartTime = null // orario di partenza teorico (assoluto)
+    string? Nation = null,      // nazione dell'atleta
+    string? ClubId = null,
+    string? ClubName = null,
+    string? ClubNation = null,  // nazione del club
+    DateTime? StartTime = null  // orario di partenza teorico (assoluto)
     );
 
   public record Punch(

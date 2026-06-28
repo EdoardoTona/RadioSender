@@ -18,8 +18,13 @@ namespace RadioSender.Helpers
         // prefer the enriched value; fall back to CompetitorId when its type matches
         "Bib" or "bib" => punch.Competitor?.Bib ?? (punch.CompetitorIdType == CompetitorIdType.BibNumber ? punch.CompetitorId : ""),
         "Card" or "card" => punch.Competitor?.Card ?? (punch.CompetitorIdType == CompetitorIdType.PunchingCard ? punch.CompetitorId : ""),
+        "Card2" or "card2" => punch.Competitor?.Card2 ?? "",
         "Name" or "name" => punch.Competitor?.Name ?? "",
         "Class" or "class" => punch.Competitor?.Class ?? "",
+        "Nation" or "nation" => punch.Competitor?.Nation ?? "",
+        "ClubId" or "clubid" => punch.Competitor?.ClubId ?? "",
+        "ClubName" or "clubname" or "Club" or "club" => punch.Competitor?.ClubName ?? "",
+        "ClubNation" or "clubnation" => punch.Competitor?.ClubNation ?? "",
         "StartTime" or "starttime" => punch.Competitor?.StartTime is DateTime st ? st : "", // IFormattable when present
         "CompetitorIdType" or "competitoridtype" => punch.CompetitorIdType,
         "Control" or "control" => punch.Control,

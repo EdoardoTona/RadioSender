@@ -15,29 +15,17 @@
 }
 <div class="row h-100">
   <div class="col h-100 bg-light bg-gradient border-end" id="punchesContainer">
-    <table id="punches"
-           class="table table-striped table-sm"
-           data-height="400"
-           data-sortable="true"
-           data-sort-name="time"
-           data-sort-order="desc"
-           data-virtual-scroll="true"
+    <table id="punches" class="table table-striped table-sm" data-height="400" data-sortable="true"
+           data-sort-name="time" data-sort-order="desc" data-virtual-scroll="true" data-row-style="rowStyle"
            data-search="true">
       <thead>
         <tr>
-          <th data-field="time" data-sortable="true">Time</th>
-          <th data-field="competitorId" data-sortable="true">Competitor Id</th>
-          <th data-field="competitorIdType" data-sortable="true">Competitor Id Type</th>
-          <th data-field="competitor.bib" data-sortable="true" data-formatter="enrichedFormatter">Bib</th>
-          <th data-field="competitor.name" data-sortable="true" data-formatter="enrichedFormatter">Name</th>
-          <th data-field="competitor.class" data-sortable="true" data-formatter="enrichedFormatter">Class</th>
-          <th data-field="competitor.startTime" data-sortable="true" data-formatter="startTimeFormatter">Start</th>
-          <th data-field="control" data-sortable="true">Control</th>
-          <th data-field="controlType" data-sortable="true">Control Type</th>
-          <th data-field="sourceId" data-sortable="true">Source</th>
-          <th data-field="cancellation" data-sortable="true">Cancellation</th>
-                    <th data-field="competitorStatus" data-sortable="true">Competitor Status</th>
-                    <th data-field="receivedAt" data-sortable="true">Receved At</th>
+          <th data-field="competitorId" data-sortable="true" data-formatter="competitorIdFormatter">Competitor Id</th>
+          <th data-field="time" data-sortable="true" data-formatter="dataFormatter">Data</th>
+          <th data-field="competitor.bib" data-sortable="true" data-formatter="bibFormatter">Bib</th>
+          <th data-field="competitor.card" data-sortable="true" data-formatter="cardFormatter">Card</th>
+          <th data-field="competitor.name" data-sortable="true" data-formatter="nameFormatter">Name</th>
+          <th data-field="receivedAt" data-sortable="true" data-formatter="receivedFormatter">Received At</th>
         </tr>
       </thead>
     </table>
@@ -48,15 +36,113 @@
 {
   <script>
 
-    // enriched competitor fields (populated by an enrichment source, may be absent)
-    function enrichedFormatter(value, row) {
-      return value ?? '';
+    // bib with the competitor class on a second line
+    function bibFormatter(value, row) {
+    const cls = row.competitor && row.competitor.class;
+    const sub = cls ? `<br><small class="text-muted">${cls}</small>` : '';
+    return `${value ?? ''}${sub}`;
     }
 
-    function startTimeFormatter(value, row) {
-      if (!value) return '';
-      const d = new Date(value);
-      return isNaN(d) ? value : d.toLocaleTimeString();
+    // first line: "nation - name"; second line: "clubNation clubId clubName"
+    function nameFormatter(value, row) {
+    const c = row.competitor || {};
+    const top = [c.nation, value].filter(Boolean).join(' - ');
+    const bottom = [c.clubNation, c.clubId, c.clubName].filter(Boolean).join(' ');
+    const sub = bottom ? `<br><small class="text-muted">${bottom}</small>` : '';
+    return `${top}${sub}`;
+    }
+
+    // card on the first line; second card (if the athlete has one) on a second line
+    function cardFormatter(value, row) {
+    const c = row.competitor || {};
+    const card2 = c.card2;
+    const sub = card2 ? `<br><small class="text-muted">${card2}</small>` : '';
+    return `${value ?? ''}${sub}`;
+    }
+
+    // local time including milliseconds when present (e.g. 21:45:59.123)
+    function timeWithMs(d) {
+    const time = d.toLocaleTimeString();
+    const ms = d.getMilliseconds();
+    return ms ? `${time}.${String(ms).padStart(3, '0')}` : time;
+    }
+
+    // received time on the first line; source on a second line
+    function receivedFormatter(value, row) {
+    if (!value) return '';
+    const d = new Date(value);
+    const time = isNaN(d) ? value : timeWithMs(d);
+    const sub = row.sourceId ? `<br><small class="text-muted">${row.sourceId}</small>` : '';
+    return `${time}${sub}`;
+    }
+
+    // abbreviated competitor id type as a second line under the id
+    function competitorIdTypeShort(type) {
+    switch (type) {
+    case 'BibNumber': return 'bib';
+    case 'PunchingCard': return 'card';
+    case 'TimingTransponder': return 'transponder';
+    default: return '';
+    }
+    }
+
+    function competitorIdFormatter(value, row) {
+    const short = competitorIdTypeShort(row.competitorIdType);
+    const sub = short ? `<br><small class="text-muted">${short}</small>` : '';
+    return `${value ?? ''}${sub}`;
+    }
+
+    // abbreviated control type
+    function controlTypeShort(type) {
+    switch (type) {
+    case 'Control': return 'control';
+    case 'Finish': return 'finish';
+    case 'Clear': return 'clear';
+    case 'Check': return 'check';
+    case 'Start': return 'start';
+    default: return '';
+    }
+    }
+
+    // "Data" cell: left column = time / date(if not today); right column = status-or-control.
+    // When a status is present it shows on the top-right, and the control (code + type)
+    // moves to the bottom-right so it is still visible. Otherwise top-right is the control
+    // code and bottom-right is the control type.
+    //   status: [ time | DNS    ]      punch: [ time | 0     ]
+    //           [ date | 0 start ]            [ date | start ]
+    function dataFormatter(value, row) {
+    const d = value ? new Date(value) : null;
+    const validDate = d && !isNaN(d);
+    const time = validDate ? timeWithMs(d) : (value ?? '');
+    const isToday = validDate && d.toDateString() === new Date().toDateString();
+    const dateLine = (validDate && !isToday) ? d.toLocaleDateString() : '';
+
+    const type = controlTypeShort(row.controlType);
+    const hasStatus = row.competitorStatus && row.competitorStatus !== 'Unknown';
+
+    let topRight, bottomRight;
+    if (hasStatus) {
+    topRight = `<strong>${row.competitorStatus}</strong>`;
+    bottomRight = [row.control, type].filter(v => v !== null && v !== undefined && v !== '').join(' ');
+    } else {
+    topRight = (row.control ?? '');
+    bottomRight = type;
+    }
+
+    // fixed-width left column so the status/control part starts at the same x
+    // for both normal punches and competitor-status rows
+    return `<table class="mb-0" style="border:0"><tbody>
+    <tr><td class="p-0" style="width:13ch;white-space:nowrap">${time}</td><td class="p-0 ps-2">${topRight}</td></tr>
+    <tr><td class="p-0" style="width:13ch;white-space:nowrap"><small class="text-muted">${dateLine}</small></td>
+    <td class="p-0 ps-2"><small class="text-muted">${bottomRight}</small></td></tr>
+    </tbody></table>`;
+    }
+
+    // strike through the whole row when the punch is cancelled
+    function rowStyle(row, index) {
+    return row.cancellation
+    ? { css: { 'text-decoration': 'line-through', 'opacity': '0.6' } }
+    : {};
     }
 
     let $table = $('#punches');
@@ -65,37 +151,37 @@
 
 
     let ro = new ResizeObserver(elements => {
-      console.log(punchesContainer.clientHeight)
-      $table.bootstrapTable('refreshOptions', {
-        height: punchesContainer.clientHeight
-      })
+    console.log(punchesContainer.clientHeight)
+    $table.bootstrapTable('refreshOptions', {
+    height: punchesContainer.clientHeight
+    })
     });
 
     ro.observe(punchesContainer);
 
     connection.on("punches", async (p) => {
 
-      try {
-        $table.bootstrapTable('load', p);
-
-
-      } catch (e) {
-        console.log(e)
-      }
-
-    });
-
-  connection.on("punch", async (p) => {
-
     try {
-      $table.bootstrapTable('insertRow', { index: 0, row: p });
+    $table.bootstrapTable('load', p);
 
 
     } catch (e) {
-      console.log(e)
+    console.log(e)
     }
 
-  });
+    });
+
+    connection.on("punch", async (p) => {
+
+    try {
+    $table.bootstrapTable('insertRow', { index: 0, row: p });
+
+
+    } catch (e) {
+    console.log(e)
+    }
+
+    });
 
     const GROUP = "@DeviceHub.GROUP_PUNCHES";
     start();

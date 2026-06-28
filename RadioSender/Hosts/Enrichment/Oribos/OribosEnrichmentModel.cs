@@ -17,6 +17,15 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     public DateTimeOffset Update { get; init; }
     public OrRace Race { get; init; } = new();
     public IEnumerable<OrCompetitor>? Competitors { get; init; }
+    public IEnumerable<OrClub>? Clubs { get; init; }
+  }
+
+  public record OrClub
+  {
+    public string? CountryId { get; init; } // matches OrCompetitor.ClubId
+    public string? Country { get; init; }
+    public string? Name { get; init; }
+    public string? ShortName { get; init; }
   }
 
   public record OrRace
@@ -35,7 +44,10 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     public string? Name { get; init; }
     public string? Surname { get; init; }
     public string? Class { get; init; }
+    public string? ClubId { get; init; }      // matches OrClub.CountryId
+    public string? ClubCountry { get; init; } // club nation
+    public string? Naz { get; init; }         // athlete nation
     public double Start { get; init; } // seconds relative to race start
-    public string? Status { get; init; } // CL, PM, NP, SQ, RI, FT, GA, IP, DI...
+    public string? Status { get; init; } // CL, PE/PM, NP, SQ, RI, FT, GA, IP, DI...
   }
 }
