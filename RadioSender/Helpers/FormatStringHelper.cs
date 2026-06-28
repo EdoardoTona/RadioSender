@@ -14,7 +14,9 @@ namespace RadioSender.Helpers
     {
       return key switch
       {
-        "Card" or "card" or "Bib" or "bib" or "CompetitorId" or "competitorid" => punch.CompetitorId,
+        "CompetitorId" or "competitorid" => punch.CompetitorId, // the id whatever its type
+        "Bib" or "bib" => punch.CompetitorIdType == CompetitorIdType.BibNumber ? punch.CompetitorId : "", // only when it is a bib number
+        "Card" or "card" => punch.CompetitorIdType == CompetitorIdType.PunchingCard ? punch.CompetitorId : "", // only when it is a punching card
         "CompetitorIdType" or "competitoridtype" => punch.CompetitorIdType,
         "Control" or "control" => punch.Control,
         "ControlType" or "controltype" => punch.ControlType,

@@ -24,6 +24,7 @@ public class TestFormatString
 
   [TestCase("1234", "{Card}")]
   [TestCase("1234", "{CompetitorId}")]
+  [TestCase("", "{Bib}")] // punch is a punching card, so {Bib} is empty
   [TestCase("PunchingCard", "{CompetitorIdType}")]
   [TestCase("31", "{Control}")]
   [TestCase("1234", "{card}")]
@@ -56,5 +57,24 @@ public class TestFormatString
     Assert.AreEqual(expected, res);
 
     Assert.Pass();
+  }
+
+  [TestCase("101", "{Bib}")]         // punch is a bib number
+  [TestCase("101", "{CompetitorId}")]
+  [TestCase("", "{Card}")]           // ...so {Card} is empty
+  public void TestBibNumber(string expected, string conf)
+  {
+    var bibPunch = new Punch(
+      CompetitorId: "101",
+      CompetitorIdType: CompetitorIdType.BibNumber,
+      Control: 31,
+      SourceId: "test",
+      ReceivedAt: new System.DateTimeOffset(2021, 08, 04, 21, 45, 59, 123, System.TimeSpan.Zero),
+      ControlType: PunchControlType.Control,
+      Time: new System.DateTime(2021, 08, 04, 21, 45, 59, 123)
+      );
+
+    var res = FormatStringHelper.GetString(bibPunch, conf);
+    Assert.AreEqual(expected, res);
   }
 }
