@@ -77,4 +77,33 @@ public class TestFormatString
     var res = FormatStringHelper.GetString(bibPunch, conf);
     Assert.AreEqual(expected, res);
   }
+
+  [TestCase("101", "{Bib}")]          // enriched: bib resolved from card
+  [TestCase("1234", "{Card}")]        // enriched card value
+  [TestCase("1234", "{CompetitorId}")] // raw id stays the card
+  [TestCase("John Doe", "{Name}")]
+  [TestCase("H21", "{Class}")]
+  [TestCase("10:30:00", "{StartTime:HH:mm:ss}")]
+  public void TestEnriched(string expected, string conf)
+  {
+    // a punch that arrived as a punching card, enriched with bib/name/class/start
+    var enriched = new Punch(
+      CompetitorId: "1234",
+      CompetitorIdType: CompetitorIdType.PunchingCard,
+      Control: 31,
+      SourceId: "roc",
+      ReceivedAt: new System.DateTimeOffset(2021, 08, 04, 21, 45, 59, 123, System.TimeSpan.Zero),
+      ControlType: PunchControlType.Control,
+      Time: new System.DateTime(2021, 08, 04, 21, 45, 59, 123),
+      Competitor: new Competitor(
+        Bib: "101",
+        Card: "1234",
+        Name: "John Doe",
+        Class: "H21",
+        StartTime: new System.DateTime(2021, 08, 04, 10, 30, 0))
+      );
+
+    var res = FormatStringHelper.GetString(enriched, conf);
+    Assert.AreEqual(expected, res);
+  }
 }

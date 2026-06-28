@@ -28,6 +28,10 @@
           <th data-field="time" data-sortable="true">Time</th>
           <th data-field="competitorId" data-sortable="true">Competitor Id</th>
           <th data-field="competitorIdType" data-sortable="true">Competitor Id Type</th>
+          <th data-field="competitor.bib" data-sortable="true" data-formatter="enrichedFormatter">Bib</th>
+          <th data-field="competitor.name" data-sortable="true" data-formatter="enrichedFormatter">Name</th>
+          <th data-field="competitor.class" data-sortable="true" data-formatter="enrichedFormatter">Class</th>
+          <th data-field="competitor.startTime" data-sortable="true" data-formatter="startTimeFormatter">Start</th>
           <th data-field="control" data-sortable="true">Control</th>
           <th data-field="controlType" data-sortable="true">Control Type</th>
           <th data-field="sourceId" data-sortable="true">Source</th>
@@ -43,6 +47,17 @@
 @section Scripts
 {
   <script>
+
+    // enriched competitor fields (populated by an enrichment source, may be absent)
+    function enrichedFormatter(value, row) {
+      return value ?? '';
+    }
+
+    function startTimeFormatter(value, row) {
+      if (!value) return '';
+      const d = new Date(value);
+      return isNaN(d) ? value : d.toLocaleTimeString();
+    }
 
     let $table = $('#punches');
 

@@ -10,6 +10,9 @@ namespace RadioSender.Hosts.Common.Filters
 
     public string Name { get; init; } = null!;
     public bool Enable { get; init; } = true;
+    // Names of the enrichment sources to apply, in order (later ones can overwrite earlier ones).
+    // Applied by FilterService (this record has no access to DI services).
+    public IReadOnlyList<string> Enrichers { get; init; } = [];
     public HashSet<int> IncludeOnlyControls { get; init; } = new HashSet<int>();
     public HashSet<string> IncludeOnlyCompetitorIds { get; init; } = new HashSet<string>();
     [Obsolete("Use IncludeOnlyCompetitorIds instead")]

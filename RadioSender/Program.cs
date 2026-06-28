@@ -15,6 +15,7 @@ using RadioSender.Hosts.Source.Mqtt;
 using RadioSender.Hosts.Source.OBR;
 using RadioSender.Hosts.Source.ROC;
 using RadioSender.Hosts.Source.SIRAP;
+using RadioSender.Hosts.Enrichment.Oribos;
 using RadioSender.Hosts.Source.SportidentCenter;
 using RadioSender.Hosts.Source.SportidentSerial;
 using RadioSender.Hosts.Source.TmFRadio;
@@ -90,6 +91,7 @@ public static class Program
             app.Run();
           }
           catch (OperationCanceledException) { }
+          catch (Exception ex) { Log.Fatal(ex, "**** Web host crashed ****"); }
         });
         webHostThread.IsBackground = true;
         webHostThread.Start();
@@ -152,6 +154,8 @@ public static class Program
                 .FromMicroplus()
                 .FromMicrogate()
                 .FromObr()
+    // Enrichment
+                .WithOribosEnrichment()
     // Middleware
                 .ThroughDispatcher()
     // Targets

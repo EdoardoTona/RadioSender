@@ -15,8 +15,12 @@ namespace RadioSender.Helpers
       return key switch
       {
         "CompetitorId" or "competitorid" => punch.CompetitorId, // the id whatever its type
-        "Bib" or "bib" => punch.CompetitorIdType == CompetitorIdType.BibNumber ? punch.CompetitorId : "", // only when it is a bib number
-        "Card" or "card" => punch.CompetitorIdType == CompetitorIdType.PunchingCard ? punch.CompetitorId : "", // only when it is a punching card
+        // prefer the enriched value; fall back to CompetitorId when its type matches
+        "Bib" or "bib" => punch.Competitor?.Bib ?? (punch.CompetitorIdType == CompetitorIdType.BibNumber ? punch.CompetitorId : ""),
+        "Card" or "card" => punch.Competitor?.Card ?? (punch.CompetitorIdType == CompetitorIdType.PunchingCard ? punch.CompetitorId : ""),
+        "Name" or "name" => punch.Competitor?.Name ?? "",
+        "Class" or "class" => punch.Competitor?.Class ?? "",
+        "StartTime" or "starttime" => punch.Competitor?.StartTime is DateTime st ? st : "", // IFormattable when present
         "CompetitorIdType" or "competitoridtype" => punch.CompetitorIdType,
         "Control" or "control" => punch.Control,
         "ControlType" or "controltype" => punch.ControlType,

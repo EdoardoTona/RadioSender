@@ -13,6 +13,16 @@ namespace RadioSender.Hosts.Common
     public string Id { get => From + To; }
   }
   public record PunchDispatch(IEnumerable<Punch>? Punches = null, IEnumerable<Hop>? Hops = null, IEnumerable<NodeNew>? Nodes = null);
+  // Dati anagrafici arricchiti da un IEnrichmentSource (es. mappatura Card↔Bib da Oribos).
+  // Tutti i campi opzionali: ciò che l'enricher non conosce resta null.
+  public record Competitor(
+    string? Bib = null,
+    string? Card = null,
+    string? Name = null,
+    string? Class = null,
+    DateTime? StartTime = null // orario di partenza teorico (assoluto)
+    );
+
   public record Punch(
     string CompetitorId,
     DateTime Time,
@@ -23,7 +33,8 @@ namespace RadioSender.Hosts.Common
     PunchControlType ControlType = PunchControlType.Unknown,
     CompetitorStatus CompetitorStatus = CompetitorStatus.Unknown,
     bool Cancellation = false,
-    bool NetTime = false
+    bool NetTime = false,
+    Competitor? Competitor = null
     )
   {
     public string Card => CompetitorId;
