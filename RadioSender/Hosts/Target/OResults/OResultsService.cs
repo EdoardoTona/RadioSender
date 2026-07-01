@@ -75,9 +75,20 @@ namespace RadioSender.Hosts.Target.OResults
 
     private static OResultsPunch? ToRecord(Punch punch, bool useUtc)
     {
-      if (!long.TryParse(punch.CompetitorId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var card))
+      // OResults does not support cancellations
+      if (punch.Cancellation)
+        return null;
+
+      // OResults wants the SI card number. Prefer the card resolved by enrichment;
+      // fall back to CompetitorId only when no specific card is available
+      // (valid only if the punch itself is a punching card).
+      var cardStr = punch.Competitor?.Card
+        ?? (punch.CompetitorIdType is CompetitorIdType.PunchingCard or CompetitorIdType.Unknown ? punch.CompetitorId : null);
+
+      if (!long.TryParse(cardStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var card))
       {
-        Log.Warning("OResults requires a numeric card number, got '{competitorId}'. Ignored", punch.CompetitorId);
+        Log.Warning("OResults requires a numeric card number, got competitorId '{competitorId}' (type {type}) with no enriched card. Ignored",
+          punch.CompetitorId, punch.CompetitorIdType);
         return null;
       }
 

@@ -67,8 +67,18 @@ namespace RadioSender.Hosts.Target.SIRAP
 
     private static byte[]? GetBytes(Punch punch, int version, TimeSpan zeroTime)
     {
-      if (!int.TryParse(punch.CompetitorId, out int chipNo))
-        return null; // not numeric competitor ids are not supported in SIRAP
+      // SIRAP does not support cancellations
+      if (punch.Cancellation)
+        return null;
+
+      // SIRAP is a chip (SI card) protocol. Prefer the card resolved by enrichment;
+      // fall back to CompetitorId only when no specific card is available
+      // (valid only if the punch itself is a punching card).
+      var cardStr = punch.Competitor?.Card
+        ?? (punch.CompetitorIdType is CompetitorIdType.PunchingCard or CompetitorIdType.Unknown ? punch.CompetitorId : null);
+
+      if (!int.TryParse(cardStr, out int chipNo))
+        return null; // a numeric card is required by SIRAP
 
       using var ms = _memoryManager.GetStream();
       using var bw = new BinaryWriter(ms);
