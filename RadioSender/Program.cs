@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -136,6 +137,33 @@ public static class Program
       Args = args,
       ContentRootPath = AppContext.BaseDirectory
     });
+
+    // The content root is the build output, so the default providers watch the
+    // appsettings copies in bin/, which only change on rebuild. In Development
+    // also watch the files in the project directory (the cwd under VS/dotnet run)
+    // so editing them live-reloads the configuration. They are inserted right
+    // after the default json providers to keep env vars and command line args
+    // at higher precedence.
+    if (builder.Environment.IsDevelopment())
+    {
+      var cwd = Directory.GetCurrentDirectory();
+      if (!string.Equals(Path.TrimEndingDirectorySeparator(cwd), Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), StringComparison.OrdinalIgnoreCase))
+      {
+        var sources = ((IConfigurationBuilder)builder.Configuration).Sources;
+        var insertAt = sources.Count;
+        for (var i = 0; i < sources.Count; i++)
+          if (sources[i] is JsonConfigurationSource)
+            insertAt = i + 1;
+
+        foreach (var file in new[] { "appsettings.json", $"appsettings.{builder.Environment.EnvironmentName}.json" })
+        {
+          var source = new JsonConfigurationSource { Path = Path.Combine(cwd, file), Optional = true, ReloadOnChange = true };
+          source.ResolveFileProvider();
+          sources.Insert(insertAt++, source);
+        }
+      }
+    }
+
     builder.Host.UseSerilog();
     builder.Host.UseHangfire();
     builder.Host.UseFilters();

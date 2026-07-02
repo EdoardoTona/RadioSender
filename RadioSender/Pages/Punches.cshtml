@@ -15,9 +15,25 @@
 }
 <div class="row h-100">
   <div class="col h-100 bg-light bg-gradient border-end" id="punchesContainer">
+    <div class="d-flex align-items-center gap-2" id="punchesToolbar">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Ritrasmetti
+        </button>
+        <ul class="dropdown-menu">
+          <li><button class="dropdown-item replay-batch" type="button" data-count="10">Ultimi 10</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="25">Ultimi 25</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="50">Ultimi 50</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="100">Ultimi 100</button></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><button class="dropdown-item replay-batch" type="button">Tutti</button></li>
+        </ul>
+      </div>
+      <small class="text-muted text-truncate" id="replayFeedback" style="max-width:40ch"></small>
+    </div>
     <table id="punches" class="table table-striped table-sm" data-height="400" data-sortable="true"
            data-sort-name="time" data-sort-order="desc" data-virtual-scroll="true" data-row-style="rowStyle"
-           data-search="true">
+           data-search="true" data-toolbar="#punchesToolbar">
       <thead>
         <tr>
           <th data-field="competitorId" data-sortable="true" data-formatter="competitorIdFormatter">Competitor Id</th>
@@ -26,6 +42,7 @@
           <th data-field="competitor.card" data-sortable="true" data-formatter="cardFormatter">Card</th>
           <th data-field="competitor.name" data-sortable="true" data-formatter="nameFormatter">Name</th>
           <th data-field="receivedAt" data-sortable="true" data-formatter="receivedFormatter">Received At</th>
+          <th data-field="comparisonKey" data-width="48" data-align="center" data-formatter="replayFormatter" data-events="replayEvents"></th>
         </tr>
       </thead>
     </table>
@@ -145,19 +162,113 @@
     : {};
     }
 
+    function replayFormatter(value, row) {
+    return `<button type="button" class="btn btn-sm btn-outline-secondary replay-punch" title="Ritrasmetti" aria-label="Ritrasmetti">
+    <span aria-hidden="true">&#8635;</span>
+    </button>`;
+    }
+
+    function formatReplayResult(result) {
+    const punches = result && Number.isInteger(result.punches) ? result.punches : 0;
+    const targets = result && Number.isInteger(result.targets) ? result.targets : 0;
+
+    if (punches === 0) {
+    return { text: 'Nessun record da ritrasmettere', error: true };
+    }
+
+    if (targets === 0) {
+    return { text: 'Nessun target disponibile per la ritrasmissione', error: true };
+    }
+
+    const verb = punches === 1 ? 'ritrasmesso' : 'ritrasmessi';
+    return { text: `${punches} record ${verb} a ${targets} target`, error: false };
+    }
+
+    function setReplayFeedback(text, error) {
+    const $feedback = $('#replayFeedback');
+    $feedback
+    .toggleClass('text-muted', !text)
+    .toggleClass('text-success', !!text && !error)
+    .toggleClass('text-danger', !!text && error)
+    .text(text);
+
+    if (!text) return;
+
+    setTimeout(() => {
+    if ($feedback.text() === text) {
+    $feedback.removeClass('text-success text-danger').addClass('text-muted').text('');
+    }
+    }, 4000);
+    }
+
+    async function replayPunch(row, button) {
+    const key = row && row.comparisonKey;
+    if (!key) {
+    setReplayFeedback('Record senza chiave di ritrasmissione', true);
+    return;
+    }
+
+    const $button = $(button);
+    $button.prop('disabled', true);
+
+    try {
+    const result = await connection.invoke('ReplayPunch', key);
+    const message = formatReplayResult(result);
+    setReplayFeedback(message.text, message.error);
+    } catch (e) {
+    console.log(e);
+    setReplayFeedback('Ritrasmissione fallita', true);
+    } finally {
+    $button.prop('disabled', false);
+    }
+    }
+
+    async function replayBatch(count) {
+    const $buttons = $('.replay-batch');
+    $buttons.prop('disabled', true);
+
+    try {
+    const result = await connection.invoke('ReplayLatestPunches', count);
+    const message = formatReplayResult(result);
+    setReplayFeedback(message.text, message.error);
+    } catch (e) {
+    console.log(e);
+    setReplayFeedback('Ritrasmissione batch fallita', true);
+    } finally {
+    $buttons.prop('disabled', false);
+    }
+    }
+
+    window.replayEvents = {
+    'click .replay-punch': function (event, value, row, index) {
+    event.preventDefault();
+    event.stopPropagation();
+    replayPunch(row, this);
+    }
+    };
+
+    const punchesContainerElement = document.getElementById('punchesContainer');
+
+    $('.replay-batch').on('click', function (event) {
+    event.preventDefault();
+
+    const raw = this.getAttribute('data-count');
+    const count = raw ? Number.parseInt(raw, 10) : null;
+    replayBatch(Number.isNaN(count) ? null : count);
+    });
+
     let $table = $('#punches');
 
     $table.bootstrapTable({});
 
 
     let ro = new ResizeObserver(elements => {
-    console.log(punchesContainer.clientHeight)
     $table.bootstrapTable('refreshOptions', {
-    height: punchesContainer.clientHeight
+    height: punchesContainerElement.clientHeight
     })
     });
 
-    ro.observe(punchesContainer);
+    ro.observe(punchesContainerElement);
 
     connection.on("punches", async (p) => {
 

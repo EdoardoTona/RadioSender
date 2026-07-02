@@ -16,6 +16,8 @@ namespace RadioSender.Hosts.Target.UI
 {
   public sealed class UIService : IHostedService, ITarget, IDisposable
   {
+    public TargetDescriptor Descriptor => new("ui", "UI", ManualReplay: false);
+
     private readonly FilterService _filterService;
     private UIConfiguration _configuration;
     private readonly IHubContext<DeviceHub, IDeviceHub> _hubContext;

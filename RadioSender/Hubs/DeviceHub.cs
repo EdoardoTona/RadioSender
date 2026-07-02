@@ -39,6 +39,16 @@ namespace RadioSender.Hubs
         _dispatcher.Ping();
     }
 
+    public Task<ReplayResult> ReplayPunch(string comparisonKey)
+    {
+      return _dispatcher.ReplayPunchAsync(comparisonKey);
+    }
+
+    public Task<ReplayResult> ReplayLatestPunches(int? count)
+    {
+      return _dispatcher.ReplayLatestPunchesAsync(count);
+    }
+
     public override Task OnDisconnectedAsync(Exception? exception)
     {
       base.OnDisconnectedAsync(exception);
