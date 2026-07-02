@@ -17,7 +17,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
   public record OribosEntry(
     string Bib, string? Card, string? Card2, string? Name, string? Class,
     string? Nation, string? ClubId, string? ClubName, string? ClubNation,
-    DateTime? StartTime, string Status);
+    DateTime? StartTime, string Status, DateTime? FinishTime = null, bool SubJudice = false);
 
   public sealed class OribosService : IEnrichmentSource, IRadioSenderHost, IDisposable
   {
@@ -338,7 +338,9 @@ namespace RadioSender.Hosts.Enrichment.Oribos
         ClubName: clubName,
         ClubNation: string.IsNullOrWhiteSpace(c.ClubCountry) ? null : c.ClubCountry,
         StartTime: AbsoluteStart(startutc, c.Start),
-        Status: c.Status ?? "");
+        Status: c.Status ?? "",
+        FinishTime: AbsoluteFinish(startutc, c.Finish),
+        SubJudice: c.Sj);
     }
 
     // Oribos Start is seconds relative to race start; values above 11h are wrapped (start
@@ -352,6 +354,15 @@ namespace RadioSender.Hosts.Enrichment.Oribos
 
     public static double NormalizeRelativeStart(double start)
       => start > StartBeforeRaceStartThresholdSeconds ? start - StartBeforeRaceStartModuloSeconds : start;
+
+    // Oribos Finish is seconds relative to race start; finishes are always after race
+    // start, so no 12h wrapping applies. Returns absolute local time, or null when not set.
+    public static DateTime? AbsoluteFinish(DateTimeOffset startutc, double finish)
+    {
+      if (finish <= 0)
+        return null;
+      return (startutc + TimeSpan.FromSeconds(finish)).LocalDateTime;
+    }
 
     // Oribos status code → RadioSender CompetitorStatus. Null = ignored (no enum / no event).
     public static CompetitorStatus? MapStatus(string? status) => status?.ToUpperInvariant() switch
@@ -367,9 +378,104 @@ namespace RadioSender.Hosts.Enrichment.Oribos
       _ => null,
     };
 
-    // Only "anomalous" outcomes are emitted as events when newly detected.
+    // "Anomalous" outcomes: emitted whenever newly detected. Their later corrections
+    // (back to CL with the official time, or reset to IP/GA) are emitted too — see
+    // EvaluateTransition.
     private static readonly HashSet<CompetitorStatus> EmittableStatuses =
       [CompetitorStatus.MP, CompetitorStatus.DNS, CompetitorStatus.DSQ, CompetitorStatus.DNF, CompetitorStatus.OverTime];
+
+    // A status already broadcast to targets as a final outcome: a later change away
+    // from it must be propagated downstream as a correction.
+    private static bool IsFinalOutcome(CompetitorStatus status)
+      => status == CompetitorStatus.OK || EmittableStatuses.Contains(status);
+
+    // Decides whether a prev→new status change must be emitted and with which status,
+    // and whether the punch must carry the official finish time:
+    // - → PM/PE/NP/SQ/RI/FT (anomalous): always emitted (also when prev is unknown)
+    // - PM/PE/... → CL: emitted as OK with the finish time; for targets a regular time
+    //   means "correctly classified with this time" and overwrites the anomalous status.
+    //   Also emitted when prev is unknown (bib first seen sub judice, e.g. the service
+    //   started during a review: the confirmed classification must still reach targets)
+    // - CL/PM/PE/... → IP/GA: result voided, competitor back to start/course, emitted so
+    //   targets reset; the normal pre-arrival IP→GA progression is never emitted
+    public static (CompetitorStatus status, bool useFinishTime)? EvaluateTransition(string? prevStatus, string? newStatus)
+    {
+      if (MapStatus(newStatus) is not CompetitorStatus status)
+        return null;
+
+      if (EmittableStatuses.Contains(status))
+        return (status, false);
+
+      var prev = MapStatus(prevStatus);
+
+      if (status == CompetitorStatus.OK)
+      {
+        // suppressed only for the normal arrival (GA/IP → CL): that time already
+        // flowed to the targets through the regular punches
+        var normalArrival = prev is CompetitorStatus p && !EmittableStatuses.Contains(p);
+        return normalArrival ? null : (status, true);
+      }
+
+      if (prev is not CompetitorStatus prevOutcome || !IsFinalOutcome(prevOutcome))
+        return null;
+
+      if (status is CompetitorStatus.Running or CompetitorStatus.WaitingStart)
+        return (status, false);
+
+      return null;
+    }
+
+    // Computes the next status snapshot and the status changes to emit.
+    // Sub judice entries are frozen: the snapshot keeps their last confirmed status and
+    // nothing is emitted for them; once the flag is cleared the transition is evaluated
+    // against that confirmed status. A CL reached without a finish time in the feed is
+    // also kept pending, so the correction is retried when the time appears.
+    public static (Dictionary<string, string> snapshot, List<(OribosEntry entry, CompetitorStatus status, bool useFinishTime)> toEmit)
+      ComputeStatusChanges(
+        IReadOnlyDictionary<string, OribosEntry> bibMap,
+        IReadOnlyDictionary<string, string> prevSnapshot,
+        bool initialized)
+    {
+      var snapshot = new Dictionary<string, string>();
+      var toEmit = new List<(OribosEntry, CompetitorStatus, bool)>();
+
+      foreach (var (bib, entry) in bibMap)
+      {
+        if (entry.SubJudice)
+        {
+          if (prevSnapshot.TryGetValue(bib, out var confirmed))
+            snapshot[bib] = confirmed;
+          continue;
+        }
+
+        snapshot[bib] = entry.Status;
+
+        if (!initialized)
+          continue; // first fetch: just initialize, never emit
+
+        prevSnapshot.TryGetValue(bib, out var prev);
+        if (prev == entry.Status)
+          continue;
+
+        if (EvaluateTransition(prev, entry.Status) is not { } transition)
+          continue;
+
+        if (transition.useFinishTime && entry.FinishTime == null)
+        {
+          // keep the previous status (or none) so the correction is retried on the
+          // next fetch, once the finish time appears in the feed
+          if (prev != null)
+            snapshot[bib] = prev;
+          else
+            snapshot.Remove(bib);
+          continue;
+        }
+
+        toEmit.Add((entry, transition.status, transition.useFinishTime));
+      }
+
+      return (snapshot, toEmit);
+    }
 
     #endregion
 
@@ -377,31 +483,20 @@ namespace RadioSender.Hosts.Enrichment.Oribos
 
     private void DetectAndEmitStatusChanges(IReadOnlyDictionary<string, OribosEntry> bibMap, DateTimeOffset update)
     {
-      var newSnapshot = new Dictionary<string, string>();
+      var (snapshot, transitions) = ComputeStatusChanges(bibMap, _statusSnapshot, _snapshotInitialized);
+      _statusSnapshot = snapshot;
+      _snapshotInitialized = true;
+
       var toEmit = new List<Punch>();
 
-      foreach (var (bib, entry) in bibMap)
+      foreach (var (entry, status, useFinishTime) in transitions)
       {
-        newSnapshot[bib] = entry.Status;
-
-        if (!_snapshotInitialized)
-          continue; // first fetch: just initialize, never emit
-
-        // emit only on a real transition to an emittable, anomalous status
-        var changed = !_statusSnapshot.TryGetValue(bib, out var prev) || prev != entry.Status;
-        if (!changed)
-          continue;
-
-        var mapped = MapStatus(entry.Status);
-        if (mapped is not CompetitorStatus status || !EmittableStatuses.Contains(status))
-          continue;
-
         toEmit.Add(new Punch(
-          CompetitorId: bib,
+          CompetitorId: entry.Bib,
           CompetitorIdType: CompetitorIdType.BibNumber,
-          Time: update.LocalDateTime,
-          Control: 0,
-          ControlType: PunchControlType.Unknown,
+          Time: useFinishTime ? entry.FinishTime!.Value : update.LocalDateTime,
+          Control: 10,
+          ControlType: useFinishTime ? PunchControlType.Finish : PunchControlType.Unknown,
           SourceId: _configuration.Name,
           ReceivedAt: DateTimeOffset.UtcNow,
           CompetitorStatus: status,
@@ -409,12 +504,11 @@ namespace RadioSender.Hosts.Enrichment.Oribos
           Competitor: ToCompetitor(entry)));
       }
 
-      _statusSnapshot = newSnapshot;
-      _snapshotInitialized = true;
-
       if (toEmit.Count > 0)
       {
-        Log.Information("Oribos enrichment '{name}' emitting {count} status change(s)", _configuration.Name, toEmit.Count);
+        Log.Information("Oribos enrichment '{name}' emitting {count} status change(s): {changes}",
+          _configuration.Name, toEmit.Count,
+          string.Join(", ", toEmit.Select(p => $"{p.CompetitorId}:{p.CompetitorStatus}@{p.Time:HH:mm:ss}")));
         _dispatcherService.Value.PushDispatch(new PunchDispatch(Punches: toEmit));
       }
     }

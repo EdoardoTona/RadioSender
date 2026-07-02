@@ -123,4 +123,224 @@ public class TestOribosEnrichment
     Assert.That(OribosService.AbsoluteStart(RaceStart, 0), Is.Null);
     Assert.That(OribosService.AbsoluteStart(RaceStart, -5), Is.Null);
   }
+
+  [Test]
+  public void AbsoluteFinish_AddsRelativeSeconds_Local()
+    => Assert.That(OribosService.AbsoluteFinish(RaceStart, 5741),
+                   Is.EqualTo((RaceStart + TimeSpan.FromSeconds(5741)).LocalDateTime));
+
+  [Test]
+  public void AbsoluteFinish_ZeroOrNegative_IsNull()
+  {
+    Assert.That(OribosService.AbsoluteFinish(RaceStart, 0), Is.Null);
+    Assert.That(OribosService.AbsoluteFinish(RaceStart, -5), Is.Null);
+  }
+
+  [Test]
+  public void Entry_PopulatesFinishTimeAndSubJudice()
+  {
+    var data = Server(RaceStart,
+      new OrCompetitor { Bib = 101, Status = "CL", Finish = 3600, Sj = true });
+
+    var (_, bibMap, _) = OribosService.BuildLookups(data);
+
+    Assert.That(bibMap["101"].FinishTime, Is.EqualTo((RaceStart + TimeSpan.FromHours(1)).LocalDateTime));
+    Assert.That(bibMap["101"].SubJudice, Is.True);
+  }
+
+  // --- transition evaluation ---
+
+  [TestCase("GA", "PM", CompetitorStatus.MP)]
+  [TestCase("CL", "SQ", CompetitorStatus.DSQ)]
+  [TestCase(null, "PM", CompetitorStatus.MP)] // unknown prev: anomalous always emitted
+  public void EvaluateTransition_ToAnomalous_Emitted(string? prev, string next, CompetitorStatus expected)
+    => Assert.That(OribosService.EvaluateTransition(prev, next), Is.EqualTo((expected, false)));
+
+  [TestCase("PM", "CL")]
+  [TestCase("PE", "CL")]
+  [TestCase("SQ", "CL")]
+  [TestCase("RI", "CL")]
+  [TestCase("FT", "CL")]
+  [TestCase("NP", "CL")]
+  public void EvaluateTransition_AnomalousToClassified_EmitsOkWithFinishTime(string prev, string next)
+    => Assert.That(OribosService.EvaluateTransition(prev, next), Is.EqualTo((CompetitorStatus.OK, true)));
+
+  [TestCase("GA", "CL")] // normal arrival: the time already flows through regular punches
+  [TestCase("IP", "CL")]
+  public void EvaluateTransition_RegularToClassified_NotEmitted(string? prev, string next)
+    => Assert.That(OribosService.EvaluateTransition(prev, next), Is.Null);
+
+  [TestCase(null)] // bib first seen sub judice (e.g. service started during a review)
+  [TestCase("DI")] // unmapped previous status
+  public void EvaluateTransition_UnknownPrevToClassified_EmitsOkWithFinishTime(string? prev)
+    => Assert.That(OribosService.EvaluateTransition(prev, "CL"), Is.EqualTo((CompetitorStatus.OK, true)));
+
+  [TestCase("CL", "GA", CompetitorStatus.Running)]
+  [TestCase("CL", "IP", CompetitorStatus.WaitingStart)]
+  [TestCase("PM", "GA", CompetitorStatus.Running)]
+  [TestCase("SQ", "IP", CompetitorStatus.WaitingStart)]
+  public void EvaluateTransition_FinalOutcomeReset_Emitted(string prev, string next, CompetitorStatus expected)
+    => Assert.That(OribosService.EvaluateTransition(prev, next), Is.EqualTo((expected, false)));
+
+  [TestCase("IP", "GA")] // normal pre-arrival progression
+  [TestCase("GA", "IP")]
+  [TestCase(null, "GA")]
+  [TestCase(null, "IP")]
+  public void EvaluateTransition_RegularProgression_NotEmitted(string? prev, string next)
+    => Assert.That(OribosService.EvaluateTransition(prev, next), Is.Null);
+
+  [TestCase("PM", "DI")]
+  [TestCase("CL", "")]
+  public void EvaluateTransition_UnmappedNewStatus_NotEmitted(string prev, string next)
+    => Assert.That(OribosService.EvaluateTransition(prev, next), Is.Null);
+
+  // --- snapshot / sub judice ---
+
+  private static OrCompetitor Comp(int bib, string status, bool sj = false, double finish = 0)
+    => new() { Bib = bib, Status = status, Sj = sj, Finish = finish };
+
+  private static IReadOnlyDictionary<string, OribosEntry> BibMap(params OrCompetitor[] competitors)
+    => OribosService.BuildLookups(Server(RaceStart, competitors)).bibMap;
+
+  [Test]
+  public void ComputeStatusChanges_FirstFetch_InitializesWithoutEmitting()
+  {
+    var (snapshot, toEmit) = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "PM")), new Dictionary<string, string>(), initialized: false);
+
+    Assert.That(toEmit, Is.Empty);
+    Assert.That(snapshot["101"], Is.EqualTo("PM"));
+  }
+
+  [Test]
+  public void ComputeStatusChanges_SubJudice_FreezesStatusAndEmitsNothing()
+  {
+    // GA → CL+sj (arrival waiting for punch check): nothing emitted, snapshot keeps GA
+    var prev = new Dictionary<string, string> { ["101"] = "GA" };
+
+    var (snapshot, toEmit) = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "CL", sj: true, finish: 3600)), prev, initialized: true);
+
+    Assert.That(toEmit, Is.Empty);
+    Assert.That(snapshot["101"], Is.EqualTo("GA"));
+  }
+
+  [Test]
+  public void ComputeStatusChanges_SubJudiceCleared_EmitsAgainstConfirmedStatus()
+  {
+    // GA (frozen through the sj fetches) → PM confirmed: MP emitted
+    var prev = new Dictionary<string, string> { ["101"] = "GA" };
+
+    var (snapshot, toEmit) = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "PM")), prev, initialized: true);
+
+    Assert.That(toEmit, Has.Count.EqualTo(1));
+    Assert.That(toEmit[0].status, Is.EqualTo(CompetitorStatus.MP));
+    Assert.That(snapshot["101"], Is.EqualTo("PM"));
+  }
+
+  [Test]
+  public void ComputeStatusChanges_SubJudiceOnFirstFetch_NotSnapshotted_EmitsOnceConfirmed()
+  {
+    // restart during a review: the confirmed status must still reach the targets
+    var (s1, e1) = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "CL", sj: true, finish: 3600)), new Dictionary<string, string>(), initialized: false);
+
+    Assert.That(e1, Is.Empty);
+    Assert.That(s1.ContainsKey("101"), Is.False);
+
+    var (_, e2) = OribosService.ComputeStatusChanges(BibMap(Comp(101, "PM")), s1, initialized: true);
+
+    Assert.That(e2, Has.Count.EqualTo(1));
+    Assert.That(e2[0].status, Is.EqualTo(CompetitorStatus.MP));
+  }
+
+  [Test]
+  public void ComputeStatusChanges_AnomalousToClassified_EmitsOkWithFinishTime()
+  {
+    var prev = new Dictionary<string, string> { ["101"] = "PM" };
+
+    var (snapshot, toEmit) = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "CL", finish: 3600)), prev, initialized: true);
+
+    Assert.That(toEmit, Has.Count.EqualTo(1));
+    Assert.That(toEmit[0].status, Is.EqualTo(CompetitorStatus.OK));
+    Assert.That(toEmit[0].useFinishTime, Is.True);
+    Assert.That(toEmit[0].entry.FinishTime, Is.EqualTo((RaceStart + TimeSpan.FromHours(1)).LocalDateTime));
+    Assert.That(snapshot["101"], Is.EqualTo("CL"));
+  }
+
+  [Test]
+  public void ComputeStatusChanges_ClassifiedWithoutFinishTime_KeptPendingNotEmitted()
+  {
+    var prev = new Dictionary<string, string> { ["101"] = "PM" };
+
+    var (snapshot, toEmit) = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "CL")), prev, initialized: true);
+
+    Assert.That(toEmit, Is.Empty);
+    Assert.That(snapshot["101"], Is.EqualTo("PM")); // retried when the finish time appears
+  }
+
+  [Test]
+  public void ComputeStatusChanges_Sequence_PmThenSjThenClConfirmed_EmitsOk()
+  {
+    // PM → sj on → CL (still sj) → sj off: MP emitted first, then OK with finish time
+    var f0 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "GA")), new Dictionary<string, string>(), initialized: false);
+    var f1 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "PM", finish: 3600)), f0.snapshot, initialized: true);
+    var f2 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "PM", sj: true, finish: 3600)), f1.snapshot, initialized: true);
+    var f3 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "CL", sj: true, finish: 3600)), f2.snapshot, initialized: true);
+    var f4 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "CL", finish: 3600)), f3.snapshot, initialized: true);
+
+    Assert.That(f1.toEmit[0].status, Is.EqualTo(CompetitorStatus.MP));
+    Assert.That(f2.toEmit, Is.Empty);
+    Assert.That(f3.toEmit, Is.Empty);
+    Assert.That(f4.toEmit, Has.Count.EqualTo(1));
+    Assert.That(f4.toEmit[0].status, Is.EqualTo(CompetitorStatus.OK));
+    Assert.That(f4.toEmit[0].useFinishTime, Is.True);
+  }
+
+  [Test]
+  public void ComputeStatusChanges_Sequence_RestartDuringSj_ClConfirmed_EmitsOk()
+  {
+    // service (re)starts while the bib is already PM+sj: the pre-sj status is unknown,
+    // but the confirmed classification must still reach the targets
+    var f0 = OribosService.ComputeStatusChanges(
+      BibMap(Comp(101, "PM", sj: true, finish: 3600)), new Dictionary<string, string>(), initialized: false);
+    var f1 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "CL", finish: 3600)), f0.snapshot, initialized: true);
+
+    Assert.That(f0.toEmit, Is.Empty);
+    Assert.That(f1.toEmit, Has.Count.EqualTo(1));
+    Assert.That(f1.toEmit[0].status, Is.EqualTo(CompetitorStatus.OK));
+    Assert.That(f1.toEmit[0].useFinishTime, Is.True);
+  }
+
+  [Test]
+  public void ComputeStatusChanges_Sequence_ClThenSjThenPmConfirmed_EmitsMp()
+  {
+    // CL → sj on → PM (still sj) → sj off: only the confirmed MP is emitted
+    var f0 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "CL", finish: 3600)), new Dictionary<string, string>(), initialized: false);
+    var f1 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "CL", sj: true, finish: 3600)), f0.snapshot, initialized: true);
+    var f2 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "PM", sj: true, finish: 3600)), f1.snapshot, initialized: true);
+    var f3 = OribosService.ComputeStatusChanges(BibMap(Comp(101, "PM", finish: 3600)), f2.snapshot, initialized: true);
+
+    Assert.That(f1.toEmit, Is.Empty);
+    Assert.That(f2.toEmit, Is.Empty);
+    Assert.That(f3.toEmit, Has.Count.EqualTo(1));
+    Assert.That(f3.toEmit[0].status, Is.EqualTo(CompetitorStatus.MP));
+  }
+
+  [Test]
+  public void OrCompetitor_DeserializesFinishAndSj_FromFullwebJson()
+  {
+    // fragment taken from a real ORServer.fullweb.jsp response
+    const string json = """{"bib":31,"card":8190498,"status":"CL","start":4710,"finish":5771.3,"sj":true}""";
+    var options = new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase };
+
+    var c = System.Text.Json.JsonSerializer.Deserialize<OrCompetitor>(json, options)!;
+
+    Assert.That(c.Finish, Is.EqualTo(5771.3));
+    Assert.That(c.Sj, Is.True);
+    Assert.That(c.Status, Is.EqualTo("CL"));
+  }
 }

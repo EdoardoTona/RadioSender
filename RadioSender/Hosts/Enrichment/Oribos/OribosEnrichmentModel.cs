@@ -48,6 +48,8 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     public string? ClubCountry { get; init; } // club nation
     public string? Naz { get; init; }         // athlete nation
     public double Start { get; init; } // seconds relative to race start
+    public double Finish { get; init; } // seconds relative to race start, 0 = no finish time
     public string? Status { get; init; } // CL, PE/PM, NP, SQ, RI, FT, GA, IP, DI...
+    public bool Sj { get; init; } // sub judice: result awaiting confirmation (auto check or manual review)
   }
 }
