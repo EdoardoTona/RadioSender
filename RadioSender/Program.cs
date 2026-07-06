@@ -19,6 +19,7 @@ using RadioSender.Hosts.Source.SIRAP;
 using RadioSender.Hosts.Enrichment.Oribos;
 using RadioSender.Hosts.Source.SportidentCenter;
 using RadioSender.Hosts.Source.SportidentSerial;
+using RadioSender.Hosts.Source.Tcp;
 using RadioSender.Hosts.Source.TmFRadio;
 using RadioSender.Hosts.Target.File;
 using RadioSender.Hosts.Target.Http;
@@ -182,6 +183,7 @@ public static class Program
                 .FromMicroplus()
                 .FromMicrogate()
                 .FromObr()
+                .FromTcp()
     // Enrichment
                 .WithOribosEnrichment()
     // Middleware

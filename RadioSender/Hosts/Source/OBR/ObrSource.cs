@@ -179,7 +179,6 @@ public sealed class ObrSource(
       if (punch != null)
       {
         dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
-        Log.Information("OBR punch card={card} cp={cp} tm={tm} from {ip}", card, cp, tmStr ?? "(now)", senderIp);
       }
       else
       {
