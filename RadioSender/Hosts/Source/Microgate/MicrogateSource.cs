@@ -38,6 +38,7 @@ public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
 
   public Task StartAsync(CancellationToken cancellationToken)
   {
+    Log.Information("MicrogateSource connecting to {address}:{port}", Address.ToString(), Port);
     base.ConnectAsync();
     return Task.CompletedTask;
   }
@@ -60,13 +61,19 @@ public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
 
   protected override void OnConnected()
   {
+    // TCP is established here; the device-identifying "connected" log (with serial number)
+    // only follows once a status reply arrives. Log the socket-level connection too so it is
+    // visible even when the device stays silent (e.g. wrong device or firewalled reply path).
+    Log.Information("MicrogateSource {address}:{port} TCP connected, requesting status", Address.ToString(), Port);
     try
     {
-      _ = AskSerialNumber();
-      _ = AskRetransmission();
-
+      _ = AskSerialNumber().ContinueWith(t => Log.Warning("MicrogateSource AskSerialNumber failed: {error}", t.Exception?.GetBaseException().Message), TaskContinuationOptions.OnlyOnFaulted);
+      _ = AskRetransmission().ContinueWith(t => Log.Warning("MicrogateSource AskRetransmission failed: {error}", t.Exception?.GetBaseException().Message), TaskContinuationOptions.OnlyOnFaulted);
     }
-    catch { }
+    catch (Exception e)
+    {
+      Log.Warning("MicrogateSource OnConnected error: {error}", e.Message);
+    }
   }
 
   protected override void OnDisconnected()
@@ -75,13 +82,15 @@ public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
     {
       Log.Information("MicrogateSource {address}:{port} disconnected", Address.ToString(), Port);
 
+      if (_stop)
+        return;
+
       // Wait for a while...
       Thread.Sleep(1000);
 
       // Try to connect again
-      bool res;
-      if (!_stop)
-        res = ConnectAsync();
+      Log.Information("MicrogateSource {address}:{port} reconnecting", Address.ToString(), Port);
+      ConnectAsync();
     }
     catch (Exception e)
     {
