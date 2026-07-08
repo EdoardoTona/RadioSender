@@ -148,6 +148,96 @@ public class TestOribosEnrichment
     Assert.That(bibMap["101"].SubJudice, Is.True);
   }
 
+  // --- enrichment / id type resolution ---
+
+  private static Punch Punch(string competitorId, CompetitorIdType idType) => new(
+    CompetitorId: competitorId,
+    CompetitorIdType: idType,
+    Control: 31,
+    SourceId: "test",
+    ReceivedAt: DateTimeOffset.UtcNow,
+    Time: new DateTime(2026, 06, 28, 10, 30, 0));
+
+  private static (IReadOnlyDictionary<string, OribosEntry> cardMap, IReadOnlyDictionary<string, OribosEntry> bibMap) Maps(params OrCompetitor[] competitors)
+  {
+    var (cardMap, bibMap, _) = OribosService.BuildLookups(Server(RaceStart, competitors));
+    return (cardMap, bibMap);
+  }
+
+  [Test]
+  public void Enrich_UnknownIdType_CardHit_SetsPunchingCardAndCompetitor()
+  {
+    var (cardMap, bibMap) = Maps(new OrCompetitor { Bib = 101, Card = 1234, Name = "John", Surname = "Doe", Status = "GA" });
+
+    var result = OribosService.Enrich(Punch("1234", CompetitorIdType.Unknown), cardMap, bibMap);
+
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
+    Assert.That(result.CompetitorId, Is.EqualTo("1234")); // id itself is untouched
+    Assert.That(result.Competitor?.Bib, Is.EqualTo("101"));
+    Assert.That(result.Competitor?.Name, Is.EqualTo("John Doe"));
+  }
+
+  [Test]
+  public void Enrich_UnknownIdType_BibHitOnly_SetsBibNumber()
+  {
+    // bib 101 with no card assigned: an unknown id "101" resolves only via the bib map
+    var (cardMap, bibMap) = Maps(new OrCompetitor { Bib = 101, Name = "John", Surname = "Doe", Status = "GA" });
+
+    var result = OribosService.Enrich(Punch("101", CompetitorIdType.Unknown), cardMap, bibMap);
+
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.BibNumber));
+    Assert.That(result.Competitor?.Bib, Is.EqualTo("101"));
+  }
+
+  [Test]
+  public void Enrich_UnknownIdType_CardHitWinsOverBib()
+  {
+    // "1234" is competitor A's card AND competitor B's bib: card map is tried first
+    var (cardMap, bibMap) = Maps(
+      new OrCompetitor { Bib = 1234, Name = "Bibby", Status = "GA" },
+      new OrCompetitor { Bib = 55, Card = 1234, Name = "Carrie", Status = "GA" });
+
+    var result = OribosService.Enrich(Punch("1234", CompetitorIdType.Unknown), cardMap, bibMap);
+
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
+    Assert.That(result.Competitor?.Bib, Is.EqualTo("55")); // resolved via the card
+  }
+
+  [Test]
+  public void Enrich_UnknownIdType_NoMatch_PassesThroughUnchanged()
+  {
+    var (cardMap, bibMap) = Maps(new OrCompetitor { Bib = 101, Card = 1234, Status = "GA" });
+
+    var result = OribosService.Enrich(Punch("9999", CompetitorIdType.Unknown), cardMap, bibMap);
+
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.Unknown)); // stays unknown
+    Assert.That(result.Competitor, Is.Null);
+  }
+
+  [Test]
+  public void Enrich_KnownCardType_KeepsTypeAndEnriches()
+  {
+    var (cardMap, bibMap) = Maps(new OrCompetitor { Bib = 101, Card = 1234, Status = "GA" });
+
+    var result = OribosService.Enrich(Punch("1234", CompetitorIdType.PunchingCard), cardMap, bibMap);
+
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
+    Assert.That(result.Competitor?.Bib, Is.EqualTo("101"));
+  }
+
+  [Test]
+  public void Enrich_KnownBibType_DoesNotFallBackToCardMap()
+  {
+    // id "1234" exists as a card but the punch says it's a bib: no bib match → no enrichment,
+    // and the type is not silently rewritten to PunchingCard
+    var (cardMap, bibMap) = Maps(new OrCompetitor { Bib = 101, Card = 1234, Status = "GA" });
+
+    var result = OribosService.Enrich(Punch("1234", CompetitorIdType.BibNumber), cardMap, bibMap);
+
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.BibNumber));
+    Assert.That(result.Competitor, Is.Null);
+  }
+
   // --- transition evaluation ---
 
   [TestCase("GA", "PM", CompetitorStatus.MP)]

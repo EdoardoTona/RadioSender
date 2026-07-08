@@ -75,20 +75,43 @@ namespace RadioSender.Hosts.Enrichment.Oribos
 
     #region enrichment
 
-    public Punch Enrich(Punch punch)
+    public Punch Enrich(Punch punch) => Enrich(punch, _cardMap, _bibMap);
+
+    // Pure resolution against the given lookup maps (static for testability).
+    // For an unknown id type, the map that resolves the entry also tells us what the
+    // id was: a card-map hit means it's a punching card, a bib-map hit means it's a
+    // bib. Downstream targets (e.g. Oribos) route on CompetitorIdType, so we set it
+    // here so a source that emits {CompetitorId} (Unknown type) is still routable.
+    public static Punch Enrich(
+      Punch punch,
+      IReadOnlyDictionary<string, OribosEntry> cardMap,
+      IReadOnlyDictionary<string, OribosEntry> bibMap)
     {
-      OribosEntry? entry = punch.CompetitorIdType switch
+      OribosEntry? entry;
+      var resolvedIdType = punch.CompetitorIdType;
+
+      switch (punch.CompetitorIdType)
       {
-        CompetitorIdType.PunchingCard => Lookup(_cardMap, punch.CompetitorId),
-        CompetitorIdType.BibNumber => Lookup(_bibMap, punch.CompetitorId),
-        // unknown id type: try card first, then bib (best-effort)
-        _ => Lookup(_cardMap, punch.CompetitorId) ?? Lookup(_bibMap, punch.CompetitorId),
-      };
+        case CompetitorIdType.PunchingCard:
+          entry = Lookup(cardMap, punch.CompetitorId);
+          break;
+        case CompetitorIdType.BibNumber:
+          entry = Lookup(bibMap, punch.CompetitorId);
+          break;
+        default:
+          // unknown id type: try card first, then bib (best-effort)
+          entry = Lookup(cardMap, punch.CompetitorId);
+          if (entry != null)
+            resolvedIdType = CompetitorIdType.PunchingCard;
+          else if ((entry = Lookup(bibMap, punch.CompetitorId)) != null)
+            resolvedIdType = CompetitorIdType.BibNumber;
+          break;
+      }
 
       if (entry == null)
         return punch; // best-effort: pass through unchanged, no log
 
-      return punch with { Competitor = ToCompetitor(entry) };
+      return punch with { Competitor = ToCompetitor(entry), CompetitorIdType = resolvedIdType };
     }
 
     private static Competitor ToCompetitor(OribosEntry e) => new(
