@@ -41,6 +41,9 @@ namespace RadioSender.Hosts.Target.File
       if (!punches.Any())
         return;
 
+      var sendsCancellation = FormatStringHelper.UsesPlaceholder(_configuration.Format, "Cancellation");
+      var sendsStatus = FormatStringHelper.UsesPlaceholder(_configuration.Format, "Status");
+
       await _semaphore.WaitAsync(ct);
       try
       {
@@ -48,6 +51,13 @@ namespace RadioSender.Hosts.Target.File
 
         foreach (var punch in punches)
         {
+          // The receiver has no way to tell a cancellation/status change apart from a normal
+          // punch unless the format carries it explicitly, so skip what it can't represent.
+          if (punch.Cancellation && !sendsCancellation)
+            continue;
+          if (punch.CompetitorStatus != CompetitorStatus.Unknown && !sendsStatus)
+            continue;
+
           string record = FormatStringHelper.GetString(punch, _configuration.Format);
           file.Write(Encoding.UTF8.GetBytes(record));
         }

@@ -49,9 +49,41 @@ namespace RadioSender.Hosts.Target.Tcp
 
       var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
+      var sendsCancellation = FormatStringHelper.UsesPlaceholder(_configuration.Format, "Cancellation");
+      var sendsStatus = FormatStringHelper.UsesPlaceholder(_configuration.Format, "Status");
+      // Without {Status}, the sentinel {Time} values below are the only way to convey status,
+      // so it's only unrepresentable (and must be suppressed) when {Time} is absent too.
+      var canRepresentStatus = sendsStatus || FormatStringHelper.UsesPlaceholder(_configuration.Format, "Time");
+
       foreach (var punch in punches)
       {
-        byte[] buffer = FormatStringHelper.GetBytes(punch, _configuration.Format);
+        // The receiver has no way to tell a cancellation/status change apart from a normal
+        // punch unless the format carries it explicitly, so skip what it can't represent.
+        if (punch.Cancellation && !sendsCancellation)
+          continue;
+        if (punch.CompetitorStatus != CompetitorStatus.Unknown && !canRepresentStatus)
+          continue;
+
+        var p = punch;
+        // Only needed as a fallback when the format has no explicit {Status}; otherwise it
+        // would clobber a real {Time} that's meant to be sent alongside {Status}.
+        if (!sendsStatus)
+        {
+          if (p.CompetitorStatus == CompetitorStatus.Running || p.CompetitorStatus == CompetitorStatus.WaitingStart)
+            p = p with { Time = new DateTime(1, 1, 1, 0, 0, 0) };
+          if (p.CompetitorStatus == CompetitorStatus.DNS)
+            p = p with { Time = new DateTime(1, 1, 1, 0, 0, 1) };
+          if (p.CompetitorStatus == CompetitorStatus.DNF)
+            p = p with { Time = new DateTime(1, 1, 1, 0, 0, 2) };
+          if (p.CompetitorStatus == CompetitorStatus.MP)
+            p = p with { Time = new DateTime(1, 1, 1, 0, 0, 3) };
+          if (p.CompetitorStatus == CompetitorStatus.DSQ)
+            p = p with { Time = new DateTime(1, 1, 1, 0, 0, 4) };
+          if (p.CompetitorStatus == CompetitorStatus.OverTime)
+            p = p with { Time = new DateTime(1, 1, 1, 0, 0, 5) };
+        }
+
+        byte[] buffer = FormatStringHelper.GetBytes(p, _configuration.Format);
 
         if (buffer == null || buffer.Length == 0)
           continue;

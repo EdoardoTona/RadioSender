@@ -43,8 +43,18 @@ public class HttpTarget : ITarget
 
     var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
+    var sendsCancellation = !string.IsNullOrEmpty(_configuration.Url) && FormatStringHelper.UsesPlaceholder(_configuration.Url, "Cancellation");
+    var sendsStatus = !string.IsNullOrEmpty(_configuration.Url) && FormatStringHelper.UsesPlaceholder(_configuration.Url, "Status");
+
     foreach (var punch in punches)
     {
+      // The receiver has no way to tell a cancellation/status change apart from a normal
+      // punch unless the URL carries it explicitly, so skip what it can't represent.
+      if (punch.Cancellation && !sendsCancellation)
+        continue;
+      if (punch.CompetitorStatus != CompetitorStatus.Unknown && !sendsStatus)
+        continue;
+
       _backgroundJobClient.Enqueue(() => SendPunchAction(_configuration, punch, default));
     }
     return Task.CompletedTask;
