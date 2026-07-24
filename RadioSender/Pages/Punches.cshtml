@@ -18,15 +18,15 @@
     <div class="d-flex align-items-center gap-2" id="punchesToolbar">
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-          Ritrasmetti
+          Replay
         </button>
         <ul class="dropdown-menu">
-          <li><button class="dropdown-item replay-batch" type="button" data-count="10">Ultimi 10</button></li>
-          <li><button class="dropdown-item replay-batch" type="button" data-count="25">Ultimi 25</button></li>
-          <li><button class="dropdown-item replay-batch" type="button" data-count="50">Ultimi 50</button></li>
-          <li><button class="dropdown-item replay-batch" type="button" data-count="100">Ultimi 100</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="10">Last 10</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="25">Last 25</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="50">Last 50</button></li>
+          <li><button class="dropdown-item replay-batch" type="button" data-count="100">Last 100</button></li>
           <li><hr class="dropdown-divider"></li>
-          <li><button class="dropdown-item replay-batch" type="button">Tutti</button></li>
+          <li><button class="dropdown-item replay-batch" type="button">All</button></li>
         </ul>
       </div>
       <small class="text-muted text-truncate" id="replayFeedback" style="max-width:40ch"></small>
@@ -77,9 +77,9 @@
     return `${value ?? ''}${sub}`;
     }
 
-    // local time including milliseconds when present (e.g. 21:45:59.123)
+    // local time including milliseconds when present (e.g. 21:45:59.123), always in 24h format regardless of OS culture
     function timeWithMs(d) {
-    const time = d.toLocaleTimeString();
+    const time = d.toLocaleTimeString('en-GB');
     const ms = d.getMilliseconds();
     return ms ? `${time}.${String(ms).padStart(3, '0')}` : time;
     }
@@ -132,7 +132,7 @@
     const validDate = d && !isNaN(d);
     const time = validDate ? timeWithMs(d) : (value ?? '');
     const isToday = validDate && d.toDateString() === new Date().toDateString();
-    const dateLine = (validDate && !isToday) ? d.toLocaleDateString() : '';
+    const dateLine = (validDate && !isToday) ? d.toLocaleDateString('en-GB') : '';
 
     const type = controlTypeShort(row.controlType);
     const hasStatus = row.competitorStatus && row.competitorStatus !== 'Unknown';
@@ -163,7 +163,7 @@
     }
 
     function replayFormatter(value, row) {
-    return `<button type="button" class="btn btn-sm btn-outline-secondary replay-punch" title="Ritrasmetti" aria-label="Ritrasmetti">
+    return `<button type="button" class="btn btn-sm btn-outline-secondary replay-punch" title="Replay" aria-label="Replay">
     <span aria-hidden="true">&#8635;</span>
     </button>`;
     }
@@ -173,15 +173,15 @@
     const targets = result && Number.isInteger(result.targets) ? result.targets : 0;
 
     if (punches === 0) {
-    return { text: 'Nessun record da ritrasmettere', error: true };
+    return { text: 'No records to replay', error: true };
     }
 
     if (targets === 0) {
-    return { text: 'Nessun target disponibile per la ritrasmissione', error: true };
+    return { text: 'No target available for replay', error: true };
     }
 
-    const verb = punches === 1 ? 'ritrasmesso' : 'ritrasmessi';
-    return { text: `${punches} record ${verb} a ${targets} target`, error: false };
+    const verb = punches === 1 ? 'record' : 'records';
+    return { text: `${punches} ${verb} replayed to ${targets} target${targets === 1 ? '' : 's'}`, error: false };
     }
 
     function setReplayFeedback(text, error) {
@@ -204,7 +204,7 @@
     async function replayPunch(row, button) {
     const key = row && row.comparisonKey;
     if (!key) {
-    setReplayFeedback('Record senza chiave di ritrasmissione', true);
+    setReplayFeedback('Record has no replay key', true);
     return;
     }
 
@@ -217,7 +217,7 @@
     setReplayFeedback(message.text, message.error);
     } catch (e) {
     console.log(e);
-    setReplayFeedback('Ritrasmissione fallita', true);
+    setReplayFeedback('Replay failed', true);
     } finally {
     $button.prop('disabled', false);
     }
@@ -233,7 +233,7 @@
     setReplayFeedback(message.text, message.error);
     } catch (e) {
     console.log(e);
-    setReplayFeedback('Ritrasmissione batch fallita', true);
+    setReplayFeedback('Batch replay failed', true);
     } finally {
     $buttons.prop('disabled', false);
     }
