@@ -44,6 +44,8 @@ namespace RadioSender.Hosts.Common
   {
     public string Card => CompetitorId;
     public string ComparisonKey => $"{CompetitorIdType}-{CompetitorId}-{ControlType}-{Control}-{Time:O}-{SourceId}-{CompetitorStatus}-{Cancellation}-{NetTime}";
+    // Same identity as ComparisonKey but always non-cancelled: the key of the punch a Cancellation=true event refers to.
+    public string UncancelledComparisonKey => $"{CompetitorIdType}-{CompetitorId}-{ControlType}-{Control}-{Time:O}-{SourceId}-{CompetitorStatus}-False-{NetTime}";
     public string? ControlTypeShort => ControlType switch
     {
       PunchControlType.Control => "CN",

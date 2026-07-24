@@ -95,6 +95,11 @@ public sealed class DispatcherService(
         continue;
       }
 
+      // A cancellation frees up the key of the punch it cancels, so a later restore
+      // (the same punch re-sent as active) is not mistaken for a duplicate of the original.
+      if (punch.Cancellation)
+        _punches.TryRemove(punch.UncancelledComparisonKey, out _);
+
       lock (_punchOrderLock)
       {
         _punchOrder.Add(key);
