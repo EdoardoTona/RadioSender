@@ -229,8 +229,27 @@ public sealed class MqttSource(
 
   private PunchDispatch? TryParseSportident(byte[] payload)
   {
-    var punch = SportidentProtocol.MessageToPunch(payload, SourceId);
+    var punch = SportidentProtocol.MessageToPunch(StripBleAdvertisingPrefix(payload), SourceId);
     return punch == null ? null : new PunchDispatch(Punches: [punch]);
+  }
+
+  // Some BLE-to-MQTT gateways forward the raw advertising payload instead of the bare
+  // Sportident frame: a GAP "Manufacturer Specific Data" AD structure (length byte, AD type
+  // 0xFF, 2-byte company id) wrapping the actual STX(0x02) CMD(0xD3) ... ETX(0x03) frame.
+  // Strip that prefix when present so the rest can be parsed as usual.
+  internal static ReadOnlySpan<byte> StripBleAdvertisingPrefix(ReadOnlySpan<byte> payload)
+  {
+    const byte AdTypeManufacturerSpecificData = 0xFF;
+
+    if (payload.Length > 2
+      && payload[0] == payload.Length
+      && payload[1] == AdTypeManufacturerSpecificData
+      && payload[2] == SportidentProtocol.Stx)
+    {
+      return payload[2..];
+    }
+
+    return payload;
   }
 
   private PunchDispatch? TryParseTmF(byte[] payload, string topic)
