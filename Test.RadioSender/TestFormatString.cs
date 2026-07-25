@@ -106,4 +106,17 @@ public class TestFormatString
     var res = FormatStringHelper.GetString(enriched, conf);
     Assert.AreEqual(expected, res);
   }
+
+  [TestCase("{Cancellation}", "Cancellation", true)]
+  [TestCase("{cancellation}", "Cancellation", true)] // case-insensitive
+  [TestCase("{Card};{Cancellation};{Status}", "Cancellation", true)]
+  [TestCase("{Card};{Status}", "Cancellation", false)]
+  [TestCase("", "Cancellation", false)]
+  [TestCase("{Status}", "Status", true)]
+  [TestCase("{Time:HH:mm:ss}", "Status", false)]
+  [TestCase("{CompetitorId};{Control};{Time:HH:mm:ss,fff}", "Time", true)]
+  public void TestUsesPlaceholder(string format, string key, bool expected)
+  {
+    Assert.AreEqual(expected, FormatStringHelper.UsesPlaceholder(format, key));
+  }
 }

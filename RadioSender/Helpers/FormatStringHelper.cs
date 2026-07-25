@@ -62,6 +62,12 @@ namespace RadioSender.Helpers
       return Encoding.UTF8.GetBytes(GetString(punch, format));
     }
 
+    public static bool UsesPlaceholder(string format, string key)
+    {
+      return FormatterRegex().Matches(format)
+        .Any(match => string.Equals(match.Groups[1].Value, key, StringComparison.OrdinalIgnoreCase));
+    }
+
     [GeneratedRegex(@"\{([^\{\}]+?)(?:\:([^\{\}]*))?\}", RegexOptions.Multiline)]
     private static partial Regex FormatterRegex();
   }

@@ -94,8 +94,19 @@ public class PrinterTarget : ITarget, IDisposable
 
     var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
 
+    var format = _configuration.Format ?? "{CompetitorId} {Type}-{Control} {Time:HH:mm:ss,ffff} {Source} {Status} {Cancellation}";
+    var sendsCancellation = FormatStringHelper.UsesPlaceholder(format, "Cancellation");
+    var sendsStatus = FormatStringHelper.UsesPlaceholder(format, "Status");
+
     foreach (var punch in punches)
     {
+      // The receiver has no way to tell a cancellation/status change apart from a normal
+      // punch unless the format carries it explicitly, so skip what it can't represent.
+      if (punch.Cancellation && !sendsCancellation)
+        continue;
+      if (punch.CompetitorStatus != CompetitorStatus.Unknown && !sendsStatus)
+        continue;
+
       PrintPunch(punch);
     }
 
