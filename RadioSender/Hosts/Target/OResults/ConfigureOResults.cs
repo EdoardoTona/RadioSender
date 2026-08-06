@@ -14,6 +14,7 @@ namespace RadioSender.Hosts.Target.OResults
     public string Path { get; init; } = "/punches/external";
     public string? ApiKey { get; init; }
     public bool UseUtc { get; init; } = true;
+    public bool IgnoreCompetitorIdType { get; init; } = false;
   }
 
   public static class ConfigureOResults
