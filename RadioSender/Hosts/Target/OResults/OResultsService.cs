@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -137,9 +138,21 @@ namespace RadioSender.Hosts.Target.OResults
       if (!response.IsSuccessStatusCode)
       {
         var text = await response.Content.ReadAsStringAsync(ct);
-        Log.Warning("OResults responded {status}: {body}", response.StatusCode, text);
+        Log.Warning("OResults responded {status}: {body}", response.StatusCode, SummarizeErrorBody(text));
         response.EnsureSuccessStatusCode();
       }
+    }
+
+    private const int MaxErrorBodyChars = 500;
+
+    private static string SummarizeErrorBody(string body)
+    {
+      var stripped = Regex.Replace(body, "<[^>]*>", " ");
+      stripped = Regex.Replace(stripped, @"\s+", " ").Trim();
+
+      return stripped.Length > MaxErrorBodyChars
+        ? stripped[..MaxErrorBodyChars] + "..."
+        : stripped;
     }
   }
 }
