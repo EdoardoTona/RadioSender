@@ -336,26 +336,22 @@ to RadioSender.
 
 ---
 
-## 8. Start lists and enrichment
+## 8. Enrichment
 
 An **enrichment source** attaches competitor data to each punch — **card ↔ bib mapping**, name,
 class, nation, club and scheduled start time — which is what makes `{Bib}` _and_ `{Card}` (and
-`{Name}`, `{Class}`, …) available at the same time. Two are available: **Oribos** (live, over HTTP)
-and **IOF XML**.
-
-The IOF XML enricher watches a folder for an **IOF XML 3.0 StartList or EntryList** file, picks the
-most recently written file matching the pattern, and **reloads automatically whenever the file
-changes** — so you can drop in an updated start list during the event.
+`{Name}`, `{Class}`, …) available at the same time. Declare the source:
 
 ```json
 "Enrichment": {
-  "IofXml": {
+  "Oribos": {
     "Enable": "true",
     "Sources": [
       {
-        "Name": "IofXml",
-        "Directory": "C:\\startlists",
-        "Pattern": "*.xml"
+        "Name": "Oribos",
+        "Host": "http://localhost:8080",
+        "Merged": false,
+        "EmitStatusChanges": false
       }
     ]
   }
@@ -370,18 +366,17 @@ Then activate it on the filter that should use it:
     {
       "Name": "Default",
       "Enable": true,
-      "Enrichers": [ "IofXml" ]
+      "Enrichers": [ "Oribos" ]
     }
   ]
 }
 ```
 
-Enrichers listed for a filter are applied **in order**, and a later one overwrites fields set by an
-earlier one. Lookup is best-effort: a punch whose id is not in the start list passes through
-unchanged.
-
-> The `Enrichment:IofXml` block is not present in the default `appsettings.json` — add it with the
-> keys above.
+- Enrichers listed for a filter are applied **in order**, and a later one overwrites fields set by
+  an earlier one. Lookup is best-effort: a punch whose id is unknown passes through unchanged.
+- `Merged` sets the multi-day `merged=` flag.
+- `EmitStatusChanges` also generates status-change events (DNS / DNF / DSQ / MP / OverTime) — see
+  the `{Status}` note in section 7 before enabling it.
 
 ---
 
@@ -390,7 +385,6 @@ unchanged.
 | Change                                                                       | Restart needed?                                                                                                                                 |
 | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Filters** (card/bib mapping, control mapping, enabling/disabling a filter) | No — hot-reloaded as soon as you save the file. Useful to add a card mapping when a competitor gets a replacement card, or to swap two sources. |
-| **Start list / entry list file** (IOF XML enrichment)                        | No — reloaded when the file changes.                                                                                                            |
 | **Sources and targets**                                                      | Yes — restart the app.                                                                                                                          |
 | **Dropped connection**                                                       | No — reconnection is automatic (retried every second). Punches that arrived during the outage are lost, though: use **Replay** to re-send them. |
 
