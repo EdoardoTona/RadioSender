@@ -44,12 +44,6 @@ Reading the diagram from the top:
 Only start and finish times travel this path. Radio controls, live results, TV graphics and
 commentator feeds are handled downstream by the event-management / results platform.
 
-> The chronometer's native protocol is documented in the
-> [REI2 transmission protocol](https://timing.microgate.it/sites/default/files/manuals/REI2-Transmission_Protocol_1095_002_E.pdf),
-> and the chronometer itself in the
-> [RTPro user manual](https://timing.microgate.it/sites/default/files/manuali/RTPro/RTProUserManual_EN.pdf).
-> You should not need either of them if you use RadioSender as the decoder.
-
 ---
 
 ## 2. How data flows inside RadioSender
