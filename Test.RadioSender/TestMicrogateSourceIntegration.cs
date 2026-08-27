@@ -3,7 +3,7 @@ using NUnit.Framework;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Enrichment;
-using RadioSender.Hosts.Source.Microplus; // MicrogateSource lives in this namespace
+using RadioSender.Hosts.Source.Microplus;
 using RadioSender.Hosts.Target;
 using System;
 using System.Collections.Concurrent;
@@ -19,7 +19,7 @@ using Serilog.Events;
 
 namespace Test.RadioSender;
 
-// Exercises the runtime connection path of MicrogateSource: a real socket stands in
+// Exercises the runtime connection path of MicrogateTcpSource: a real socket stands in
 // for the Microgate device, and we observe whether the source connects and issues its
 // serial-number / retransmission requests on connect.
 [TestFixture]
@@ -58,7 +58,7 @@ public class TestMicrogateSourceIntegration
     return port;
   }
 
-  private static MicrogateSource BuildSource(string address, int port)
+  private static MicrogateTcpSource BuildSource(string address, int port)
   {
     var filterService = new FilterService(
       new StubMonitor(new FiltersConfiguration { List = [] }),
@@ -66,7 +66,7 @@ public class TestMicrogateSourceIntegration
     var target = new CapturingTarget();
     var dispatcher = new DispatcherService(filterService, new ITarget[] { target }, new DispatcherConfiguration());
     var config = new MicrogateSourceConfiguration { Address = address, Port = port };
-    return new MicrogateSource(filterService, dispatcher, config);
+    return new MicrogateTcpSource(filterService, dispatcher, config);
   }
 
   private sealed class CapturingSink : ILogEventSink

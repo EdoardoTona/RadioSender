@@ -84,6 +84,17 @@
     return ms ? `${time}.${String(ms).padStart(3, '0')}` : time;
     }
 
+    // JavaScript Date only retains milliseconds. Extract the fourth fractional digit
+    // from SignalR's original ISO timestamp before converting it to Date.
+    function punchTime(value, d) {
+    const time = d.toLocaleTimeString('en-GB');
+    const match = typeof value === 'string' ? value.match(/\.(\d{1,7})/) : null;
+    const fraction = match
+      ? match[1].padEnd(4, '0').slice(0, 4)
+      : String(d.getMilliseconds()).padStart(3, '0').padEnd(4, '0');
+    return Number(fraction) ? `${time}.${fraction}` : time;
+    }
+
     // received time on the first line; source on a second line
     function receivedFormatter(value, row) {
     if (!value) return '';
@@ -130,7 +141,7 @@
     function dataFormatter(value, row) {
     const d = value ? new Date(value) : null;
     const validDate = d && !isNaN(d);
-    const time = validDate ? timeWithMs(d) : (value ?? '');
+    const time = validDate ? punchTime(value, d) : (value ?? '');
     const isToday = validDate && d.toDateString() === new Date().toDateString();
     const dateLine = (validDate && !isToday) ? d.toLocaleDateString('en-GB') : '';
 

@@ -1,131 +1,112 @@
-﻿using Microgate.Common.Protocol.Rei2;
-using NetCoreServer;
+using Microgate.Common.Protocol.Rei2;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Source.Microplus;
 
-public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
+public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
 {
-  public readonly FilterService _filterService;
-  public readonly DispatcherService _dispatcherService;
-  public readonly MicrogateSourceConfiguration _configuration;
+  private readonly CancellationTokenSource _lifetime = new();
+  private readonly object _sendLock = new();
+  private readonly MicrogateMessageProcessor _messageProcessor;
+  private bool _disposed;
 
-  private int? serialNumber;
-  public MicrogateSource(
-  FilterService filterService,
-  DispatcherService dispatcherService,
-  MicrogateSourceConfiguration configuration)
-    : base(configuration.Address ?? throw new ArgumentNullException(nameof(configuration)),
-      configuration.Port ?? throw new ArgumentNullException(nameof(configuration)))
+  protected MicrogateSource(
+    FilterService filterService,
+    DispatcherService dispatcherService,
+    MicrogateSourceConfiguration configuration,
+    string endpoint)
   {
-    _filterService = filterService;
-    _dispatcherService = dispatcherService;
-    _configuration = configuration;
-
-    OptionKeepAlive = true;
-    OptionTcpKeepAliveInterval = 15;
-    OptionTcpKeepAliveRetryCount = 3;
-    OptionTcpKeepAliveTime = 5;
-    OptionNoDelay = true;
+    Configuration = configuration;
+    Endpoint = endpoint;
+    _messageProcessor = new MicrogateMessageProcessor(
+      filterService,
+      dispatcherService,
+      configuration,
+      endpoint);
   }
 
-  public Task StartAsync(CancellationToken cancellationToken)
+  protected MicrogateSourceConfiguration Configuration { get; }
+  protected string Endpoint { get; }
+  protected CancellationToken LifetimeToken => _lifetime.Token;
+  protected bool IsStopping { get; private set; }
+
+  public abstract Task StartAsync(CancellationToken cancellationToken);
+  public abstract Task StopAsync(CancellationToken cancellationToken);
+
+  protected bool BeginStop()
   {
-    Log.Information("MicrogateSource connecting to {address}:{port}", Address.ToString(), Port);
-    base.ConnectAsync();
-    return Task.CompletedTask;
+    if (IsStopping)
+      return false;
+
+    IsStopping = true;
+    _lifetime.Cancel();
+    return true;
   }
 
-  public Task StopAsync(CancellationToken cancellationToken)
+  protected void OnTransportConnected()
   {
-    DisconnectAndStop();
-    return Task.CompletedTask;
+    _messageProcessor.Reset();
+
+    ObserveRequestFailure(AskSerialNumber(), nameof(AskSerialNumber));
+    ObserveRequestFailure(AskRetransmission(), nameof(AskRetransmission));
   }
 
-  private bool _stop;
-
-  public void DisconnectAndStop()
+  protected void OnReceived(byte[] buffer, long offset, long size)
   {
-    _stop = true;
-    DisconnectAsync();
-    while (IsConnected)
-      Thread.Yield();
+    _messageProcessor.Receive(buffer.AsSpan((int)offset, (int)size));
   }
 
-  protected override void OnConnected()
+  protected abstract void SendCore(ReadOnlySpan<byte> data);
+
+  protected virtual void DisposeTransport()
   {
-    // TCP is established here; the device-identifying "connected" log (with serial number)
-    // only follows once a status reply arrives. Log the socket-level connection too so it is
-    // visible even when the device stays silent (e.g. wrong device or firewalled reply path).
-    Log.Information("MicrogateSource {address}:{port} TCP connected, requesting status", Address.ToString(), Port);
-    try
-    {
-      _ = AskSerialNumber().ContinueWith(t => Log.Warning("MicrogateSource AskSerialNumber failed: {error}", t.Exception?.GetBaseException().Message), TaskContinuationOptions.OnlyOnFaulted);
-      _ = AskRetransmission().ContinueWith(t => Log.Warning("MicrogateSource AskRetransmission failed: {error}", t.Exception?.GetBaseException().Message), TaskContinuationOptions.OnlyOnFaulted);
-    }
-    catch (Exception e)
-    {
-      Log.Warning("MicrogateSource OnConnected error: {error}", e.Message);
-    }
   }
 
-  protected override void OnDisconnected()
+  public void Dispose()
   {
-    try
-    {
-      Log.Information("MicrogateSource {address}:{port} disconnected", Address.ToString(), Port);
+    if (_disposed)
+      return;
 
-      if (_stop)
-        return;
-
-      // Wait for a while...
-      Thread.Sleep(1000);
-
-      // Try to connect again
-      Log.Information("MicrogateSource {address}:{port} reconnecting", Address.ToString(), Port);
-      ConnectAsync();
-    }
-    catch (Exception e)
-    {
-      Log.Error("MicrogateSource OnDisconnected error: {error}", e.Message);
-    }
+    StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+    DisposeTransport();
+    _lifetime.Dispose();
+    _disposed = true;
+    GC.SuppressFinalize(this);
   }
 
-  public async Task AskRetransmission()
+  private async Task AskRetransmission()
   {
-    await Task.Delay(1500); // Wait for the connection to stabilize
+    await Task.Delay(1500, LifetimeToken).ConfigureAwait(false);
 
-    SendAsync(new Rei2StaticRequest()
+    Send(new Rei2StaticRequest
     {
       RequestingDevice = 'R',
       RequestId = 1,
       CompetitorNumber = 0,
       Info = InfoExtEnum.TimeOfDay,
-      LogicalChannel = 251, // means all the channels
+      LogicalChannel = 251,
       Run = 1,
       Output = OutputStaticEnum.S
     }.Raw);
-
   }
-  public async Task AskSerialNumber()
-  {
-    await Task.Delay(1000); // Wait for the connection to stabilize
 
-    SendAsync(new Rei2StatusRequest()
+  private async Task AskSerialNumber()
+  {
+    await Task.Delay(1000, LifetimeToken).ConfigureAwait(false);
+
+    Send(new Rei2StatusRequest
     {
       StatusCode = 9999,
       RequestingDevice = 'R',
       RequestId = 1
     }.Raw);
 
-    SendAsync(new Rei2StatusRequest()
+    Send(new Rei2StatusRequest
     {
       StatusCode = 1000,
       RequestingDevice = 'R',
@@ -133,239 +114,17 @@ public class MicrogateSource : TcpClient, ISource, IRadioSenderHost, IDisposable
     }.Raw);
   }
 
-  protected override void OnError(System.Net.Sockets.SocketError error)
+  private void Send(ReadOnlySpan<byte> data)
   {
-    Log.Warning("MicrogateSource socket error {error}", error);
-  }
-  private readonly List<byte> _receiveBuffer = [];
-  private const int MAX_BUFFER_SIZE = 8192;
-  private const int BUFFER_TIMEOUT_SECONDS = 5;
-  private DateTime _lastBufferUpdate = DateTime.MinValue;
-
-  protected override void OnReceived(byte[] buffer, long offset, long size)
-  {
-    var sBuffer = buffer.AsSpan((int)offset, (int)size); try
-    {
-      if (size == 0) return;
-
-      var now = DateTime.UtcNow;
-
-      // Check if buffer content is older than 5 seconds
-      if (_receiveBuffer.Count > 0 && _lastBufferUpdate != DateTime.MinValue &&
-          (now - _lastBufferUpdate).TotalSeconds > BUFFER_TIMEOUT_SECONDS)
-      {
-        Log.Warning("MicrogateSource buffer content is older than {timeout} seconds, clearing buffer", BUFFER_TIMEOUT_SECONDS);
-        _receiveBuffer.Clear();
-        _lastBufferUpdate = DateTime.MinValue;
-      }
-
-      // Append new data to handle fragmented messages.
-      _receiveBuffer.AddRange(sBuffer);
-      _lastBufferUpdate = now;      // Check if buffer exceeds maximum size
-      if (_receiveBuffer.Count > MAX_BUFFER_SIZE)
-      {
-        Log.Warning("MicrogateSource buffer exceeded maximum size of {maxSize} bytes, clearing buffer", MAX_BUFFER_SIZE);
-        _receiveBuffer.Clear();
-        _lastBufferUpdate = DateTime.MinValue;
-        return;
-      }
-
-      // Get a zero-copy span to process the buffer.
-      var processingSpan = CollectionsMarshal.AsSpan(_receiveBuffer);
-      int processedLength = 0;
-
-      while (true)
-      {
-        var searchSpan = processingSpan[processedLength..];
-        int delimiterPos = searchSpan.IndexOfAny((byte)'\r', (byte)'\n');
-
-        // No delimiter found, wait for more data.
-        if (delimiterPos == -1) break;
-
-        var messageSpan = searchSpan[..delimiterPos];
-        if (!messageSpan.IsEmpty)
-        {
-          ProcessMessage(messageSpan);
-        }
-
-        // Consume all sequential delimiters (handles CR, LF, CRLF).
-        int startOfNextMessage = processedLength + delimiterPos + 1;
-        while (startOfNextMessage < processingSpan.Length &&
-               (processingSpan[startOfNextMessage] == (byte)'\r' || processingSpan[startOfNextMessage] == (byte)'\n'))
-        {
-          startOfNextMessage++;
-        }
-
-        processedLength = startOfNextMessage;
-        if (processedLength >= processingSpan.Length) break;
-      }      // Clean up the processed part of the buffer.
-      if (processedLength > 0)
-      {
-        if (processedLength == _receiveBuffer.Count)
-        {
-          _receiveBuffer.Clear();
-          _lastBufferUpdate = DateTime.MinValue;
-        }
-        else
-        {
-          _receiveBuffer.RemoveRange(0, processedLength);
-          // Buffer still has content, keep the timestamp
-        }
-      }
-    }
-    catch (Exception e)
-    {
-      Log.Warning("MicrogateSource OnReceived error {error} on {buffer}", e.Message, Convert.ToBase64String(sBuffer));
-    }
+    lock (_sendLock)
+      SendCore(data);
   }
 
-  private void ProcessMessage(Span<byte> b)
+  private static void ObserveRequestFailure(Task request, string requestName)
   {
-    var type = Rei2Msg.GetRei2MsgType(b);
-    switch (type)
-    {
-      case Rei2MsgTypes.Rei2ExtData:
-      case Rei2MsgTypes.Rei2StaticData:
-        ProcessData(type, b);
-        break;
-      case Rei2MsgTypes.Rei2StatusReply:
-        ProcessStatusMessage(b);
-        break;
-
-      default:
-        break;
-    }
+    _ = request.ContinueWith(
+      task => Log.Warning("MicrogateSource {request} failed: {error}",
+        requestName, task.Exception?.GetBaseException().Message),
+      TaskContinuationOptions.OnlyOnFaulted);
   }
-
-  private void ProcessStatusMessage(Span<byte> b)
-  {
-    if (b.Length < Rei2StatusReply.LENGTH)
-    {
-      Log.Information("MicrogateSource {address}:{port} (simulator) connected", Address.ToString(), Port);
-      return;
-    }
-
-    var data = new Rei2StatusReply(b);
-
-    if (data.StatusCode == 9999)
-    {
-      var snRaw = data.DataRaw.Slice(5, 4);
-
-      if (!int.TryParse(snRaw, out var sn))
-        return;
-
-      serialNumber = sn;
-
-      Log.Information("MicrogateSource {address}:{port} (serial number {sn}) connected", Address.ToString(), Port, sn);
-      return;
-
-    }
-    else if (data.StatusCode == 1000)
-    {
-      var precision = (char)data.DataRaw[0] switch
-      {
-        '0' => "1s",
-        '1' => "0.1s",
-        '2' => "0.01s",
-        '3' => "0.001s",
-        '4' => "0.0001s",
-        _ => "unknown"
-      };
-
-      var rounding = (char)data.DataRaw[1];
-      var cuttingoff = (char)data.DataRaw[2] == '1';
-      Log.Information("MicrogateSource {sn}: precision {p}, rounding {r}, cutting off {c}",
-        serialNumber?.ToString() ?? "simulator", precision, rounding, cuttingoff);
-
-    }
-  }
-
-
-  private void ProcessData(Rei2MsgTypes type, Span<byte> b)
-  {
-    CompetitorStatus status;
-    PunchControlType controlType;
-    string competitorNumber;
-    int logicalChannel;
-    DateTime time;
-    bool annulled = false;
-    if (type == Rei2MsgTypes.Rei2ExtData)
-    {
-      var data = new Rei2ExtData(b);
-
-      if (data.CompetitorNumber == null || data.Timestamp == null || data.IsNetTime)
-        return;
-
-      status = data.Info switch
-      {
-        InfoExtEnum.DSQ => CompetitorStatus.DSQ,
-        InfoExtEnum.DNS => CompetitorStatus.DNS,
-        InfoExtEnum.DNF => CompetitorStatus.DNF,
-        _ => CompetitorStatus.Unknown
-      };
-
-      controlType = data.LogicalChannel switch
-      {
-        0 => PunchControlType.Start,
-        byte.MaxValue => PunchControlType.Finish,
-        ushort.MaxValue => PunchControlType.Finish,
-        _ => PunchControlType.Control
-      };
-      competitorNumber = data.CompetitorNumber.Value.ToString();
-      logicalChannel = data.LogicalChannel;
-      time = data.Timestamp.Value;
-      annulled = data.Info == InfoExtEnum.Annulled;
-    }
-    else if (type == Rei2MsgTypes.Rei2StaticData)
-    {
-      var data = new Rei2StaticData(b);
-
-      if (data.CompetitorNumber == null || data.Timestamp == null)
-        return;
-
-      status = data.Info switch
-      {
-        InfoExtEnum.DSQ => CompetitorStatus.DSQ,
-        InfoExtEnum.DNS => CompetitorStatus.DNS,
-        InfoExtEnum.DNF => CompetitorStatus.DNF,
-        _ => CompetitorStatus.Unknown
-      };
-
-      controlType = data.LogicalChannel switch
-      {
-        0 => PunchControlType.Start,
-        byte.MaxValue => PunchControlType.Finish,
-        ushort.MaxValue => PunchControlType.Finish,
-        _ => PunchControlType.Control
-      };
-      competitorNumber = data.CompetitorNumber.Value.ToString();
-      logicalChannel = data.LogicalChannel;
-      time = data.Timestamp.Value;
-      annulled = data.Info == InfoExtEnum.Annulled;
-
-    }
-    else
-    {
-      return;
-    }
-
-    var punch = _filterService.Transform(
-                   _configuration.Filter,
-                    new Punch(
-                     ReceivedAt: DateTimeOffset.UtcNow,
-                    CompetitorId: competitorNumber,
-                    CompetitorIdType: CompetitorIdType.BibNumber,
-                    Control: logicalChannel,
-                    ControlType: controlType,
-                    Time: time,
-                    SourceId: "Microgate " + serialNumber,
-                    Cancellation: annulled,
-                    CompetitorStatus: status
-                    )
-                 );
-
-    if (punch != null)
-      _dispatcherService.PushDispatch(new PunchDispatch([punch]));
-  }
-
 }

@@ -140,6 +140,23 @@ the same block is used for a real chronometer over TCP:
 }
 ```
 
+For a serial connection, use `PortName` instead of `Address` and `Port`. `DtrEnable` and
+`RtsEnable` are optional and default to `false`:
+
+```json
+"Microgate": {
+  "Enable": "true",
+  "Sources": [
+    {
+      "PortName": "COM12",
+      "Baudrate": 115200,
+      "DtrEnable": false,
+      "RtsEnable": false
+    }
+  ]
+}
+```
+
 ### Target
 
 The example below sends every punch to a TCP endpoint on port `1122`, using a one-line text

@@ -11,7 +11,10 @@ public record MicrogateSourceConfiguration : FilterableConfiguration
 {
   public string? Address { get; init; }
   public int? Port { get; init; }
-
+  public string? PortName { get; init; }
+  public int Baudrate { get; init; } = 115200;
+  public bool DtrEnable { get; init; }
+  public bool RtsEnable { get; init; }
 }
 
 public static class ConfigureMicrogateSource
@@ -29,12 +32,20 @@ public static class ConfigureMicrogateSource
 
       foreach (var source in sources)
       {
-        services.AddSingleton<IRadioSenderHost, MicrogateSource>(sp => new MicrogateSource(
+        if (string.IsNullOrWhiteSpace(source.PortName))
+        {
+          services.AddSingleton<IRadioSenderHost>(sp => new MicrogateTcpSource(
             sp.GetRequiredService<FilterService>(),
             sp.GetRequiredService<DispatcherService>(),
-            source
-            )
-        );
+            source));
+        }
+        else
+        {
+          services.AddSingleton<IRadioSenderHost>(sp => new MicrogateSerialSource(
+            sp.GetRequiredService<FilterService>(),
+            sp.GetRequiredService<DispatcherService>(),
+            source));
+        }
       }
 
     });
