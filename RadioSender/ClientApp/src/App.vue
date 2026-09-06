@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
       ><button v-if="saveError" @click="reload">Reload file</button
       ><button
         @click="
-          error = ''
+          error = '';
           notice = ''
         "
       >
