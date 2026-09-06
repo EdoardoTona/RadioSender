@@ -13,6 +13,7 @@
 		<!--<PublishSingleFile>true</PublishSingleFile>-->
 
 		<DefaultItemExcludes>wwwroot/**</DefaultItemExcludes>
+		<DefaultItemExcludes>$(DefaultItemExcludes);ClientApp/node_modules/**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -65,4 +66,25 @@
 	<PropertyGroup>
 		<RestoreAdditionalProjectSources>$(MSBuildThisFileDirectory)</RestoreAdditionalProjectSources>
 	</PropertyGroup>
+
+	<!-- Build the editor before resource discovery so clean and single-file publishes embed its assets. -->
+	<Target Name="RestoreFlowEditor" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipFrontendBuild)' != 'true'"
+		Inputs="ClientApp/package.json;ClientApp/package-lock.json" Outputs="ClientApp/node_modules/.package-lock.json">
+		<Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="ClientApp" />
+	</Target>
+	<Target Name="BuildFlowEditor" BeforeTargets="AssignTargetPaths" DependsOnTargets="RestoreFlowEditor" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipFrontendBuild)' != 'true'"
+		Inputs="ClientApp/package-lock.json;ClientApp/package.json;ClientApp/vite.config.ts;ClientApp/tsconfig.json;ClientApp/index.html;@(FlowEditorSource)"
+		Outputs="wwwroot/flows/index.html">
+		<Exec Command="npm run build" WorkingDirectory="ClientApp" />
+	</Target>
+	<ItemGroup>
+		<FlowEditorSource Include="ClientApp/src/**/*" />
+		<Content Remove="ClientApp/**/*" />
+	</ItemGroup>
+	<Target Name="IncludeFlowEditor" BeforeTargets="AssignTargetPaths" DependsOnTargets="BuildFlowEditor">
+		<ItemGroup>
+			<EmbeddedResource Remove="wwwroot/flows/**" />
+			<EmbeddedResource Include="wwwroot/flows/**" CopyToOutputDirectory="PreserveNewest" />
+		</ItemGroup>
+	</Target>
 </Project>

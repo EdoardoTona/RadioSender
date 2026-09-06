@@ -30,6 +30,7 @@ using RadioSender.Hosts.Target.SIRAP;
 using RadioSender.Hosts.Target.Tcp;
 using RadioSender.Hosts.Target.UI;
 using RadioSender.UI;
+using RadioSender.Api;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -79,9 +80,9 @@ public static class Program
 
       // On macOS, Photino must run on the main thread (AppKit requirement).
       // We start the web host on a background thread and run Photino here.
-      if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+      if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && app.Configuration.GetValue("Desktop:Enabled", true))
       {
-        var urls = configuration.GetSection("Urls").Get<string>() ?? "http://*:8082";
+        var urls = app.Configuration.GetSection("Urls").Get<string>() ?? "http://127.0.0.1:8082";
         var port = Regex.Match(urls, @"(?<=:)\d{2,5}").Value;
 
         // Start the web host on a background thread
@@ -171,37 +172,12 @@ public static class Program
     builder.Host.ActivatePhotino();
     builder.Services.AddHttpClient();
 
-    builder.Services.AddHostedService<HostOrchestrator>();
-
-    // Sources
-    builder.Host.FromRoc()
-                .FromSportidentCenter()
-                .FromSportidentSerial()
-                .FromTmFRadio()
-                .FromMqtt()
-                .FromSirap()
-                .FromMicroplus()
-                .FromMicrogate()
-                .FromObr()
-                .FromTcp()
-    // Enrichment
-                .WithOribosEnrichment()
-    // Middleware
-                .ThroughDispatcher()
-    // Targets
-                .ToUI()
-                .ToOribos()
-                .ToFile()
-                .ToSirap()
-                .ToTcp()
-                .ToOResults()
-                .ToHttp();
-
-    // Platform-specific targets
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-    {
-      builder.Host.ToPrinter();
-    }
+    builder.Services.AddFlowServices();
+    // Existing operational pages stay available while their UI is migrated.
+    // Protocol instances are owned exclusively by the graph runtime.
+    builder.Services.AddSingleton(sp => new DispatcherService(sp.GetRequiredService<FilterService>(), [], new DispatcherConfiguration()));
+    builder.Services.AddHostedService<LogService>();
+    builder.Services.AddHostedService<StatsService>();
 
     builder.Services.AddHealthChecks();
     builder.Services.AddRazorPages();
@@ -218,6 +194,8 @@ public static class Program
     {
       app.UseDeveloperExceptionPage();
     }
+
+    app.MapFlowApi();
 
     var wwwrootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
     var embeddedProvider = new EmbeddedFileProvider(Assembly.GetExecutingAssembly(), "RadioSender.wwwroot");
@@ -241,6 +219,8 @@ public static class Program
     app.UseRouting();
     app.MapHealthChecks("healthz");
     app.MapRazorPages();
+    app.MapGet("/", () => Results.Redirect("/flows/index.html"));
+    app.MapGet("/Flows", () => Results.Redirect("/flows/index.html"));
     app.MapHub<DeviceHub>("/deviceHub");
     app.MapHangfireDashboard();
 

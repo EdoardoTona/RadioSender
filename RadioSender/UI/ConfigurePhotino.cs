@@ -12,6 +12,7 @@ namespace Microsoft.Extensions.Hosting
       builder
         .ConfigureServices((context, services) =>
         {
+          if (!context.Configuration.GetValue("Desktop:Enabled", true)) return;
 
           var urls = context.Configuration.GetSection("Urls").Get<string>();
 

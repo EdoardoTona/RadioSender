@@ -2,6 +2,8 @@
 using Photino.NET;
 using System;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -18,6 +20,8 @@ namespace RadioSender.UI
     private static Action? _terminatePhotinoAction;
     private static Action? _terminateAppAction;
     private static volatile bool _isTerminating;
+    private static bool _flowEditorReady;
+    private static bool _closeRequested;
 
     private Thread? _thread;
 
@@ -116,10 +120,12 @@ namespace RadioSender.UI
         .SetTitle("RadioSender")
         .SetChromeless(false)
         .SetDevToolsEnabled(true)
-        .SetUseOsDefaultSize(true)
+        .SetUseOsDefaultSize(false)
+        .SetSize(new System.Drawing.Size(1440, 950))
         .SetResizable(true)
         .Center()
-        .Load($"http://127.0.0.1:{port}/Log")
+        .RegisterWebMessageReceivedHandler(HandleWebMessage)
+        .Load($"http://127.0.0.1:{port}/flows/index.html")
         .RegisterWindowClosingHandler(new PhotinoWindow.NetClosingDelegate(Window_WindowClosing));
 
       _terminatePhotinoAction = () => { _isTerminating = true; window?.Close(); };
@@ -137,12 +143,49 @@ namespace RadioSender.UI
 
       var window = sender as PhotinoWindow;
 
+      if (_flowEditorReady && window != null)
+      {
+        _closeRequested = true;
+        window.SendWebMessage("{\"kind\":\"closing\"}");
+        return true;
+      }
+
       var res = window?.ShowMessage("Radiosender", "Do you want to close?", PhotinoDialogButtons.YesNo, PhotinoDialogIcon.Warning);
 
       if (res != null && res == PhotinoDialogResult.Yes)
         return false;
 
       return true;
+    }
+
+    private static void HandleWebMessage(object? sender, string message)
+    {
+      if (sender is not PhotinoWindow window) return;
+      string? requestId = null;
+      try
+      {
+        using var json = JsonDocument.Parse(message);
+        var root = json.RootElement;
+        var kind = root.GetProperty("kind").GetString();
+        if (kind == "flow-editor-ready") { _flowEditorReady = true; return; }
+        if (kind == "flow-editor-leaving") { _flowEditorReady = false; return; }
+        if (kind == "close-ready" && _closeRequested)
+        { _isTerminating = true; window.Close(); return; }
+        if (kind != "file-dialog") return;
+        requestId = root.GetProperty("id").GetString();
+        var defaultPath = root.GetProperty("path").GetString();
+        var mode = root.GetProperty("mode").GetString();
+        (string Name, string[] Extensions)[] filters = [("RadioSender configuration", ["json"])];
+        var path = mode == "open"
+          ? window.ShowOpenFile("Open configuration", defaultPath, false, filters).FirstOrDefault()
+          : window.ShowSaveFile("Save configuration", defaultPath, filters);
+        window.SendWebMessage(JsonSerializer.Serialize(new { kind = "file-dialog-result", id = requestId, path }));
+      }
+      catch (Exception ex)
+      {
+        if (requestId != null)
+          window.SendWebMessage(JsonSerializer.Serialize(new { kind = "file-dialog-result", id = requestId, error = ex.Message }));
+      }
     }
   }
 }
