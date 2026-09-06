@@ -80,7 +80,7 @@ async function send() {
         :items="['Unknown', 'Control', 'Start', 'Finish', 'Check', 'Clear']"
       />
     </div>
-    <v-switch v-model="useNow" label="Use current time" />
+    <v-checkbox v-model="useNow" label="Use current time" />
     <v-text-field
       v-if="!useNow"
       v-model="values.time"
@@ -94,15 +94,19 @@ async function send() {
       label="Competitor status"
       :items="['Unknown', 'OK', 'DNS', 'DNF', 'MP', 'DSQ', 'OverTime', 'WaitingStart', 'Running']"
     />
-    <v-switch v-model="values.cancellation" label="Cancellation" /><v-switch
+    <v-checkbox v-model="values.cancellation" label="Cancellation" /><v-checkbox
       v-model="values.netTime"
       label="Net time"
     />
     <v-btn type="submit" color="primary" variant="flat" block :disabled="disabled" :loading="busy"
       >Send event</v-btn
     >
-    <v-alert v-if="message" :type="failed ? 'error' : 'success'" class="mt-4">{{
-      message
-    }}</v-alert>
+    <v-alert
+      v-if="message"
+      :type="failed ? 'error' : undefined"
+      :icon="failed ? undefined : false"
+      class="mt-4"
+      >{{ message }}</v-alert
+    >
   </form>
 </template>

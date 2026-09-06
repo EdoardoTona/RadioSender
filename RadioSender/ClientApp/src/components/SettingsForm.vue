@@ -6,7 +6,7 @@ const emit = defineEmits<{ update: [key: string, value: string | number | boolea
 <template>
   <div class="settings-form">
     <template v-for="field in definition.fields" :key="field.key">
-      <v-switch
+      <v-checkbox
         v-if="field.kind === 'boolean'"
         :label="field.label"
         :model-value="Boolean(node.settings[field.key])"

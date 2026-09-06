@@ -503,7 +503,7 @@ onBeforeUnmount(() => {
   <v-app>
     <div class="app-shell">
       <header class="app-header">
-        <a class="brand" href="/flows/index.html"><span class="brand-icon">↗</span>RadioSender</a>
+        <a class="brand" href="/flows/index.html">RadioSender</a>
         <nav>
           <button :class="{ current: mode !== 'logs' }" @click="mode = 'flow'">Flow</button
           ><button :class="{ current: mode === 'logs' }" @click="mode = 'logs'">Logs</button>
@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
       </header>
       <div class="document-toolbar">
         <div class="document-title">
-          <span class="eyebrow">{{
+          <span class="panel-caption">{{
             mode === 'editor' ? 'Editor' : mode === 'logs' ? 'Application logs' : 'Flow'
           }}</span
           ><strong>{{ fileName }}</strong
@@ -587,7 +587,7 @@ onBeforeUnmount(() => {
           ><v-btn v-if="saveError" @click="reload">Reload file</v-btn>
         </div></v-alert
       >
-      <v-alert v-if="notice" type="success" class="app-alert" closable @click:close="notice = ''">{{
+      <v-alert v-if="notice" :icon="false" class="app-alert" closable @click:close="notice = ''">{{
         notice
       }}</v-alert>
       <v-alert v-if="issues.length" type="warning" class="app-alert"
@@ -612,7 +612,6 @@ onBeforeUnmount(() => {
       >
       <main v-if="mode === 'logs'" class="general-logs">
         <div class="page-heading">
-          <span class="eyebrow">Application activity</span>
           <h1>General logs</h1>
           <p>Messages that do not belong to a node. Enable node logs to see everything together.</p>
         </div>
@@ -620,16 +619,13 @@ onBeforeUnmount(() => {
       </main>
       <main v-else-if="!snapshot" class="welcome">
         <div class="welcome-card">
-          <span class="welcome-icon">↗</span><span class="eyebrow">Your race. Your data flow.</span>
           <h1>Open or create a new flow</h1>
-          <p>
-            Connect your timing sources and destinations,<br />then manage the data from one place.
-          </p>
+          <p>Open a saved configuration or create a new one.</p>
           <div class="welcome-actions">
-            <v-btn size="large" :prepend-icon="mdiFolderOpenOutline" @click="fileAction('open')"
+            <v-btn size="default" :prepend-icon="mdiFolderOpenOutline" @click="fileAction('open')"
               >Open flow</v-btn
             ><v-btn
-              size="large"
+              size="default"
               color="primary"
               variant="flat"
               :prepend-icon="mdiPlus"
@@ -642,7 +638,6 @@ onBeforeUnmount(() => {
       <main v-else class="workspace" :class="mode">
         <aside v-if="mode === 'editor'" class="library">
           <div class="panel-heading">
-            <span class="eyebrow">Build your flow</span>
             <h2>Module library</h2>
           </div>
           <v-text-field v-model="librarySearch" label="Search modules" class="library-search" />
@@ -656,9 +651,6 @@ onBeforeUnmount(() => {
               variant="text"
               class="library-module"
               @click="addNode(module)"
-              ><span class="module-symbol">{{
-                category === 'Source' ? '↗' : category === 'Target' ? '↙' : '→'
-              }}</span
               ><span
                 ><strong>{{ module.name }}</strong
                 ><small>{{ module.description }}</small></span
@@ -747,11 +739,11 @@ onBeforeUnmount(() => {
         <aside class="properties">
           <template v-if="mode === 'editor' && node"
             ><div class="panel-heading">
-              <span class="eyebrow">Node configuration</span>
+              <span class="panel-caption">Node configuration</span>
               <h2>{{ definition?.name ?? 'Unavailable module' }}</h2>
             </div>
             <div class="properties-content">
-              <v-text-field v-model="node.name" label="Name" maxlength="100" /><v-switch
+              <v-text-field v-model="node.name" label="Name" maxlength="100" /><v-checkbox
                 v-model="node.enabled"
                 label="Enabled"
               /><SettingsForm
@@ -771,7 +763,7 @@ onBeforeUnmount(() => {
           >
           <template v-else-if="mode === 'editor' && (edge || namedFilter)"
             ><div class="panel-heading">
-              <span class="eyebrow">{{
+              <span class="panel-caption">{{
                 edge ? 'Connection configuration' : 'Reusable filter'
               }}</span>
               <h2>{{ edge ? 'Branch settings' : namedFilter?.name }}</h2>
@@ -782,7 +774,7 @@ onBeforeUnmount(() => {
                   {{ document.nodes.find((n) => n.id === edge!.from.node)?.name }} →
                   {{ document.nodes.find((n) => n.id === edge!.to.node)?.name }}
                 </p>
-                <v-switch v-model="edge.enabled" label="Connection enabled" /><v-text-field
+                <v-checkbox v-model="edge.enabled" label="Connection enabled" /><v-text-field
                   :model-value="edge.delayMs ?? 0"
                   type="number"
                   min="0"
@@ -829,21 +821,13 @@ onBeforeUnmount(() => {
           >
           <template v-else-if="mode === 'flow' && node"
             ><div class="panel-heading">
-              <span class="eyebrow">{{ definition?.category }} controls</span>
+              <span class="panel-caption">{{ definition?.category }} controls</span>
               <h2>{{ node.name }}</h2>
             </div>
             <div class="properties-content">
               <div class="status-card">
-                <v-chip
-                  :color="
-                    nodeState?.status === 'Running' ||
-                    nodeState?.status === 'Connected' ||
-                    nodeState?.status === 'Listening'
-                      ? 'success'
-                      : 'secondary'
-                  "
-                  >{{ nodeState?.status ?? 'Not running' }}</v-chip
-                ><small v-if="nodeState?.detail">{{ nodeState.detail }}</small
+                <span class="node-status">Status: {{ nodeState?.status ?? 'Not running' }}</span>
+                <small v-if="nodeState?.detail">{{ nodeState.detail }}</small
                 ><small v-if="nodeState?.pending"
                   >{{ nodeState.pending }} events pending delivery</small
                 >
@@ -864,7 +848,6 @@ onBeforeUnmount(() => {
             </div></template
           >
           <div v-else class="properties-empty">
-            <span class="empty-symbol">⌁</span>
             <h2>{{ mode === 'editor' ? 'Configure your flow' : 'Select a node' }}</h2>
             <p>
               {{

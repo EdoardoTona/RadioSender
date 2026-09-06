@@ -33,7 +33,7 @@ function setType(type: string, text: string) {
 </script>
 <template>
   <div class="filter-editor">
-    <v-switch
+    <v-checkbox
       label="Enable filter & mapping"
       :model-value="modelValue.enabled"
       @update:model-value="update('enabled', Boolean($event))"

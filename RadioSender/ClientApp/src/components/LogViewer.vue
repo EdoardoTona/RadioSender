@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
         label="Level"
         class="level-select"
       />
-      <v-switch v-if="!nodeId" v-model="includeNodes" label="Include node logs" />
+      <v-checkbox v-if="!nodeId" v-model="includeNodes" label="Include node logs" />
       <v-btn @click="paused = !paused">{{ paused ? 'Resume view' : 'Pause view' }}</v-btn>
     </div>
     <v-alert v-if="error" type="error">{{ error }}</v-alert>

@@ -62,6 +62,6 @@ async function run(command: string) {
       editor.
     </p>
     <v-alert v-if="error" type="error">{{ error }}</v-alert
-    ><v-alert v-if="message" type="success">{{ message }}</v-alert>
+    ><v-alert v-if="message" :icon="false">{{ message }}</v-alert>
   </div>
 </template>

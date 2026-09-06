@@ -57,12 +57,12 @@ const edges = computed(() =>
           .filter(Boolean)
           .join(' · ') || undefined,
     style: {
-      stroke: !edge.enabled ? '#bec8d2' : props.selectedEdge === edge.id ? '#0c8b80' : '#8395a5',
+      stroke: !edge.enabled ? '#b8b8b8' : props.selectedEdge === edge.id ? '#0067c0' : '#808080',
       strokeWidth: props.selectedEdge === edge.id ? 3 : 2,
       strokeDasharray: !edge.enabled ? '5 5' : undefined,
     },
     labelBgPadding: [7, 5] as [number, number],
-    labelBgBorderRadius: 5,
+    labelBgBorderRadius: 2,
   })),
 )
 function moved(event: NodeDragEvent) {
@@ -128,8 +128,7 @@ function moved(event: NodeDragEvent) {
       </template>
     </VueFlow>
     <div v-if="!document.nodes.length" class="canvas-empty">
-      <span class="empty-symbol">↗</span>
-      <h2>Build your data flow</h2>
+      <h2>No nodes</h2>
       <p>Add a source from the library, then connect its output to a target.</p>
     </div>
     <div class="canvas-controls">
