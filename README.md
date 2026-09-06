@@ -23,6 +23,12 @@ OResults, Oribos.
 
 ---
 
+## Graph configuration (development version)
+
+The current application opens the new **Flow** screen and uses JSON graph documents with a graphical **Editor**. The first increment supports Manual/TCP sources, Passthrough and TCP/File targets, live reconfiguration, named branch filters, delays, per-node inspection, replay and logs. See the [Flow guide](docs/flow-editor.md) and [example documents](examples).
+
+**The protocol list and appsettings walkthrough below describe the previous configuration system.** Other adapters and enrichment still need to be connected to the new runtime. This version does not start source/target instances from those appsettings sections.
+
 ## 1. Where RadioSender sits in the chain
 
 This is the layout used for a start-gate + photocell setup at an orienteering event:

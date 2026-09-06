@@ -3,6 +3,7 @@ using RadioSender.Flow;
 using RadioSender.Flow.Modules;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,10 +18,12 @@ namespace RadioSender.Runtime;
 
 internal sealed record FlowEvent(Punch Punch, Guid EventId, Guid ExecutionId, long? ReplayOf = null);
 public sealed record RuntimeNode(string Id, string Name, string Type, string Status, string? Detail, int Pending);
-public sealed record RuntimeEdge(string Id, long Forwarded, long Filtered);
+public sealed record RuntimeEdge(string Id, long Forwarded, long Filtered, int Pending, long Rejected);
+public sealed record RuntimeGraph(Guid? DocumentId, string? Path, long Revision, FlowDocument Document);
 public sealed record RuntimeSnapshot(Guid SessionId, Guid? DocumentId, string? Path, long Revision, bool Running,
   string? Error, IReadOnlyList<RuntimeNode> Nodes, IReadOnlyList<RuntimeEdge> Edges);
 public sealed record ApplyResult(long Revision, string[] Restarted, string[] Kept);
+public sealed record ApplyPreview(string[] Started, string[] Kept, string[] Stopped);
 public sealed record ReplayRequest(Guid SessionId, long Revision, Guid OperationId, long[] ObservationIds, string Port = "out");
 public sealed record ReplayResult(Guid OperationId, int Events);
 
@@ -35,12 +38,14 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
     public FlowModule Module = module;
     public TargetQueue? Target;
   }
-  private sealed class EdgeState(FlowEdge edge)
+  private sealed class EdgeState(FlowEdge edge, Filter? filter)
   {
     public FlowEdge Edge = edge;
-    public Filter? Filter = edge.Filter?.Compile();
+    public Filter? Filter = filter;
+    public DelayedEdgeQueue? Delay;
     public long Forwarded;
     public long Filtered;
+    public long Rejected;
   }
   private sealed record Work(Func<Task> Action, TaskCompletionSource? Completion);
   private readonly Channel<Work> _queue = Channel.CreateBounded<Work>(new BoundedChannelOptions(256)
@@ -57,6 +62,10 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
   private long _revision;
   private string? _error;
   private bool _running;
+  private FlowDocument _activeDocument = new();
+
+  public RuntimeGraph Graph()
+  { lock (_snapshotLock) return new(_documentId, _path, _revision, FlowJson.Clone(_activeDocument)); }
 
   public Task StartAsync(CancellationToken cancellationToken) { _worker = RunAsync(); return Task.CompletedTask; }
   private async Task RunAsync()
@@ -92,7 +101,11 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
         }, null), timeout.Token);
       }
       catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-      { lock (runtime._snapshotLock) runtime._error = $"Input queue full: an event from {nodeId} was rejected."; }
+      {
+        lock (runtime._snapshotLock) runtime._error = $"Input queue full: an event from {nodeId} was rejected.";
+        Log.ForContext("NodeId", nodeId).ForContext("SessionId", runtime._sessionId)
+          .Warning("Input queue full: event rejected.");
+      }
     }
   }
 
@@ -102,7 +115,30 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
       return new(_sessionId, _documentId, _path, _revision, _running, _error,
         _instances.Values.Select(i => new RuntimeNode(i.Node.Id, i.Node.Name, i.Node.Type, i.Module.State.Status,
           i.Module.State.Detail, i.Target?.Pending ?? 0)).ToArray(),
-        _edges.Select(e => new RuntimeEdge(e.Edge.Id, Interlocked.Read(ref e.Forwarded), Interlocked.Read(ref e.Filtered))).ToArray());
+        _edges.Select(e => new RuntimeEdge(e.Edge.Id, Interlocked.Read(ref e.Forwarded), Interlocked.Read(ref e.Filtered), e.Delay?.Pending ?? 0, Interlocked.Read(ref e.Rejected))).ToArray());
+  }
+
+  private static string Signature(FlowNode node, JsonObject settings, string directory) =>
+    node.Type + "|" + settings.ToJsonString(FlowJson.Options) +
+      (node.Type == "target.file" ? "|" + Path.GetFullPath(settings["path"]!.GetValue<string>(), directory) : "");
+
+  public async Task<ApplyPreview> PreviewAsync(Guid documentId, string path, FlowDocument document, CancellationToken ct)
+  {
+    document = FlowJson.Clone(document);
+    var issues = validator.Validate(document);
+    if (issues.Count > 0) throw new FlowException(string.Join("\n", issues.Select(i => i.Message)));
+    ApplyPreview? result = null;
+    await ExecuteAsync(() =>
+    {
+      var enabled = document.Nodes.Where(n => n.Enabled).ToArray();
+      var kept = enabled.Where(n => _documentId == documentId && _instances.TryGetValue(n.Id, out var old) &&
+        old.Signature == Signature(n, registry.Find(n.Type)!.Normalize(n.Settings), Path.GetDirectoryName(path)!)).Select(n => n.Id).ToHashSet();
+      result = new(enabled.Where(n => !kept.Contains(n.Id)).Select(n => n.Name).ToArray(),
+        enabled.Where(n => kept.Contains(n.Id)).Select(n => n.Name).ToArray(),
+        _instances.Values.Where(n => !kept.Contains(n.Node.Id)).Select(n => n.Node.Name).ToArray());
+      return Task.CompletedTask;
+    }, ct);
+    return result!;
   }
 
   public async Task<ApplyResult> ApplyAsync(Guid documentId, string path, long revision, FlowDocument document, CancellationToken ct = default)
@@ -117,6 +153,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
         throw new FlowException("A newer revision of this document is already running.", 409);
       var directory = Path.GetDirectoryName(path)!;
       var sameDocument = _documentId == documentId;
+      var nextSession = sameDocument ? _sessionId : Guid.NewGuid();
       var next = new Dictionary<string, Instance>();
       var fresh = new List<Instance>();
       var kept = new List<string>();
@@ -124,8 +161,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
       {
         var definition = registry.Find(node.Type)!;
         var settings = definition.Normalize(node.Settings);
-        var signature = node.Type + "|" + settings.ToJsonString(FlowJson.Options) +
-          (node.Type == "target.file" ? "|" + Path.GetFullPath(settings["path"]!.GetValue<string>(), directory) : "");
+        var signature = Signature(node, settings, directory);
         if (sameDocument && _instances.TryGetValue(node.Id, out var old) && old.Signature == signature)
         { next[node.Id] = old; kept.Add(node.Id); }
         else
@@ -138,14 +174,14 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
       }
 
       using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-      try { await Task.WhenAll(_instances.Values.Where(i => i.Target != null).Select(i => i.Target!.DrainAsync(timeout.Token))); }
-      catch { foreach (var i in fresh) await i.Module.DisposeAsync(); throw new FlowException("Apply timed out while draining target queues. The current flow is unchanged.", 409); }
+      try { await DrainAsync(timeout.Token); }
+      catch { foreach (var i in fresh) await i.Module.DisposeAsync(); throw new FlowException("Apply timed out while draining delayed events and target queues. The current flow is unchanged.", 409); }
       var retired = _instances.Values.Where(i => !kept.Contains(i.Node.Id)).ToArray();
       try
       {
         foreach (var instance in retired) await RetireAsync(instance);
         foreach (var instance in fresh.OrderBy(i => registry.Find(i.Node.Type)!.Descriptor.Category == "Source"))
-          await StartInstanceAsync(instance);
+          await StartInstanceAsync(instance, nextSession);
       }
       catch (Exception failure)
       {
@@ -160,7 +196,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
             old.Module = registry.Find(old.Node.Type)!.Create(old.Settings,
               new(old.Node.Id, Path.GetDirectoryName(_path!)!, new Output(this, old.Node.Id, generation)));
             old.Target = null;
-            await StartInstanceAsync(old);
+            await StartInstanceAsync(old, _sessionId);
           }
           catch (Exception e) { rollbackErrors.Add($"{old.Node.Name}: {e.Message}"); }
         }
@@ -168,28 +204,49 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
           (rollbackErrors.Count == 0 ? " The previous flow was restored." : " Restore failed: " + string.Join("; ", rollbackErrors)), 409);
       }
 
+      foreach (var edge in _edges.Where(e => e.Delay != null)) await edge.Delay!.DisposeAsync();
       lock (_snapshotLock)
       {
-        if (!sameDocument) { _sessionId = Guid.NewGuid(); journal.Clear(); _replays.Clear(); }
+        if (!sameDocument) { _sessionId = nextSession; journal.Clear(); _replays.Clear(); }
         foreach (var node in document.Nodes.Where(n => next.ContainsKey(n.Id))) next[node.Id].Node = node;
         _instances = next;
-        _edges = document.Edges.Where(e => e.Enabled && next.ContainsKey(e.From.Node) && next.ContainsKey(e.To.Node)).Select(e => new EdgeState(e)).ToArray();
+        var filters = document.Filters.ToDictionary(f => f.Id, f => f.Rules.Compile());
+        _edges = document.Edges.Where(e => e.Enabled && next.ContainsKey(e.From.Node) && next.ContainsKey(e.To.Node))
+          .Select(e => new EdgeState(e, e.FilterId == null ? null : filters[e.FilterId])).ToArray();
         _outgoing = _edges.GroupBy(e => e.Edge.From.Node).ToDictionary(g => g.Key, g => g.ToArray());
         _documentId = documentId; _path = path; _revision = revision; _error = null; _running = true;
+        _activeDocument = document;
       }
+      foreach (var edge in _edges.Where(e => e.Edge.DelayMs > 0))
+      {
+        edge.Delay = new(edge.Edge.DelayMs, item => DeliverEdgeAsync(edge, item), (item, reason) =>
+        {
+          Interlocked.Increment(ref edge.Rejected);
+          Log.ForContext("NodeId", edge.Edge.From.Node).ForContext("EdgeId", edge.Edge.Id).ForContext("SessionId", nextSession)
+            .Warning("Delayed event {CompetitorId} rejected: {Reason}", item.Punch.CompetitorId, reason);
+        });
+        edge.Delay.Start();
+      }
+      Log.Information("Applied flow {Path}, revision {Revision}: {NodeCount} nodes.", path, revision, next.Count);
       result = new(revision, fresh.Select(i => i.Node.Id).ToArray(), kept.ToArray());
     }, ct);
     return result!;
   }
 
-  private async Task StartInstanceAsync(Instance instance)
+  private async Task StartInstanceAsync(Instance instance, Guid sessionId)
   {
+    instance.Module.AttachLogging(instance.Node.Id, sessionId);
     await instance.Module.StartAsync(CancellationToken.None);
     if (registry.Find(instance.Node.Type)!.Descriptor.Category == "Target")
     {
       instance.Target = new(instance.Module, (item, edgeId, revision, result) =>
+      {
         journal.Add(item.EventId, item.ExecutionId, item.ReplayOf, instance.Node.Id, "delivery", edgeId,
-          revision, item.Punch, result.Status, result.Detail));
+          revision, item.Punch, result.Status, result.Detail);
+        if (result.Status is "Failed" or "Rejected" or "Partial" or "Suppressed")
+          Log.ForContext("NodeId", instance.Node.Id).ForContext("EdgeId", edgeId).ForContext("SessionId", sessionId)
+            .Warning("Delivery {Status}: {Detail}", result.Status, result.Detail);
+      });
       instance.Target.Start();
     }
   }
@@ -209,26 +266,49 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
     {
       var transformed = state.Filter == null ? item.Punch : state.Filter.Transform(item.Punch);
       if (transformed == null) { Interlocked.Increment(ref state.Filtered); return; }
-      Interlocked.Increment(ref state.Forwarded);
       var forwarded = item with { Punch = transformed };
-      var target = _instances[state.Edge.To.Node];
-      journal.Add(item.EventId, item.ExecutionId, item.ReplayOf, target.Node.Id, "input", state.Edge.Id, _revision, transformed);
-      if (target.Target != null) await target.Target.EnqueueAsync(forwarded, state.Edge.Id, _revision);
-      else await RouteOutputAsync(target.Node.Id, forwarded);
+      if (state.Delay != null) await state.Delay.EnqueueAsync(forwarded);
+      else await DeliverEdgeAsync(state, forwarded);
     }));
   }
 
-  public Task SendManualAsync(Guid sessionId, long revision, string nodeId, Punch punch, CancellationToken ct = default) => ExecuteAsync(async () =>
+  private async Task DeliverEdgeAsync(EdgeState state, FlowEvent item)
   {
-    CheckSession(sessionId, revision);
-    if (!_instances.TryGetValue(nodeId, out var node) || node.Node.Type != "source.manual")
-      throw new FlowException("Apply and start a Manual input node before sending.", 409);
-    if (punch == null || string.IsNullOrWhiteSpace(punch.CompetitorId) || punch.CompetitorId.Length > 256 || punch.Time == default ||
-        !Enum.IsDefined(punch.CompetitorIdType) || !Enum.IsDefined(punch.ControlType) || !Enum.IsDefined(punch.CompetitorStatus) || punch.Control < 0)
-      throw new FlowException("Enter a competitor ID, valid time, control and event types.");
-    punch = punch with { SourceId = nodeId, ReceivedAt = DateTimeOffset.UtcNow, Competitor = null };
-    await RouteOutputAsync(nodeId, new(punch, Guid.NewGuid(), Guid.NewGuid()));
-  }, ct);
+    Interlocked.Increment(ref state.Forwarded);
+    var target = _instances[state.Edge.To.Node];
+    journal.Add(item.EventId, item.ExecutionId, item.ReplayOf, target.Node.Id, "input", state.Edge.Id, _revision, item.Punch);
+    if (target.Target != null) await target.Target.EnqueueAsync(item, state.Edge.Id, _revision);
+    else await RouteOutputAsync(target.Node.Id, item);
+  }
+
+  private async Task DrainAsync(CancellationToken ct)
+  {
+    do
+    {
+      await Task.WhenAll(_edges.Where(e => e.Delay != null).Select(e => e.Delay!.DrainAsync(ct)));
+      await Task.WhenAll(_instances.Values.Where(i => i.Target != null).Select(i => i.Target!.DrainAsync(ct)));
+      // An upstream delayed edge may have enqueued another edge after its first drain snapshot.
+    } while (_edges.Any(e => e.Delay?.Pending > 0) || _instances.Values.Any(i => i.Target?.Pending > 0));
+  }
+
+  public async Task<CommandResult> ExecuteCommandAsync(Guid sessionId, long revision, string nodeId, string command, JsonObject arguments, CancellationToken ct = default)
+  {
+    CommandResult? result = null;
+    await ExecuteAsync(async () =>
+    {
+      CheckSession(sessionId, revision);
+      if (!_instances.TryGetValue(nodeId, out var node) ||
+          !registry.Find(node.Node.Type)!.Descriptor.Commands.Any(c => c.Id == command))
+        throw new FlowException("This running node does not declare the requested command.", 409);
+      using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+      result = await node.Module.ExecuteCommandAsync(command, arguments, timeout.Token);
+      foreach (var punch in result.Output ?? [])
+        await RouteOutputAsync(nodeId, new(punch, Guid.NewGuid(), Guid.NewGuid()));
+      Log.ForContext("NodeId", nodeId).ForContext("SessionId", _sessionId)
+        .Information("Command {Command}: {Message}", command, result.Message);
+    }, ct);
+    return result! with { Output = null };
+  }
 
   private void CheckSession(Guid session, long revision)
   {
@@ -255,6 +335,8 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
       if (_replays.Count >= 4096) throw new FlowException("The session replay limit was reached. Start a new runtime session to continue.", 409);
       result = new(request.OperationId, items.Length);
       _replays[request.OperationId] = (fingerprint, result);
+      Log.ForContext("NodeId", nodeId).ForContext("SessionId", _sessionId)
+        .Information("{Operation}: {Count} selected events.", retry ? "Target retry" : "Output replay", items.Length);
       foreach (var observation in items)
       {
         var item = new FlowEvent(observation.Punch, observation.EventId, request.OperationId, observation.Id);
@@ -271,10 +353,13 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
 
   public Task StopFlowAsync(CancellationToken ct = default) => ExecuteAsync(async () =>
   {
+    foreach (var edge in _edges.Where(e => e.Delay != null)) await edge.Delay!.DisposeAsync();
     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-    await Task.WhenAll(_instances.Values.Where(i => i.Target != null).Select(i => i.Target!.DrainAsync(timeout.Token)));
+    try { await Task.WhenAll(_instances.Values.Where(i => i.Target != null).Select(i => i.Target!.DrainAsync(timeout.Token))); }
+    catch (OperationCanceledException) { Log.Warning("Stop timed out while draining targets. Remaining deliveries will be cancelled."); }
     foreach (var instance in _instances.Values) await RetireAsync(instance);
-    lock (_snapshotLock) { _instances = []; _outgoing = []; _edges = []; _running = false; _documentId = null; }
+    lock (_snapshotLock) { _instances = []; _outgoing = []; _edges = []; _running = false; _documentId = null; _error = null; }
+    Log.Information("Flow stopped.");
   }, ct);
 
   public async Task StopAsync(CancellationToken cancellationToken)

@@ -16,7 +16,7 @@ public sealed class ModuleRegistry
 
   public static ModuleRegistry CreateDefault() => new([
     new ModuleDefinition<EmptySettings>("source.manual", "Manual input", "Source", "Enter punches and competitor status changes.",
-      (_, _) => new PassthroughModule(), commands: [new("send", "Send event")], view: "manual-input"),
+      (_, c) => new ManualFlowModule(c.NodeId), commands: [new("send", "Send event")], view: "manual-input"),
     new ModuleDefinition<EmptySettings>("processor.passthrough", "Passthrough", "Processor", "Inspect, replay and branch an unchanged stream.",
       (_, _) => new PassthroughModule()),
     new ModuleDefinition<TcpSettings>("source.tcp", "TCP input", "Source", "Read formatted lines as a TCP client or server.",

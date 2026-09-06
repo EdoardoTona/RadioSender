@@ -8,8 +8,8 @@ const error = ref('')
 function update(key: keyof EdgeFilter, value: unknown) {
   emit('update:modelValue', { ...emptyFilter(), ...props.modelValue, [key]: value })
 }
-function list(event: Event, key: 'includeOnlyControls' | 'includeOnlyCompetitorIds') {
-  const values = (event.target as HTMLInputElement).value
+function list(text: string, key: 'includeOnlyControls' | 'includeOnlyCompetitorIds') {
+  const values = text
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
@@ -20,19 +20,26 @@ function list(event: Event, key: 'includeOnlyControls' | 'includeOnlyCompetitorI
   error.value = ''
   update(key, key === 'includeOnlyControls' ? values.map(Number) : values)
 }
+function setType(type: string, text: string) {
+  const values = text
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (values.every((s) => /^-?\d+$/.test(s))) {
+    error.value = ''
+    update('typeFromCode', { ...props.modelValue.typeFromCode, [type]: values.map(Number) })
+  } else error.value = 'Control codes must be integers.'
+}
 </script>
-
 <template>
   <div class="filter-editor">
-    <label class="field check"
-      ><span>Enable filter & mapping</span
-      ><input
-        type="checkbox"
-        :checked="modelValue.enabled"
-        @change="update('enabled', ($event.target as HTMLInputElement).checked)"
-    /></label>
+    <v-switch
+      label="Enable filter & mapping"
+      :model-value="modelValue.enabled"
+      @update:model-value="update('enabled', Boolean($event))"
+    />
     <p class="hint">
-      Mappings run before the inclusion checks. Each connection processes its own copy.
+      Mappings run before inclusion checks. Every connection processes its own copy.
     </p>
     <MappingTable
       label="Control mapping"
@@ -45,70 +52,49 @@ function list(event: Event, key: 'includeOnlyControls' | 'includeOnlyCompetitorI
       :model-value="modelValue.mapCompetitorIds ?? {}"
       @update:model-value="update('mapCompetitorIds', $event)"
     />
-    <label class="field"
-      ><span>Include only controls</span
-      ><input
-        :value="modelValue.includeOnlyControls?.join(', ')"
-        placeholder="All controls"
-        @change="list($event, 'includeOnlyControls')"
-      /><small>Comma-separated codes, after mapping.</small></label
-    >
-    <label class="field"
-      ><span>Include only identifiers</span
-      ><input
-        :value="modelValue.includeOnlyCompetitorIds?.join(', ')"
-        placeholder="All identifiers"
-        @change="list($event, 'includeOnlyCompetitorIds')"
-    /></label>
+    <v-text-field
+      label="Include only controls"
+      :model-value="modelValue.includeOnlyControls?.join(', ')"
+      placeholder="All controls"
+      hint="Comma-separated codes, after mapping."
+      persistent-hint
+      @change="list(($event.target as HTMLInputElement).value, 'includeOnlyControls')"
+    />
+    <v-text-field
+      label="Include only identifiers"
+      :model-value="modelValue.includeOnlyCompetitorIds?.join(', ')"
+      placeholder="All identifiers"
+      @change="list(($event.target as HTMLInputElement).value, 'includeOnlyCompetitorIds')"
+    />
     <small v-if="error" class="error-text">{{ error }}</small>
-    <label class="field"
-      ><span>Maximum age (seconds)</span
-      ><input
-        type="number"
-        min="0"
-        max="315360000"
-        :value="modelValue.ignoreOlderThanSeconds ?? 0"
-        @input="update('ignoreOlderThanSeconds', Number(($event.target as HTMLInputElement).value))"
-      /><small>0 keeps every event. Net times are exempt.</small></label
-    >
-    <label class="field"
-      ><span>Identifier type override</span
-      ><select
-        :value="modelValue.overrideCompetitorIdType ?? ''"
-        @change="
-          update('overrideCompetitorIdType', ($event.target as HTMLSelectElement).value || null)
-        "
-      >
-        <option value="">Keep original</option>
-        <option>BibNumber</option>
-        <option>PunchingCard</option>
-        <option>TimingTransponder</option>
-        <option>Unknown</option>
-      </select></label
-    >
+    <v-text-field
+      label="Maximum age (seconds)"
+      type="number"
+      min="0"
+      max="315360000"
+      :model-value="modelValue.ignoreOlderThanSeconds ?? 0"
+      hint="0 keeps every event. Net times are exempt."
+      persistent-hint
+      @update:model-value="update('ignoreOlderThanSeconds', Number($event))"
+    />
+    <v-select
+      label="Identifier type override"
+      :model-value="modelValue.overrideCompetitorIdType"
+      :items="['BibNumber', 'PunchingCard', 'TimingTransponder', 'Unknown']"
+      clearable
+      placeholder="Keep original"
+      @update:model-value="update('overrideCompetitorIdType', $event)"
+    />
     <details>
       <summary>Control types from codes</summary>
-      <label
+      <v-text-field
         v-for="type in ['Start', 'Finish', 'Control', 'Check', 'Clear']"
         :key="type"
-        class="field"
-        ><span>{{ type }}</span
-        ><input
-          :value="modelValue.typeFromCode?.[type]?.join(', ') ?? ''"
-          placeholder="Control codes"
-          @change="
-            (event) => {
-              const text = (event.target as HTMLInputElement).value
-              const values = text
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean)
-              if (values.every((s) => /^-?\d+$/.test(s)))
-                update('typeFromCode', { ...modelValue.typeFromCode, [type]: values.map(Number) })
-              else error = 'Control codes must be integers.'
-            }
-          "
-      /></label>
+        :label="type"
+        :model-value="modelValue.typeFromCode?.[type]?.join(', ') ?? ''"
+        placeholder="Control codes"
+        @change="setType(type, ($event.target as HTMLInputElement).value)"
+      />
     </details>
   </div>
 </template>

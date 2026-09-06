@@ -11,6 +11,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,7 +22,7 @@ public static class FlowApi
   public sealed record OpenRequest(string Path);
   public sealed record SaveRequest(long Revision, FlowDocument? Document, string? Path = null);
   public sealed record ApplyRequest(Guid DocumentId, long Revision);
-  public sealed record ManualRequest(Guid SessionId, long Revision, Punch Punch);
+  public sealed record CommandRequest(Guid SessionId, long Revision, JsonObject Arguments);
 
   public static void AddFlowServices(this IServiceCollection services)
   {
@@ -29,6 +30,8 @@ public static class FlowApi
     services.AddSingleton<FlowValidator>();
     services.AddSingleton<FlowDocuments>();
     services.AddSingleton<FlowJournal>();
+    services.AddSingleton<FlowLogs>();
+    services.AddHostedService(sp => sp.GetRequiredService<FlowLogs>());
     services.AddSingleton<FlowRuntime>();
     services.AddHostedService(sp => sp.GetRequiredService<FlowRuntime>());
     services.AddHostedService<FlowNotifications>();
@@ -76,6 +79,15 @@ public static class FlowApi
     api.MapPost("/documents/{id:guid}/save-as", (Guid id, SaveRequest request, FlowDocuments documents, CancellationToken ct) => documents.SaveAsync(id, request.Revision, request.Document, request.Path ?? throw new FlowException("Choose a file path."), ct));
     api.MapPost("/validate", (FlowDocument document, FlowValidator validator) => validator.Validate(document));
     api.MapGet("/runtime", (FlowRuntime runtime) => runtime.Snapshot());
+    api.MapGet("/runtime/graph", (FlowRuntime runtime) => runtime.Graph());
+    api.MapGet("/logs", (string? scope, string? nodeId, string? sessionId, long? after, FlowLogs logs) =>
+      logs.Read(scope ?? "general", nodeId, sessionId, after ?? 0));
+    api.MapPost("/runtime/preview", async (ApplyRequest request, FlowDocuments documents, FlowRuntime runtime, CancellationToken ct) =>
+    {
+      var snapshot = await documents.ReadAsync(request.DocumentId, ct);
+      if (snapshot.Revision != request.Revision) throw new FlowException("The document changed. Review the latest revision before applying.", 409);
+      return await runtime.PreviewAsync(snapshot.Id, snapshot.Path, snapshot.Document, ct);
+    });
     api.MapPost("/runtime/apply", async (ApplyRequest request, FlowDocuments documents, FlowRuntime runtime, CancellationToken ct) =>
     {
       var snapshot = await documents.SaveAsync(request.DocumentId, request.Revision, ct: ct);
@@ -85,11 +97,8 @@ public static class FlowApi
     api.MapGet("/nodes/{id}/observations", (string id, string direction, long? after, FlowJournal journal) => journal.Read(id, direction, after ?? 0));
     api.MapPost("/nodes/{id}/replay", (string id, ReplayRequest request, FlowRuntime runtime, CancellationToken ct) => runtime.ReplayAsync(id, request, ct: ct));
     api.MapPost("/nodes/{id}/retry", (string id, ReplayRequest request, FlowRuntime runtime, CancellationToken ct) => runtime.ReplayAsync(id, request, true, ct));
-    api.MapPost("/nodes/{id}/commands/send", async (string id, ManualRequest request, FlowRuntime runtime, CancellationToken ct) =>
-    {
-      await runtime.SendManualAsync(request.SessionId, request.Revision, id, request.Punch, ct);
-      return Results.Ok(new { status = "Accepted" });
-    });
+    api.MapPost("/nodes/{id}/commands/{command}", (string id, string command, CommandRequest request, FlowRuntime runtime, CancellationToken ct) =>
+      runtime.ExecuteCommandAsync(request.SessionId, request.Revision, id, command, request.Arguments ?? throw new FlowException("Command arguments are required."), ct));
     app.MapHub<FlowHub>("/flowHub");
   }
 }

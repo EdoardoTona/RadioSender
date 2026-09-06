@@ -17,7 +17,8 @@ public static class EventLogSinkSinkExtensions
   }
 }
 
-public record LogMessage(DateTimeOffset Timestamp, LogEventLevel Level, string Message, string? Exception = null);
+public record LogMessage(DateTimeOffset Timestamp, LogEventLevel Level, string Message, string? Exception = null,
+  string? NodeId = null, string? EdgeId = null, string? SessionId = null);
 
 public class EventLogSink : ILogEventSink
 {
@@ -28,6 +29,7 @@ public class EventLogSink : ILogEventSink
 
   private readonly IFormatProvider? _formatProvider;
   private readonly Queue<LogMessage> buffer = new();
+  private readonly object _sync = new();
 
   public EventLogSink(IFormatProvider? formatProvider)
   {
@@ -37,25 +39,31 @@ public class EventLogSink : ILogEventSink
 
   public void AddHandler(NewLogHandler handler)
   {
-    NewLogEvent += handler;
-
-    while (buffer.TryDequeue(out LogMessage? oldMessage) && oldMessage != null)
+    LogMessage[] pending;
+    lock (_sync)
     {
-      NewLogEvent?.Invoke(this, oldMessage);
+      NewLogEvent += handler;
+      pending = buffer.ToArray();
     }
+    foreach (var oldMessage in pending) handler(this, oldMessage);
   }
   public void RemoveHandler(NewLogHandler handler)
   {
-    NewLogEvent -= handler;
+    lock (_sync) NewLogEvent -= handler;
   }
 
   public void Emit(LogEvent logEvent)
   {
-    var message = new LogMessage(logEvent.Timestamp, logEvent.Level, logEvent.RenderMessage(_formatProvider), logEvent.Exception?.ToString());
-
-    if (NewLogEvent == null)
+    string? Property(string name) => logEvent.Properties.TryGetValue(name, out var value) && value is ScalarValue scalar ? scalar.Value?.ToString() : null;
+    var message = new LogMessage(logEvent.Timestamp, logEvent.Level, logEvent.RenderMessage(_formatProvider), logEvent.Exception?.ToString(),
+      Property("NodeId"), Property("EdgeId"), Property("SessionId"));
+    NewLogHandler? handler;
+    lock (_sync)
+    {
+      handler = NewLogEvent;
+      if (buffer.Count >= 1000) buffer.Dequeue();
       buffer.Enqueue(message);
-    else
-      NewLogEvent?.Invoke(this, message);
+    }
+    handler?.Invoke(this, message);
   }
 }

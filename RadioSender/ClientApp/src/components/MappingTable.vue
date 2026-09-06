@@ -31,26 +31,26 @@ function remove(key: string) {
   emit('update:modelValue', next)
 }
 </script>
-
 <template>
   <div class="mapping-table">
     <h4>{{ label }}</h4>
     <div v-for="(value, key) in modelValue" :key="key" class="mapping-row">
       <code>{{ key }}</code
       ><span>→</span><code>{{ value === '' ? '(drop)' : value }}</code
-      ><button :aria-label="`Remove mapping ${key}`" @click="remove(String(key))">×</button>
+      ><v-btn variant="text" :aria-label="`Remove mapping ${key}`" @click="remove(String(key))"
+        >×</v-btn
+      >
     </div>
     <form class="mapping-row new-mapping" @submit.prevent="add">
-      <input v-model="from" :aria-label="`${label} from`" placeholder="From" /><span>→</span
-      ><input v-model="to" :aria-label="`${label} to`" placeholder="To" /><button
+      <v-text-field v-model="from" :aria-label="`${label} from`" placeholder="From" /><span>→</span
+      ><v-text-field v-model="to" :aria-label="`${label} to`" placeholder="To" /><v-btn
         type="submit"
         :aria-label="`Add ${label.toLowerCase()}`"
+        >+</v-btn
       >
-        +
-      </button>
     </form>
-    <small v-if="error" class="error-text">{{ error }}</small>
-    <small v-else>{{
+    <small v-if="error" class="error-text">{{ error }}</small
+    ><small v-else>{{
       numeric ? 'Map a positive control to 0 to drop it.' : 'An empty destination drops the event.'
     }}</small>
   </div>

@@ -14,6 +14,7 @@ public sealed record FlowDocument
   public int SchemaVersion { get; init; } = 1;
   public List<FlowNode> Nodes { get; init; } = [];
   public List<FlowEdge> Edges { get; init; } = [];
+  public List<NamedFlowFilter> Filters { get; init; } = [];
   public FlowEditor Editor { get; init; } = new();
 }
 
@@ -27,13 +28,22 @@ public sealed record FlowNode
 }
 
 public sealed record FlowPort(string Node, string Port);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record FlowEdge
 {
   public string Id { get; init; } = "";
   public FlowPort From { get; init; } = new("", "out");
   public FlowPort To { get; init; } = new("", "in");
   public bool Enabled { get; init; } = true;
-  public EdgeFilter? Filter { get; init; }
+  public string? FilterId { get; init; }
+  public int DelayMs { get; init; }
+}
+
+public sealed record NamedFlowFilter
+{
+  public string Id { get; init; } = "";
+  public string Name { get; init; } = "";
+  public EdgeFilter Rules { get; init; } = new();
 }
 
 public sealed record FlowPosition(double X, double Y);
@@ -100,16 +110,18 @@ public static class FlowJson
 
   public static void CheckStructure(FlowDocument document)
   {
-    if (document.SchemaVersion != 1 || document.Nodes == null || document.Edges == null || document.Editor?.Positions == null)
+    if (document.SchemaVersion != 1 || document.Nodes == null || document.Edges == null || document.Filters == null || document.Editor?.Positions == null)
       throw new FlowException("Invalid graph document structure.");
-    if (document.Nodes.Count > 128 || document.Edges.Count > 256)
-      throw new FlowException("A document supports up to 128 nodes and 256 edges.");
+    if (document.Nodes.Count > 128 || document.Edges.Count > 256 || document.Filters.Count > 256)
+      throw new FlowException("A document supports up to 128 nodes, 256 edges and 256 filters.");
     if (document.Nodes.Any(n => n == null || n.Settings == null || !ValidId(n.Id) || string.IsNullOrWhiteSpace(n.Type) || n.Name == null) ||
         document.Edges.Any(e => e == null || !ValidId(e.Id) || e.From == null || e.To == null))
       throw new FlowException("Nodes and edges require valid IDs, endpoints and settings.");
     if (document.Nodes.Select(n => n.Id).Distinct().Count() != document.Nodes.Count ||
-        document.Edges.Select(e => e.Id).Distinct().Count() != document.Edges.Count)
-      throw new FlowException("Node and edge IDs must be unique.");
+        document.Edges.Select(e => e.Id).Distinct().Count() != document.Edges.Count ||
+        document.Filters.Any(f => f == null || !ValidId(f.Id) || f.Name == null || f.Rules == null) ||
+        document.Filters.Select(f => f.Id).Distinct().Count() != document.Filters.Count)
+      throw new FlowException("Nodes, edges and filters require unique IDs and valid structure.");
     if (document.Editor.Positions.Any(p => p.Value == null || !double.IsFinite(p.Value.X) || !double.IsFinite(p.Value.Y)))
       throw new FlowException("Editor positions must be finite numbers.");
   }

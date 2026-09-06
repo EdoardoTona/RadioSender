@@ -1,6 +1,6 @@
 # Proposta: configurazione a nodi e modifica a runtime
 
-Stato: proposta, senza modifiche al comportamento dell'applicazione. Analisi del codice al 6 settembre 2026, aggiornata con ispezione per nodo, filtri sugli edge e gestione dei documenti.
+Stato: passi 1–3 implementati, con aggiornamenti da `note.txt`: Flow separato da Editor, Vuetify, filtri nominati riutilizzabili, delay sugli edge e log per nodo. La [guida operativa](flow-editor.md) descrive il comportamento effettivo e i limiti; le sezioni su enrichment, deduplicazione e altri protocolli restano obiettivi dei passi successivi.
 
 L'obiettivo è rendere configurabili dalla UI sorgenti, destinazioni, trasformazioni e collegamenti, applicando le modifiche senza riavviare RadioSender. Il documento JSON resta il formato portabile della configurazione. La modularità dei protocolli rimane il criterio principale del progetto.
 
@@ -13,7 +13,7 @@ L'obiettivo è rendere configurabili dalla UI sorgenti, destinazioni, trasformaz
 - Ispezione degli ingressi e delle uscite di ogni nodo; replay da un'uscita precisa e passthrough per punti intermedi.
 - Configurazioni tipizzate C# per ciascun modulo, con descrizione dei campi per la UI.
 - Comandi e pannelli opzionali dichiarati dai moduli.
-- Vue 3 + TypeScript + Vite + Vue Flow, mantenendo ASP.NET Core, SignalR e Photino.
+- Vue 3 + TypeScript + Vite + Vue Flow + Vuetify, mantenendo ASP.NET Core, SignalR e Photino.
 - New, Open, Save, Save As e autosalvataggio del documento; Apply separato dal salvataggio.
 - Implementazione per incrementi verificabili, iniziando da Manual source, TCP e File. Nessuna migrazione della configurazione precedente richiesta agli utenti.
 
@@ -35,13 +35,13 @@ Il grafo non impone che gli oggetti source conoscano gli oggetti target. Un picc
 | `UIService` è anche un target di dati | Una sola tabella non rappresenta i valori differenti dei vari rami | Ispezione del runtime per nodo e porta, indipendente dai target |
 | `ManualSender` contiene un proprio `Punch` e un client SIRAP | Il modello dati può divergere dal programma principale | Source manuale che usa il `Punch` principale e i normali collegamenti |
 
-La pagina `Graph` esistente rappresenta nodi e collegamenti della rete radio (`NodeNew`, `Hop`). L'editor della configurazione sarà una pagina distinta, **Flows**; la visualizzazione attuale diventerà **Radio network**. La vista **Punches** diventa un inspector contestuale riutilizzabile, non un target configurabile.
+La pagina `Graph` esistente rappresenta nodi e collegamenti della rete radio (`NodeNew`, `Hop`). **Radio network** diventerà una vista operativa del modulo TmF quando quel protocollo sarà adattato al nuovo runtime. **Flow** è la home operativa e **Editor** si apre dal pulsante Edit; non esiste una tab Editor nella navigazione principale. La vista **Punches** diventa un inspector contestuale riutilizzabile, non un target configurabile.
 
 ## Modello del grafo
 
 Un nodo ha `id` stabile, `type`, nome visualizzato, stato abilitato e `settings` specifici. L'identità non dipende da indirizzo, porta, nome visualizzato o posizione nell'array. Il `SourceId` contenuto in `Punch` continua a indicare la provenienza dei dati: è distinto dall'ID del nodo che li introduce nel grafo.
 
-Le porte sono dichiarate dal tipo di modulo. Ogni edge ha un ID stabile, nodo e porta di partenza, nodo e porta di arrivo, stato abilitato e una proprietà `filter` opzionale. La configurazione non può inventare porte non supportate dal modulo. Un edge senza filtro inoltra invariato il dato.
+Le porte sono dichiarate dal tipo di modulo. Ogni edge ha un ID stabile, nodo e porta di partenza, nodo e porta di arrivo, stato abilitato e un riferimento `filterId` opzionale a un filtro nominato e `delayMs` per la latenza del ramo. La configurazione non può inventare porte non supportate dal modulo. Un edge senza filtro inoltra invariato il dato.
 
 | Tipo di nodo | Ingressi | Uscite | Responsabilità |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ Le porte sono dichiarate dal tipo di modulo. Ogni edge ha un ID stabile, nodo e 
 | Target | Flusso | Nessuno | Consegnare al sistema esterno |
 | Provider enrichment | Nessuno per le punzonature | Risorsa di lookup, ed eventuale flusso di eventi | Aggiornare dati anagrafici e, se previsto, generare cambi di stato |
 
-Nella prima versione basta un tipo di flusso applicativo basato su `PunchDispatch`. Gli aggiornamenti della rete radio vanno conservati e consegnati al monitoraggio; i processori delle punzonature non devono cancellare accidentalmente `Nodes` e `Hops`. Si può separare il loro trasporto dal grafo quando si estrae la telemetria.
+Il primo runtime trasporta `Punch`; la telemetria radio non attraversa i filtri delle punzonature. Con il modulo TmF, gli aggiornamenti `Nodes` e `Hops` dovranno alimentare la relativa vista di istanza tramite un canale dedicato, senza introdurre un target UI globale.
 
 Esempio concettuale:
 
@@ -72,7 +72,7 @@ Le linee tratteggiate rappresentano dipendenze da risorse, non trasferimenti di 
 
 **Oribos richiede entrambe le capacità.** Il servizio attuale arricchisce tramite lookup e, con `EmitStatusChanges`, pubblica anche eventi. Una sola istanza/provider deve alimentare i processori che lo referenziano e la propria uscita `status`. Duplicare il nodo di trasformazione non deve duplicare il long polling. Le capacità opzionali evitano di imporre che ogni modulo appartenga a una sola categoria.
 
-Per KISS, la proprietà `filter` dell'edge contiene regole di selezione e mapping tipizzate, inizialmente basate su `Filter.Transform`. Non serve un nodo filtro. L'ordine delle operazioni va documentato nella UI: il codice attuale controlla alcune inclusioni sui valori già mappati. Un edge mostra un badge quando ha un filtro e apre il relativo editor alla selezione. Le regole vivono inline sull'edge; copia/incolla è sufficiente inizialmente, senza introdurre riferimenti globali aggiornabili implicitamente.
+I filtri sono definiti una sola volta nella lista `filters`, con `id`, `name` e `rules` basate su `Filter.Transform`. Ogni edge può selezionare un `filterId`; il nome appare sul collegamento. La UI mostra quante connessioni usano il filtro perché modificarlo cambia tutte quelle connessioni alla successiva Apply. Il filtro si esegue prima del ritardo opzionale del ramo, espresso da `delayMs`. Code separate mantengono indipendenti i rami ritardati.
 
 L'arricchimento rimane un nodo esplicito perché usa una risorsa condivisa e rende utile il confronto ingresso/uscita. Un passthrough non ha trasformazioni né memoria di deduplicazione: la sua ispezione e il replay provengono dai servizi comuni del runtime. Non serve inserire passthrough per ispezionare source e target, che sono già ispezionabili; serve per dare un nome a un punto intermedio. Per applicare un filtro comune prima di una diramazione: source → edge filtrato → passthrough → più target.
 
@@ -89,7 +89,7 @@ L'inspector legge i valori effettivamente osservati ai confini dei nodi, senza r
 
 Ogni osservazione contiene snapshot immutabile, `observationId`, `eventId`, `nodeId`, `portId`, direzione, eventuale `edgeId` di arrivo, timestamp e revisione applicata. I metadati di correlazione appartengono a un envelope del runtime, non ai dati del protocollo `Punch`. Due arrivi tramite percorsi diversi mantengono la correlazione con l'evento originale ma hanno osservazioni distinte. Gli snapshot non cambiano quando si modifica successivamente un filtro o la cache di enrichment.
 
-La cronologia usa buffer limitati per porta e un limite di memoria totale, con conteggi degli eventi espulsi; contatori cumulativi e storico disponibile sono distinti. Gli snapshot immutabili possono essere condivisi quando i valori non cambiano, mantenendo distinte le osservazioni. La raccolta avviene anche a inspector chiuso; SignalR invia soltanto aggiornamenti dei punti sottoscritti. Pausa e filtri di visualizzazione agiscono sulla tabella, non sulla ricezione. La prima versione conserva lo storico in memoria per la sessione, non nel JSON della configurazione.
+La cronologia usa buffer limitati per porta e un limite di memoria totale, con conteggi degli eventi espulsi; contatori cumulativi e storico disponibile sono distinti. Gli snapshot immutabili possono essere condivisi quando i valori non cambiano, mantenendo distinte le osservazioni. La raccolta avviene anche a inspector chiuso. SignalR notifica stato e contatori; la UI legge via API soltanto i delta dell'inspector selezionato, usando un cursore. Pausa e filtri di visualizzazione agiscono sulla tabella, non sulla ricezione. La prima versione conserva lo storico in memoria per la sessione, non nel JSON della configurazione.
 
 Il replay usa gli snapshot selezionati, già risolti e fissati dal backend prima di accodare l'operazione: non dipende da righe che possono scadere nel frattempo. Se sono già scadute, la richiesta restituisce un errore esplicito. Il comando specifica sessione runtime, nodo, porta, osservazioni e revisione attesa. Il runtime verifica che tutte appartengano a quel punto e che il nodo sia ancora disponibile; un cambio di revisione richiede aggiornamento della selezione dei destinatari, non un reinvio silenzioso altrove.
 
@@ -121,7 +121,7 @@ Separare `appsettings.json` (host web, logging, impostazioni dell'app) dai docum
 | Azione UI | Comportamento |
 | --- | --- |
 | New | Scegliere nome e percorso con il dialogo di salvataggio, poi creare il documento vuoto e attivare l'autosalvataggio. Annullando il dialogo si mantiene il documento corrente |
-| Open | Scegliere un JSON del nuovo formato e aprirlo nell'editor; nessuna connessione viene avviata automaticamente |
+| Open | Scegliere un JSON del nuovo formato e aprirlo in Flow; nessuna connessione viene avviata automaticamente |
 | Save | Completare subito le scritture pendenti; il salvataggio non applica le modifiche al runtime |
 | Save As | Scrivere una copia completa nel percorso scelto; questo diventa il percorso del documento corrente e dell'autosalvataggio |
 | Autosave | Salvare dopo una breve pausa dalle modifiche, incluse le posizioni, mostrando Saving, Saved o Save failed |
@@ -131,11 +131,11 @@ Il documento è il progetto modificabile e può contenere nodi ancora incompleti
 
 Distinguere revisione del documento, revisione salvata e revisione applicata. La UI può quindi indicare Saved e Unapplied changes contemporaneamente. Le scritture sono serializzate per documento con controllo di revisione, così una risposta autosave ritardata non sovrascrive modifiche nuove. Su errore il lavoro resta in memoria e la UI consente Retry o Save As. Prima di New, Open o chiusura si completa la scrittura pendente; se fallisce non si perde silenziosamente il documento.
 
-Aprire un altro file cambia il documento nell'editor, mentre il flusso già attivo continua fino a Stop o Apply. La UI indica sempre quale file/revisione è in esecuzione. L'applicazione di un altro documento crea una nuova sessione runtime: ID di nodo uguali in file diversi non implicano condivisione di istanze, storico o deduplicazione. Al riavvio dell'app si può riaprire l'ultimo documento, senza eseguire automaticamente una bozza salvata ma mai applicata.
+Aprire un altro file cambia il documento nell'editor, mentre il flusso già attivo continua fino a Stop o Apply. La UI indica sempre quale file/revisione è in esecuzione. L'applicazione di un altro documento crea una nuova sessione runtime: ID di nodo uguali in file diversi non implicano condivisione di istanze, storico o deduplicazione. Al riavvio l'app mostra Flow con il messaggio di apertura/creazione di un documento. Non riapre né esegue automaticamente l'ultimo file.
 
-In Photino, i dialoghi di apertura/salvataggio appartengono all'integrazione desktop; il backend mantiene la sessione del documento e il percorso scelto. Nel browser remoto, Open/Save si riferiscono ai file della macchina RadioSender; l'upload/download di copie locali resta disponibile come Import/Export del nuovo formato. Non supporre che il browser possa riscrivere arbitrariamente un file sul computer del visitatore.
+In Photino, i dialoghi di apertura/salvataggio appartengono all'integrazione desktop; il backend mantiene la sessione del documento e il percorso scelto. Nel browser locale, Open/Save si riferiscono ai file della macchina RadioSender. Non è previsto un pulsante Export: Save e Save As persistono già un JSON portabile. Non supporre che il browser possa riscrivere arbitrariamente un file sul computer del visitatore.
 
-Esempio di formato proposto, non ancora implementato:
+Esempio del formato implementato:
 
 ```json
 {
@@ -184,7 +184,8 @@ Esempio di formato proposto, non ancora implementato:
       "from": { "node": "manual-1", "port": "out" },
       "to": { "node": "after-mapping", "port": "in" },
       "enabled": true,
-      "filter": { "enabled": true, "mapControls": { "35": 1 } }
+      "filterId": "finish-map",
+      "delayMs": 150
     },
     {
       "id": "timing-output",
@@ -198,6 +199,9 @@ Esempio di formato proposto, non ancora implementato:
       "to": { "node": "raw-file", "port": "in" },
       "enabled": true
     }
+  ],
+  "filters": [
+    { "id": "finish-map", "name": "Finish mapping", "rules": { "enabled": true, "mapControls": { "35": 1 } } }
   ],
   "editor": {
     "positions": {
@@ -216,7 +220,7 @@ I percorsi relativi nei settings, come `raw-punches.csv`, sono risolti rispetto 
 
 Scrivere il documento con file temporaneo e sostituzione atomica sullo stesso filesystem, conservando una copia precedente recuperabile. Un JSON malformato o con versione futura non sostituisce il documento aperto. Tipi sconosciuti restano visibili come non disponibili: i settings originali vengono preservati al salvataggio e l'applicazione è bloccata, senza eliminarli silenziosamente. Le revisioni future del nuovo schema potranno avere migrazioni proprie; non è richiesta la lettura del vecchio appsettings operativo.
 
-Save, Save As e Autosave conservano tutti i settings necessari a riaprire il documento, incluse le credenziali, che restano mascherate nei form e nei log. Un'azione separata Export sanitized copy può omettere credenziali per condividere un esempio, indicando i campi da reinserire; questa copia non diventa il documento di autosalvataggio.
+Save, Save As e Autosave conservano tutti i settings necessari a riaprire il documento. I moduli iniziali non richiedono credenziali; mascheramento dei relativi campi e log va introdotto con i moduli che le usano. Non è previsto un comando Export.
 
 Il vecchio watcher dei filtri non interviene nel nuovo runtime. Un cambiamento esterno del documento viene segnalato come conflitto con Reload o Save As; non si applica automaticamente e non viene sovrascritto da un autosave ignaro. La gestione documenti è l'unica autorità per le scritture, il runtime per l'esecuzione.
 
@@ -300,32 +304,32 @@ Separare la configurazione persistente del modulo dai valori dell'evento da invi
 
 ## UI e API
 
-Scelta proposta: **Vue 3 + TypeScript + Vite + Vue Flow**. È una valutazione di adeguatezza al progetto: i template Vue si prestano alla migrazione da Razor/HTML e i componenti coprono sia form sia pannelli personalizzati. Vue Flow fornisce [nodi personalizzati](https://vueflow.dev/guide/node.html) e [porte di collegamento](https://vueflow.dev/guide/handle.html). React + React Flow rimane un'alternativa valida se c'è già maggiore familiarità nel team; anche React Flow supporta [nodi personalizzati](https://reactflow.dev/learn/customization/custom-nodes).
+Scelta implementata: **Vue 3 + TypeScript + Vite + Vue Flow + Vuetify**. È una valutazione di adeguatezza al progetto: i template Vue si prestano alla migrazione da Razor/HTML e i componenti coprono sia form sia pannelli personalizzati. Vue Flow fornisce [nodi personalizzati](https://vueflow.dev/guide/node.html) e [porte di collegamento](https://vueflow.dev/guide/handle.html). React + React Flow rimane un'alternativa valida se c'è già maggiore familiarità nel team; anche React Flow supporta [nodi personalizzati](https://reactflow.dev/learn/customization/custom-nodes).
 
 Vite produce gli asset frontend; ASP.NET Core li serve nella stessa applicazione, con Photino come contenitore. La documentazione di [integrazione backend di Vite](https://vite.dev/guide/backend-integration.html) descrive l'uso del server di sviluppo e del manifest di build. La pipeline del progetto dovrà costruire gli asset prima dell'incorporamento delle risorse/publish: Node serve allo sviluppo e alla build, non agli utenti finali. Verificare il risultato nei WebView Windows e macOS e senza accesso a CDN.
 
-La pagina Flows comprende catalogo moduli a sinistra, canvas centrale e pannello laterale per impostazioni, stato e comandi. L'inspector, laterale o inferiore, ha schede Input e Output per porta, selezione degli eventi e Replay dove disponibile. Il target espone Input e Delivery; un provider espone anche stato del lookup e la sua eventuale uscita di eventi. Sul nodo bastano nome, tipo, porte e stato sintetico. Fornire anche una lista delle connessioni, utile per tastiera e grafi affollati. La disposizione grafica non deve essere l'unico modo per correggere un collegamento.
+**Editor** comprende catalogo moduli a sinistra, canvas centrale e pannello laterale per configurare nodi, filtri nominati e ritardi. **Flow** contiene il canvas della revisione applicata, controlli del modulo e inspector inferiore con schede Stream inspector e Node logs. Le impostazioni di connessione compaiono soltanto in Editor; inserimento manuale, replay e log per nodo soltanto in Flow. Non è prevista una lista delle connessioni separata dal grafico. I log generali hanno una pagina dedicata, con opzione per includere quelli dei nodi.
 
-La barra documento espone New, Open, Save, Save As, percorso corrente e stato dell'autosalvataggio. Apply mostra il riepilogo delle istanze da riavviare e distingue il documento salvato dal piano in esecuzione. Spostare un nodo salva il layout senza riavviare nulla. Errori di validazione rimandano al nodo o all'edge e al campo; il colore delle connessioni indica attività osservata, non garanzia di consegna. Un edge selezionato espone il form Filter e i contatori; il confronto dei suoi estremi può aprire due inspector affiancati. Log, statistiche e rete radio passano al nuovo frontend una pagina alla volta; Bootstrap CSS può rimanere durante la transizione.
+La barra documento espone New, Open, Save, Save As, percorso corrente e stato dell'autosalvataggio. Apply mostra il riepilogo delle istanze da riavviare e distingue il documento salvato dal piano in esecuzione. Spostare un nodo salva il layout senza riavviare nulla. Errori di validazione rimandano al nodo o all'edge e al campo; il colore delle connessioni indica attività osservata, non garanzia di consegna. Un edge selezionato espone il form Filter e i contatori; il confronto dei suoi estremi può aprire due inspector affiancati. I log sono nella nuova UI Vuetify; statistiche e rete radio saranno adattate con i relativi moduli. Bootstrap resta soltanto nelle vecchie pagine Razor.
 
-API indicative:
+API della prima implementazione:
 
 | Operazione | Endpoint |
 | --- | --- |
-| Catalogo moduli e descrittori | `GET /api/modules` |
-| Aprire/creare sessione di documento | `POST /api/documents/open`, `POST /api/documents/new` |
-| Documento e revisioni di modifica/salvataggio | `GET /api/documents/{id}` |
-| Aggiornare documento con revisione attesa e autosave | `PUT /api/documents/{id}` |
-| Completare salvataggio / salvare con altro nome | `POST /api/documents/{id}/save`, `POST /api/documents/{id}/save-as` |
-| Validare e mostrare cambi previsti | `POST /api/documents/{id}/validate` |
-| Applicare revisione salvata al runtime | `POST /api/runtime/apply` |
-| Stato effettivo delle istanze | `GET /api/runtime` |
-| Storico paginato di nodo/porta nella sessione | `GET /api/runtime/nodes/{id}/observations` |
-| Replay dall'uscita con selezione e revisione attesa | `POST /api/runtime/nodes/{id}/replay` |
-| Retry dell'ingresso di un target, se supportato | `POST /api/runtime/nodes/{id}/retry` |
-| Eseguire comando | `POST /api/nodes/{id}/commands/{command}` |
+| Catalogo moduli e descrittori | `GET /api/flow/modules` |
+| Aprire/creare sessione di documento | `POST /api/flow/documents/open`, `POST /api/flow/documents/new` |
+| Documento e revisioni di modifica/salvataggio | `GET /api/flow/documents/{id}` |
+| Aggiornare documento con revisione attesa e autosave | `PUT /api/flow/documents/{id}` |
+| Completare salvataggio / salvare con altro nome | `POST /api/flow/documents/{id}/save`, `POST /api/flow/documents/{id}/save-as` |
+| Validare e mostrare cambi previsti | `POST /api/flow/validate`, `POST /api/flow/runtime/preview` |
+| Applicare revisione salvata al runtime | `POST /api/flow/runtime/apply` |
+| Stato effettivo delle istanze | `GET /api/flow/runtime` |
+| Storico paginato di nodo/porta nella sessione | `GET /api/flow/nodes/{id}/observations` |
+| Replay dall'uscita con selezione e revisione attesa | `POST /api/flow/nodes/{id}/replay` |
+| Retry dell'ingresso di un target, se supportato | `POST /api/flow/nodes/{id}/retry` |
+| Eseguire comando | `POST /api/flow/nodes/{id}/commands/{command}` |
 
-SignalR trasporta stato, errori, contatori, osservazioni sottoscritte e risultati di operazioni. Storico iniziale e aggiornamenti condividono un cursore monotono per evitare buchi o duplicati tra caricamento e sottoscrizione; al reconnect il client riprende dal cursore oppure riceve un'indicazione di storico scaduto e rilegge lo snapshot disponibile. Il backend valida sempre, anche quando la UI ha già controllato il form. Ispezione e replay sono riferiti alla sessione in esecuzione anche quando l'editor mostra un altro documento.
+SignalR notifica stato, errori e contatori. Le API restituiscono osservazioni e log richiesti dalla vista selezionata. Storico iniziale e aggiornamenti condividono un cursore monotono per evitare buchi o duplicati tra caricamento e sottoscrizione; al reconnect il client riprende dal cursore oppure riceve un'indicazione di storico scaduto e rilegge lo snapshot disponibile. Il backend valida sempre, anche quando la UI ha già controllato il form. Ispezione e replay sono riferiti alla sessione in esecuzione anche quando l'editor mostra un altro documento.
 
 L'esempio attuale ascolta su `http://*:8082`: l'aggiunta di API che cambiano connessioni e inviano dati richiede un confine di accesso deliberato. Proporrei modifica locale per impostazione predefinita e accesso remoto esplicitamente abilitato e autenticato, con verifica dell'origine delle richieste mutative. La finestra Photino non rende automaticamente private le API HTTP.
 
@@ -345,7 +349,7 @@ I test mantengono le garanzie dei protocolli e delle trasformazioni riutilizzate
 | 2. Primo flusso completo | Documento versionato, runtime, filtri sugli edge, passthrough, osservazioni e replay; Manual → edge filtrato → passthrough → TCP, con File su un ramo separato | Aggiunta/rimozione/cambio porta a runtime; source e target mostrano valori diversi; replay dal punto scelto senza rimappare a monte; rami indipendenti |
 | 3. Prima UI operativa | Vue, editor, filtri degli edge, inspector, Replay, New/Open/Save/Save As, Autosave, Apply, comandi e pannello Manual | Creazione con scelta percorso; salvataggio automatico e riapertura; confronto prima/dopo mapping; errore autosave non perde lavoro; pacchetto offline in Photino |
 | 4. Completamento dei moduli | Deduplicazione e interazione con replay, provider Oribos e relativi eventi, adattamento degli altri protocolli | Nuovi esempi complessi con input/output attesi; test annullamento/ripristino, provider condiviso e job pendenti; nessun import legacy necessario |
-| 5. Consolidamento UI e rimozione duplicazioni | Pagine operative, rete radio distinta, dismissione ManualSender e target UI globale | Regressioni dei protocolli superate; comandi indirizzati all'istanza corretta; documentazione utente e pacchetti Windows/macOS aggiornati |
+| 5. Consolidamento UI e rimozione duplicazioni | Pagine operative, vista Radio network del modulo TmF, dismissione ManualSender e target UI globale | Regressioni dei protocolli superate; comandi indirizzati all'istanza corretta; documentazione utente e pacchetti Windows/macOS aggiornati |
 
 Il primo traguardo utilizzabile comprende i passi 1–3: creare e salvare un documento, inserire dati manualmente, inviarli a due destinazioni con mapping diversi, ispezionare e reinviare da un punto preciso, cambiare una connessione e riaprire la configurazione salvata automaticamente. La disponibilità di tutte le sorgenti esistenti arriva nel passo 4 e va dichiarata esplicitamente durante lo sviluppo.
 

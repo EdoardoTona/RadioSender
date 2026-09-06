@@ -41,14 +41,15 @@ public class TestFlowRuntime : IAsyncDisposable
 
   internal static FlowNode Node(string id, string type, object? settings = null) => new()
   { Id = id, Name = id, Type = type, Settings = JsonSerializer.SerializeToNode(settings ?? new { }, FlowJson.Options)!.AsObject() };
-  internal static FlowEdge Edge(string id, string from, string to, EdgeFilter? filter = null) => new()
-  { Id = id, From = new(from, "out"), To = new(to, "in"), Filter = filter };
+  internal static FlowEdge Edge(string id, string from, string to, string? filterId = null) => new()
+  { Id = id, From = new(from, "out"), To = new(to, "in"), FilterId = filterId };
   private FlowDocument Branches(int mapped = 1) => new()
   {
     Nodes = [Node("manual", "source.manual"), Node("after", "processor.passthrough"),
       Node("mapped", "target.file", new FileSettings { Path = "mapped.csv", Format = "{Control}{CRLF}" }),
       Node("raw", "target.file", new FileSettings { Path = "raw.csv", Format = "{Control}{CRLF}" })],
-    Edges = [Edge("mapping", "manual", "after", new() { MapControls = new() { ["35"] = mapped } }),
+    Filters = [new() { Id = "control-map", Name = "Control mapping", Rules = new() { MapControls = new() { ["35"] = mapped } } }],
+    Edges = [Edge("mapping", "manual", "after", "control-map"),
       Edge("output", "after", "mapped"), Edge("raw", "manual", "raw")]
   };
   private Task<ApplyResult> Apply(FlowDocument document, long revision = 1, Guid? documentId = null) =>
@@ -56,8 +57,8 @@ public class TestFlowRuntime : IAsyncDisposable
   private async Task Send(int control = 35)
   {
     var snapshot = _runtime.Snapshot();
-    await _runtime.SendManualAsync(snapshot.SessionId, snapshot.Revision, "manual",
-      new("123", new DateTime(2026, 9, 6, 12, 34, 56), control, "ignored", DateTimeOffset.UtcNow, CompetitorIdType.PunchingCard, PunchControlType.Control));
+    await _runtime.ExecuteCommandAsync(snapshot.SessionId, snapshot.Revision, "manual", "send",
+      JsonSerializer.SerializeToNode(new { punch = new Punch("123", new DateTime(2026, 9, 6, 12, 34, 56), control, "ignored", DateTimeOffset.UtcNow, CompetitorIdType.PunchingCard, PunchControlType.Control) }, FlowJson.Options)!.AsObject());
   }
   private async Task<global::RadioSender.Runtime.ReplayResult> Replay(string node, long observationId, Guid operationId)
   {
@@ -197,10 +198,135 @@ public class TestFlowRuntime : IAsyncDisposable
     var graph = new FlowDocument
     {
       Nodes = [Node("a", "processor.passthrough"), Node("b", "processor.passthrough")],
-      Edges = [Edge("ab", "a", "b", new() { MapControls = new() { ["invalid"] = 1 } }), Edge("ba", "b", "a")]
+      Filters = [new() { Id = "invalid", Name = "Invalid", Rules = new() { MapControls = new() { ["invalid"] = 1 } } }],
+      Edges = [Edge("ab", "a", "b", "invalid"), Edge("ba", "b", "a")]
     };
     var issues = new FlowValidator(registry).Validate(graph);
     Assert.That(issues.Any(i => i.Field == "filter"), Is.True);
     Assert.That(issues.Any(i => i.Message.Contains("Cycles")), Is.True);
   }
+
+  [Test]
+  public async Task DelayedBranch_DoesNotBlockOtherBranchOrMultiplyLatencyAcrossEvents()
+  {
+    var graph = Branches();
+    graph.Edges[0] = graph.Edges[0] with { DelayMs = 500 };
+    await Apply(graph);
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    for (var i = 0; i < 4; i++) await Send();
+    Assert.That(_journal.Read("raw", "input").Items, Has.Count.EqualTo(4));
+    Assert.That(_journal.Read("mapped", "input").Items, Is.Empty);
+    await WaitUntil(() => _journal.Read("mapped", "input").Items.Count == 4);
+    Assert.That(clock.ElapsedMilliseconds, Is.GreaterThanOrEqualTo(450));
+    Assert.That(clock.ElapsedMilliseconds, Is.LessThan(1800), "Delay is measured per arrival, not added serially to every event.");
+  }
+
+  [Test]
+  public async Task Apply_DrainsChainedDelaysBeforeChangingTheRevision()
+  {
+    var graph = Branches();
+    graph.Edges[0] = graph.Edges[0] with { DelayMs = 100 };
+    graph.Edges[1] = graph.Edges[1] with { DelayMs = 150 };
+    await Apply(graph); await Send();
+    await Apply(Branches(9), 2);
+    Assert.That(_journal.Read("mapped", "input").Items.Single().Revision, Is.EqualTo(1));
+    Assert.That(_journal.Read("mapped", "input").Items.Single().Punch.Control, Is.EqualTo(1));
+    await Send();
+    Assert.That(_journal.Read("mapped", "input").Items.Last().Punch.Control, Is.EqualTo(9));
+  }
+
+  [Test]
+  public async Task NamedFilter_IsSharedAcrossEdges_AndCanBeUpdatedWithoutRestartingConnections()
+  {
+    var graph = Branches();
+    graph.Edges[2] = graph.Edges[2] with { FilterId = "control-map" };
+    await Apply(graph); await Send();
+    Assert.That(_journal.Read("raw", "input").Items.Single().Punch.Control, Is.EqualTo(1));
+    graph.Filters[0] = graph.Filters[0] with { Rules = new() { MapControls = new() { ["35"] = 7 } } };
+    var applied = await Apply(graph, 2); await Send();
+    Assert.That(applied.Restarted, Is.Empty);
+    Assert.That(_journal.Read("raw", "input").Items.Last().Punch.Control, Is.EqualTo(7));
+    Assert.That(_journal.Read("mapped", "input").Items.Last().Punch.Control, Is.EqualTo(7));
+  }
+  [Test]
+  public async Task Stop_CancelsPendingDelayWithoutDeliveringIt_AndAllowsRestart()
+  {
+    var graph = Branches();
+    graph.Edges[0] = graph.Edges[0] with { DelayMs = 60000 };
+    await Apply(graph); await Send();
+    Assert.That(_runtime.Snapshot().Edges.Single(e => e.Id == "mapping").Pending, Is.EqualTo(1));
+    await _runtime.StopFlowAsync().WaitAsync(TimeSpan.FromSeconds(3));
+    Assert.That(_journal.Read("mapped", "input").Items, Is.Empty);
+    await Apply(Branches(), 2); await Send();
+    Assert.That(_journal.Read("mapped", "input").Items, Has.Count.EqualTo(1));
+  }
+
+  [Test]
+  public async Task TcpPortChange_ReleasesPreviousPort_AndFailedChangeRestoresListener()
+  {
+    using var occupied = new TcpListener(IPAddress.Any, 0);
+    occupied.Server.ExclusiveAddressUse = true; occupied.Start();
+    using var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
+    var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+    var graph = new FlowDocument { Nodes = [Node("tcp", "source.tcp", new TcpSettings { AsServer = true, Port = port })] };
+    await Apply(graph);
+    var invalid = graph with { Nodes = [Node("tcp", "source.tcp", new TcpSettings { AsServer = true, Port = ((IPEndPoint)occupied.LocalEndpoint).Port })] };
+    Assert.ThrowsAsync<FlowException>(async () => await Apply(invalid, 2));
+    using (var client = new TcpClient()) await client.ConnectAsync(IPAddress.Loopback, port);
+    Assert.That(_runtime.Snapshot().Revision, Is.EqualTo(1));
+    occupied.Stop();
+    var changed = await Apply(invalid, 3);
+    Assert.That(changed.Restarted, Is.EqualTo(new[] { "tcp" }));
+    using var previousPort = new TcpListener(IPAddress.Loopback, port); previousPort.Start();
+  }
+
+  [Test]
+  public async Task Commands_AreValidatedAgainstTheNodeDescriptorAndSession()
+  {
+    await Apply(Branches());
+    var state = _runtime.Snapshot();
+    Assert.ThrowsAsync<FlowException>(async () => await _runtime.ExecuteCommandAsync(state.SessionId, state.Revision, "raw", "send", new()));
+    Assert.ThrowsAsync<FlowException>(async () => await _runtime.ExecuteCommandAsync(state.SessionId, state.Revision, "manual", "ping", new()));
+    Assert.ThrowsAsync<FlowException>(async () => await _runtime.ExecuteCommandAsync(state.SessionId, state.Revision, "manual", "send", new()));
+    Assert.That(_journal.Read("manual", "output").Items, Is.Empty);
+  }
+
+  [Test]
+  public void GraphValidation_RejectsMissingFilterAndInvalidDelay()
+  {
+    var registry = ModuleRegistry.CreateDefault();
+    var graph = Branches();
+    graph.Edges[0] = graph.Edges[0] with { FilterId = "missing", DelayMs = -1 };
+    var issues = new FlowValidator(registry).Validate(graph);
+    Assert.That(issues.Select(i => i.Field), Does.Contain("filterId").And.Contain("delayMs"));
+  }
+
+  private sealed class SlowTarget : FlowModule
+  {
+    public override async ValueTask<DeliveryResult> SendAsync(Punch punch, CancellationToken ct)
+    {
+      await Task.Delay(TimeSpan.FromMinutes(1), ct);
+      return new("Written");
+    }
+  }
+
+  [Test]
+  public async Task Stop_BoundsSlowTargetShutdown_AndRecordsUndeliveredEvents()
+  {
+    await _runtime.DisposeAsync();
+    var defaults = ModuleRegistry.CreateDefault();
+    var registry = new ModuleRegistry(defaults.Catalog.Select(d => defaults.Find(d.Type)!).Append(
+      new ModuleDefinition<EmptySettings>("target.slow", "Slow target", "Target", "Test target", (_, _) => new SlowTarget())));
+    _runtime = new(registry, new(registry), _journal);
+    await _runtime.StartAsync(default);
+    await Apply(new() { Nodes = [Node("manual", "source.manual"), Node("slow", "target.slow")], Edges = [Edge("slow", "manual", "slow")] });
+    for (var i = 0; i < 10; i++) await Send();
+    await _runtime.StopFlowAsync().WaitAsync(TimeSpan.FromSeconds(20));
+    Assert.That(_runtime.Snapshot().Running, Is.False);
+    var deliveries = _journal.Read("slow", "delivery").Items;
+    Assert.That(deliveries, Has.Count.EqualTo(10));
+    Assert.That(deliveries.Any(d => d.Status == "Rejected"), Is.True);
+    Assert.That(deliveries.Any(d => d.Status == "Written"), Is.False);
+  }
+
 }

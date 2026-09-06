@@ -12,6 +12,7 @@ public sealed class FlowValidator(ModuleRegistry registry)
     FlowJson.CheckStructure(document);
     var issues = new List<FlowIssue>();
     var nodes = document.Nodes.ToDictionary(n => n.Id);
+    var filters = document.Filters.ToDictionary(f => f.Id);
     foreach (var node in document.Nodes)
     {
       var definition = registry.Find(node.Type);
@@ -25,15 +26,24 @@ public sealed class FlowValidator(ModuleRegistry registry)
       if (registry.Find(source.Type)?.Descriptor.Outputs.Contains(edge.From.Port) != true ||
           registry.Find(target.Type)?.Descriptor.Inputs.Contains(edge.To.Port) != true)
         issues.Add(new(edge.Id, "connection", "Connect an output port to a compatible input port."));
-      if (edge.Filter is { } f)
-      {
-        if (f.MapControls == null || f.MapCompetitorIds == null || f.IncludeOnlyControls == null || f.IncludeOnlyCompetitorIds == null ||
-            f.TypeFromCode == null || f.TypeFromCode.Any(kv => !Enum.IsDefined(kv.Key) || kv.Value == null) ||
-            f.MapControls.Keys.Any(k => !int.TryParse(k, out _)) || f.MapCompetitorIds.Any(kv => string.IsNullOrWhiteSpace(kv.Key) || kv.Value == null) ||
-            !double.IsFinite(f.IgnoreOlderThanSeconds) || f.IgnoreOlderThanSeconds < 0 || f.IgnoreOlderThanSeconds > 315360000 ||
-            f.OverrideCompetitorIdType is { } idType && !Enum.IsDefined(idType))
-          issues.Add(new(edge.Id, "filter", "Filter lists, mappings, identifier type or maximum age are invalid."));
-      }
+      if (edge.FilterId != null && !filters.ContainsKey(edge.FilterId))
+        issues.Add(new(edge.Id, "filterId", "The selected filter does not exist."));
+      if (edge.DelayMs is < 0 or > 60000)
+        issues.Add(new(edge.Id, "delayMs", "Delay must be between 0 and 60000 milliseconds."));
+    }
+    foreach (var filter in document.Filters)
+    {
+      if (string.IsNullOrWhiteSpace(filter.Name) || filter.Name.Length > 100)
+        issues.Add(new(filter.Id, "name", "Give the filter a name of up to 100 characters."));
+      if (document.Filters.Count(f => string.Equals(f.Name.Trim(), filter.Name.Trim(), StringComparison.OrdinalIgnoreCase)) > 1)
+        issues.Add(new(filter.Id, "name", "Filter names must be unique."));
+      var f = filter.Rules;
+      if (f.MapControls == null || f.MapCompetitorIds == null || f.IncludeOnlyControls == null || f.IncludeOnlyCompetitorIds == null ||
+          f.TypeFromCode == null || f.TypeFromCode.Any(kv => !Enum.IsDefined(kv.Key) || kv.Value == null) ||
+          f.MapControls.Keys.Any(k => !int.TryParse(k, out _)) || f.MapCompetitorIds.Any(kv => string.IsNullOrWhiteSpace(kv.Key) || kv.Value == null) ||
+          !double.IsFinite(f.IgnoreOlderThanSeconds) || f.IgnoreOlderThanSeconds < 0 || f.IgnoreOlderThanSeconds > 315360000 ||
+          f.OverrideCompetitorIdType is { } idType && !Enum.IsDefined(idType))
+        issues.Add(new(filter.Id, "filter", "Filter lists, mappings, identifier type or maximum age are invalid."));
     }
 
     // Validate disabled edges too: enabling a connection must not reveal a hidden cycle.

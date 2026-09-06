@@ -97,7 +97,7 @@ public class TestMicrogateSourceIntegration
       {
         Assert.That(sink.Any("connecting to"), Is.True,
           $"No 'connecting' startup log was emitted. Captured:\n{sink.Dump()}");
-        Assert.That(sink.Any("reconnecting"), Is.True,
+        Assert.That(sink.Any("retrying"), Is.True,
           $"Retry was not made observable. Captured:\n{sink.Dump()}");
       });
     }

@@ -208,7 +208,7 @@ public static class Program
       FileProvider = staticFileProvider,
       OnPrepareResponse = context =>
       {
-        if (env.IsDevelopment())
+        if (env.IsDevelopment() || context.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
           context.Context.Response.Headers.Append("Cache-Control", "no-cache");
         else
           context.Context.Response.Headers.Append("Cache-Control", "private, max-age=86400"); // 1 day

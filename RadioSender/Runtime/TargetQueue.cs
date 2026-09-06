@@ -14,6 +14,8 @@ internal sealed class TargetQueue(FlowModule module, Action<FlowEvent, string, l
   private TaskCompletionSource _idle = Completed();
   private int _pending;
   private Task? _worker;
+  private readonly CancellationTokenSource _lifetime = new();
+  private int _disposed;
   public int Pending => Volatile.Read(ref _pending);
   private static TaskCompletionSource Completed() { var t = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); t.SetResult(); return t; }
 
@@ -34,10 +36,14 @@ internal sealed class TargetQueue(FlowModule module, Action<FlowEvent, string, l
     {
       try
       {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _lifetime.Token.ThrowIfCancellationRequested();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         var result = await module.SendAsync(work.Event.Punch, timeout.Token);
         observe(work.Event, work.EdgeId, work.Revision, result);
       }
+      catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+      { observe(work.Event, work.EdgeId, work.Revision, new("Rejected", "Delivery cancelled when the flow stopped. The receiver may have received a partial message.")); }
       catch (Exception e) { observe(work.Event, work.EdgeId, work.Revision, new("Failed", e.Message)); }
       finally { Complete(); }
     }
@@ -49,5 +55,11 @@ internal sealed class TargetQueue(FlowModule module, Action<FlowEvent, string, l
   public Task DrainAsync(CancellationToken ct)
   { lock (_sync) return _idle.Task.WaitAsync(ct); }
   public async ValueTask DisposeAsync()
-  { _queue.Writer.TryComplete(); if (_worker != null) await _worker; }
+  {
+    if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+    _queue.Writer.TryComplete();
+    await _lifetime.CancelAsync();
+    if (_worker != null) await _worker;
+    _lifetime.Dispose();
+  }
 }

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": "manual",
+      "type": "source.manual",
+      "name": "Manual input",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "id": "after-mapping",
+      "type": "processor.passthrough",
+      "name": "After mapping",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "id": "mapped-file",
+      "type": "target.file",
+      "name": "Mapped archive",
+      "enabled": true,
+      "settings": {
+        "path": "mapped-punches.csv",
+        "format": "{CompetitorId};{Control};{Time:O}{CRLF}"
+      }
+    },
+    {
+      "id": "raw-file",
+      "type": "target.file",
+      "name": "Raw archive",
+      "enabled": true,
+      "settings": {
+        "path": "raw-punches.csv",
+        "format": "{CompetitorId};{Control};{Time:O}{CRLF}"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "finish-map",
+      "name": "Finish mapping",
+      "rules": {
+        "enabled": true,
+        "mapControls": {
+          "35": 1
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "mapped-input",
+      "from": {
+        "node": "manual",
+        "port": "out"
+      },
+      "to": {
+        "node": "after-mapping",
+        "port": "in"
+      },
+      "enabled": true,
+      "delayMs": 150,
+      "filterId": "finish-map"
+    },
+    {
+      "id": "mapped-output",
+      "from": {
+        "node": "after-mapping",
+        "port": "out"
+      },
+      "to": {
+        "node": "mapped-file",
+        "port": "in"
+      },
+      "enabled": true,
+      "delayMs": 0
+    },
+    {
+      "id": "raw-output",
+      "from": {
+        "node": "manual",
+        "port": "out"
+      },
+      "to": {
+        "node": "raw-file",
+        "port": "in"
+      },
+      "enabled": true,
+      "delayMs": 0
+    }
+  ],
+  "editor": {
+    "positions": {
+      "manual": {
+        "x": 40,
+        "y": 80
+      },
+      "after-mapping": {
+        "x": 410,
+        "y": 80
+      },
+      "mapped-file": {
+        "x": 780,
+        "y": 80
+      },
+      "raw-file": {
+        "x": 410,
+        "y": 300
+      }
+    }
+  }
+}

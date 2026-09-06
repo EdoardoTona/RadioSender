@@ -20,12 +20,19 @@ export interface FlowEdge {
   from: { node: string; port: string }
   to: { node: string; port: string }
   enabled: boolean
-  filter?: EdgeFilter | null
+  filterId?: string | null
+  delayMs: number
+}
+export interface NamedFlowFilter {
+  id: string
+  name: string
+  rules: EdgeFilter
 }
 export interface FlowDocument {
   schemaVersion: number
   nodes: FlowNode[]
   edges: FlowEdge[]
+  filters: NamedFlowFilter[]
   editor: {
     positions: Record<string, { x: number; y: number }>
     viewport?: { x: number; y: number; zoom: number } | null
@@ -74,7 +81,13 @@ export interface RuntimeSnapshot {
   running: boolean
   error: string | null
   nodes: RuntimeNode[]
-  edges: { id: string; forwarded: number; filtered: number }[]
+  edges: { id: string; forwarded: number; filtered: number; pending: number; rejected: number }[]
+}
+export interface RuntimeGraph {
+  documentId: string | null
+  path: string | null
+  revision: number
+  document: FlowDocument
 }
 export interface Punch {
   competitorId: string
@@ -118,6 +131,7 @@ export const emptyDocument = (): FlowDocument => ({
   schemaVersion: 1,
   nodes: [],
   edges: [],
+  filters: [],
   editor: { positions: {} },
 })
 export const emptyFilter = (): EdgeFilter => ({

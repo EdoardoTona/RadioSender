@@ -1,4 +1,5 @@
 using RadioSender.Hosts.Common;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -18,6 +19,7 @@ public interface IFlowOutput
 
 public record DeliveryResult(string Status, string? Detail = null);
 public record ModuleState(string Status, string? Detail = null);
+public record CommandResult(string Message, IReadOnlyList<Punch>? Output = null);
 public record ModuleCommand(string Id, string Label);
 public record ModuleField(string Key, string Label, string Kind, bool Required, double? Min, double? Max, string? Help);
 public record ModuleDescriptor(string Type, string Name, string Category, string Description,
@@ -27,12 +29,24 @@ public record ModuleDescriptor(string Type, string Name, string Category, string
 public abstract class FlowModule : IRadioSenderHost, IAsyncDisposable
 {
   private ModuleState _state = new("Stopped");
+  private ILogger _logger = Log.Logger;
+  internal void AttachLogging(string nodeId, Guid sessionId) => _logger = Log.ForContext("NodeId", nodeId).ForContext("SessionId", sessionId);
   public ModuleState State => Volatile.Read(ref _state);
-  protected void SetState(string status, string? detail = null) => Volatile.Write(ref _state, new(status, detail));
+  protected void SetState(string status, string? detail = null)
+  {
+    var next = new ModuleState(status, detail);
+    var previous = Interlocked.Exchange(ref _state, next);
+    if (previous == next) return;
+    if (status is "Error" or "Disconnected" or "Input warning") _logger.Warning("{Status}: {Detail}", status, detail);
+    else _logger.Information("{Status}: {Detail}", status, detail);
+  }
   public virtual Task StartAsync(CancellationToken ct) { SetState("Running"); return Task.CompletedTask; }
   public virtual Task StopAsync(CancellationToken ct) { SetState("Stopped"); return Task.CompletedTask; }
   public virtual ValueTask<DeliveryResult> SendAsync(Punch punch, CancellationToken ct) =>
     ValueTask.FromResult(new DeliveryResult("Accepted"));
+  public virtual ValueTask<CommandResult> ExecuteCommandAsync(string command, JsonObject arguments, CancellationToken ct) =>
+    throw new FlowException("This module does not support the requested command.");
+  protected ILogger Logger => _logger;
   public virtual ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 

@@ -61,9 +61,10 @@ async function load() {
     )
     if (current !== generation || disposed) return
     expired.value ||= page.historyExpired
-    items.value = [...items.value, ...page.items]
-      .filter((item, index, all) => all.findIndex((x) => x.id === item.id) === index)
-      .slice(-500)
+    if (page.items.length)
+      items.value = [...items.value, ...page.items]
+        .filter((item, index, all) => all.findIndex((x) => x.id === item.id) === index)
+        .slice(-500)
     cursor.value = page.cursor
   } catch (e) {
     error.value = (e as Error).message
@@ -81,7 +82,7 @@ function reset() {
   operationId.value = null
   void load()
 }
-watch(() => [props.nodeId, props.runtime?.sessionId, direction.value], reset)
+watch([() => props.nodeId, () => props.runtime?.sessionId, direction], reset)
 watch(() => props.tick, load, { immediate: true })
 watch(paused, (value) => {
   if (!value) void load()
@@ -135,122 +136,122 @@ async function replay() {
 <template>
   <section class="inspector">
     <div class="inspector-toolbar">
-      <div>
-        <span class="eyebrow">Stream inspector</span><strong>{{ name }}</strong>
-      </div>
+      <strong>{{ name }}</strong>
       <div class="segmented">
-        <button
+        <v-btn
           v-if="category !== 'Source'"
-          :class="{ active: direction === 'input' }"
+          :variant="direction === 'input' ? 'tonal' : 'text'"
           @click="direction = 'input'"
+          >Input</v-btn
         >
-          Input</button
-        ><button
+        <v-btn
           v-if="category !== 'Target'"
-          :class="{ active: direction === 'output' }"
+          :variant="direction === 'output' ? 'tonal' : 'text'"
           @click="direction = 'output'"
+          >Output</v-btn
         >
-          Output</button
-        ><button
+        <v-btn
           v-if="category === 'Target'"
-          :class="{ active: direction === 'delivery' }"
+          :variant="direction === 'delivery' ? 'tonal' : 'text'"
           @click="direction = 'delivery'"
+          >Delivery</v-btn
         >
-          Delivery
-        </button>
       </div>
-      <input
+      <v-text-field
         v-model="query"
-        aria-label="Search events"
-        placeholder="Find identifier, control, status…"
+        label="Search events"
+        placeholder="Identifier, control, status…"
         class="event-search"
+        clearable
       />
-      <button @click="paused = !paused">{{ paused ? 'Resume view' : 'Pause view' }}</button
-      ><button
-        v-if="canReplay"
-        :disabled="!selected.length || !active || busy"
-        @click="prepareReplay"
+      <v-btn @click="paused = !paused">{{ paused ? 'Resume view' : 'Pause view' }}</v-btn>
+      <v-btn v-if="canReplay" :disabled="!selected.length || !active || busy" @click="prepareReplay"
+        >{{ label }} ({{ selected.length }})</v-btn
       >
-        {{ label }} ({{ selected.length }})
-      </button>
     </div>
     <p v-if="expired" class="inspector-note">
       Some older events have expired from the bounded history.
     </p>
     <p v-if="error" role="alert" class="error-text inspector-note">{{ error }}</p>
     <p v-if="message" class="success-text inspector-note">{{ message }}</p>
-    <div class="event-table-wrap">
-      <table class="event-table">
-        <thead>
-          <tr>
-            <th v-if="canReplay">Select</th>
-            <th>Observed</th>
-            <th>Identifier</th>
-            <th>ID type</th>
-            <th>Control</th>
-            <th>Type</th>
-            <th>Event time</th>
-            <th>Status</th>
-            <th>Cancellation</th>
-            <th>Revision</th>
-            <th>Delivery / origin</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in visible" :key="item.id" :class="{ replayed: item.replayOf }">
-            <td v-if="canReplay">
-              <input
-                v-model="selected"
-                type="checkbox"
-                :value="item.id"
-                :aria-label="`Select event ${item.id}`"
-                :disabled="busy || (selected.length >= 250 && !selected.includes(item.id))"
-              />
-            </td>
-            <td>{{ new Date(item.observedAt).toLocaleTimeString() }}</td>
-            <td>
-              <strong>{{ item.punch.competitorId }}</strong>
-            </td>
-            <td>{{ item.punch.competitorIdType }}</td>
-            <td>{{ item.punch.control }}</td>
-            <td>{{ item.punch.controlType }}</td>
-            <td>{{ item.punch.time }}</td>
-            <td>{{ item.punch.competitorStatus }}</td>
-            <td>{{ item.punch.cancellation ? 'Yes' : '—' }}</td>
-            <td>{{ item.revision }}</td>
-            <td :title="item.detail ?? item.edgeId ?? ''">
-              {{ item.status }}<span v-if="item.replayOf" class="tag">Replay</span
-              ><small v-if="item.detail">{{ item.detail }}</small>
-            </td>
-          </tr>
-          <tr v-if="!visible.length">
-            <td :colspan="canReplay ? 11 : 10" class="empty-events">
-              {{ paused ? 'View paused. Data continues to flow.' : 'No events at this point yet.' }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div v-if="replayConfirm" class="modal-backdrop">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="replay-title">
-        <h2 id="replay-title">{{ label }}</h2>
-        <p>Send {{ selected.length }} selected event(s) to {{ targets }}?</p>
-        <p class="hint">
-          {{
-            category === 'Target'
-              ? 'Uses the stored target input without repeating the incoming edge filter.'
-              : 'Uses the stored output and current downstream filters. Upstream mappings are not repeated.'
-          }}
-          Running revision: {{ replayContext?.revision }}.
-        </p>
-        <p v-if="error" class="error-text">{{ error }}</p>
-        <div class="modal-actions">
-          <button :disabled="busy" @click="replayConfirm = false">Cancel</button
-          ><button class="primary" :disabled="busy" @click="replay">
-            {{ busy ? 'Sending…' : 'Send selected events' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <v-table class="event-table" fixed-header height="230" density="compact">
+      <thead>
+        <tr>
+          <th v-if="canReplay">Select</th>
+          <th>Observed</th>
+          <th>Identifier</th>
+          <th>ID type</th>
+          <th>Control</th>
+          <th>Type</th>
+          <th>Event time</th>
+          <th>Status</th>
+          <th>Cancellation</th>
+          <th>Revision</th>
+          <th>Delivery / origin</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="item in visible"
+          :key="item.id"
+          :class="{ replayed: item.replayOf }"
+          :data-event-id="item.id"
+        >
+          <td v-if="canReplay">
+            <v-checkbox-btn
+              v-model="selected"
+              :value="item.id"
+              :aria-label="`Select event ${item.id}`"
+              :disabled="busy || (selected.length >= 250 && !selected.includes(item.id))"
+            />
+          </td>
+          <td>{{ new Date(item.observedAt).toLocaleTimeString() }}</td>
+          <td>
+            <strong>{{ item.punch.competitorId }}</strong>
+          </td>
+          <td>{{ item.punch.competitorIdType }}</td>
+          <td>{{ item.punch.control }}</td>
+          <td>{{ item.punch.controlType }}</td>
+          <td>{{ item.punch.time }}</td>
+          <td>{{ item.punch.competitorStatus }}</td>
+          <td>{{ item.punch.cancellation ? 'Yes' : '—' }}</td>
+          <td>{{ item.revision }}</td>
+          <td :title="item.detail ?? item.edgeId ?? ''">
+            {{ item.status
+            }}<v-chip v-if="item.replayOf" size="x-small" color="secondary">Replay</v-chip
+            ><small v-if="item.detail">{{ item.detail }}</small>
+          </td>
+        </tr>
+        <tr v-if="!visible.length">
+          <td :colspan="canReplay ? 11 : 10" class="empty-events">
+            {{ paused ? 'View paused. Data continues to flow.' : 'No events at this point yet.' }}
+          </td>
+        </tr>
+      </tbody>
+    </v-table>
+    <v-dialog v-model="replayConfirm" max-width="520" :persistent="busy"
+      ><v-card
+        ><v-card-title>{{ label }}</v-card-title
+        ><v-card-text
+          ><p>
+            Send {{ replayContext?.observationIds.length }} selected event(s) to {{ targets }}?
+          </p>
+          <p class="hint">
+            {{
+              category === 'Target'
+                ? 'Uses the stored target input without repeating the incoming edge filter.'
+                : 'Uses the stored output and current downstream filters. Upstream mappings are not repeated.'
+            }}
+            Running revision: {{ replayContext?.revision }}.
+          </p>
+          <p v-if="error" class="error-text">{{ error }}</p></v-card-text
+        ><v-card-actions
+          ><v-btn :disabled="busy" @click="replayConfirm = false">Cancel</v-btn
+          ><v-btn color="primary" variant="flat" :loading="busy" @click="replay"
+            >Send selected events</v-btn
+          ></v-card-actions
+        ></v-card
+      ></v-dialog
+    >
   </section>
 </template>

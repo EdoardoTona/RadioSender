@@ -17,6 +17,7 @@ const props = defineProps<{
   sameDocument: boolean
   selectedNode: string | null
   selectedEdge: string | null
+  readOnly?: boolean
 }>()
 const emit = defineEmits<{
   node: [id: string]
@@ -47,7 +48,14 @@ const edges = computed(() =>
     target: edge.to.node,
     targetHandle: edge.to.port,
     selected: props.selectedEdge === edge.id,
-    label: !edge.enabled ? 'Disabled' : edge.filter?.enabled ? 'Filter & mapping' : undefined,
+    label: !edge.enabled
+      ? 'Disabled'
+      : [
+          props.document.filters?.find((f) => f.id === edge.filterId)?.name,
+          edge.delayMs ? `${edge.delayMs} ms` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined,
     style: {
       stroke: !edge.enabled ? '#bec8d2' : props.selectedEdge === edge.id ? '#0c8b80' : '#8395a5',
       strokeWidth: props.selectedEdge === edge.id ? 3 : 2,
@@ -71,6 +79,8 @@ function moved(event: NodeDragEvent) {
       :min-zoom="0.2"
       :max-zoom="2"
       :delete-key-code="null"
+      :nodes-draggable="!readOnly"
+      :nodes-connectable="!readOnly"
       :snap-to-grid="true"
       :snap-grid="[10, 10]"
       @node-click="emit('node', $event.node.id)"
@@ -123,11 +133,11 @@ function moved(event: NodeDragEvent) {
       <p>Add a source from the library, then connect its output to a target.</p>
     </div>
     <div class="canvas-controls">
-      <button title="Zoom out" @click="zoomOut()">−</button
-      ><button title="Fit graph" @click="fitView({ padding: 0.25 })">Fit</button
-      ><button title="Zoom in" @click="zoomIn()">+</button>
+      <v-btn title="Zoom out" @click="zoomOut()">−</v-btn>
+      <v-btn title="Fit graph" @click="fitView({ padding: 0.25 })">Fit</v-btn>
+      <v-btn title="Zoom in" @click="zoomIn()">+</v-btn>
     </div>
-    <div class="canvas-hint">
+    <div v-if="!readOnly" class="canvas-hint">
       Drag between ports to connect · Select a connection to add a filter
     </div>
   </div>

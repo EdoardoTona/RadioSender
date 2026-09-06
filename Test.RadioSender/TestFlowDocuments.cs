@@ -66,4 +66,27 @@ public class TestFlowDocuments
 
   [TestCase("{\"Source\":{}}")] [TestCase("{\"schemaVersion\":2}")] [TestCase("{\"schemaVersion\":1,\"nodes\":null}")]
   public void UnsupportedOrMalformedStructure_IsRejected(string json) => Assert.Throws<FlowException>(() => FlowJson.Read(json));
+  [Test]
+  public async Task StaleSaveAs_RecoversDraftWithoutChangingOtherEditorsSession()
+  {
+    using var documents = new FlowDocuments();
+    var first = await documents.OpenAsync(Path.Combine(_directory, "first.json"), true);
+    var other = await documents.ReadAsync(first.Id);
+    other.Document.Nodes.Add(TestFlowRuntime.Node("new", "source.manual"));
+    var saved = await documents.SaveAsync(other.Id, other.Revision, other.Document);
+    first.Document.Nodes.Add(TestFlowRuntime.Node("recovered", "processor.passthrough"));
+    var recovered = await documents.SaveAsync(first.Id, first.Revision, first.Document, Path.Combine(_directory, "recovered.json"));
+    Assert.That(recovered.Id, Is.Not.EqualTo(saved.Id));
+    Assert.That((await documents.ReadAsync(saved.Id)).Document.Nodes[0].Id, Is.EqualTo("new"));
+    Assert.That(recovered.Document.Nodes[0].Id, Is.EqualTo("recovered"));
+  }
+
+  [Test]
+  public void UnknownEdgeSettings_CannotSilentlyDiscardRoutingRules()
+  {
+    Assert.Throws<System.Text.Json.JsonException>(() => FlowJson.Read("""
+      {"schemaVersion":1,"edges":[{"id":"edge","from":{"node":"a","port":"out"},"to":{"node":"b","port":"in"},"filter":{"mapControls":{"35":1}}}]}
+      """));
+  }
+
 }

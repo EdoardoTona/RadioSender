@@ -2,6 +2,15 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { HubConnectionBuilder, LogLevel, type HubConnection } from '@microsoft/signalr'
 import type { Connection } from '@vue-flow/core'
+import {
+  mdiPlus,
+  mdiFolderOpenOutline,
+  mdiPencilOutline,
+  mdiArrowLeft,
+  mdiPlay,
+  mdiStop,
+  mdiContentSaveOutline,
+} from '@mdi/js'
 import { api, chooseFile, finishDesktopClose, isDesktop } from './api'
 import {
   copy,
@@ -12,22 +21,27 @@ import {
   type FlowDocument,
   type FlowIssue,
   type ModuleDescriptor,
+  type RuntimeGraph,
   type RuntimeSnapshot,
 } from './types'
 import FlowCanvas from './components/FlowCanvas.vue'
 import SettingsForm from './components/SettingsForm.vue'
 import FilterEditor from './components/FilterEditor.vue'
-import ManualInput from './components/ManualInput.vue'
+import ModuleControls from './components/ModuleControls.vue'
 import NodeInspector from './components/NodeInspector.vue'
+import LogViewer from './components/LogViewer.vue'
 
+const mode = ref<'flow' | 'editor' | 'logs'>('flow')
 const modules = ref<ModuleDescriptor[]>([]),
   document = ref<FlowDocument>(emptyDocument()),
   snapshot = ref<DocumentSnapshot | null>(null)
 const runtime = ref<RuntimeSnapshot | null>(null),
+  activeGraph = ref<RuntimeGraph | null>(null),
   online = ref(false),
   tick = ref(0)
 const selectedNodeId = ref<string | null>(null),
-  selectedEdgeId = ref<string | null>(null)
+  selectedEdgeId = ref<string | null>(null),
+  selectedFilterId = ref<string | null>(null)
 const editVersion = ref(0),
   savedVersion = ref(0),
   saving = ref(false),
@@ -38,10 +52,11 @@ const editVersion = ref(0),
 const issues = ref<FlowIssue[]>([]),
   applyDialog = ref(false),
   librarySearch = ref(''),
-  showConnections = ref(false)
-const connectionFrom = ref(''),
-  connectionTo = ref(''),
-  defaultDirectory = ref(''),
+  inspectionTab = ref('stream')
+const applyPreview = ref<{ started: string[]; kept: string[]; stopped: string[] } | null>(null)
+const filterDialog = ref(false),
+  filterName = ref('')
+const defaultDirectory = ref(''),
   pathDialog = ref(false),
   pathValue = ref(''),
   pathMode = ref<'new' | 'open' | 'save-as'>('new')
@@ -51,12 +66,26 @@ let adopting = false,
   savingPromise: Promise<void> | null = null,
   hub: HubConnection | null = null
 let polling: ReturnType<typeof setInterval> | undefined
-const node = computed(() => document.value.nodes.find((n) => n.id === selectedNodeId.value))
-const edge = computed(() => document.value.edges.find((e) => e.id === selectedEdgeId.value))
-const definition = computed(() => modules.value.find((m) => m.type === node.value?.type))
 const sameDocument = computed(
   () => !!snapshot.value && runtime.value?.documentId === snapshot.value.id,
 )
+const displayDocument = computed(() =>
+  mode.value === 'flow' &&
+  sameDocument.value &&
+  runtime.value?.running &&
+  activeGraph.value?.documentId === snapshot.value?.id
+    ? activeGraph.value!.document
+    : document.value,
+)
+const node = computed(() => displayDocument.value.nodes.find((n) => n.id === selectedNodeId.value))
+const edge = computed(() => document.value.edges.find((e) => e.id === selectedEdgeId.value))
+const namedFilter = computed(() =>
+  document.value.filters.find((f) => f.id === (edge.value?.filterId ?? selectedFilterId.value)),
+)
+const filterUses = computed(
+  () => document.value.edges.filter((e) => e.filterId === namedFilter.value?.id).length,
+)
+const definition = computed(() => modules.value.find((m) => m.type === node.value?.type))
 const unapplied = computed(
   () =>
     !sameDocument.value ||
@@ -77,25 +106,20 @@ const saveLabel = computed(() =>
 const nodeState = computed(() =>
   sameDocument.value ? runtime.value?.nodes.find((n) => n.id === node.value?.id) : undefined,
 )
-const fileName = computed(
-  () => snapshot.value?.path.split(/[\\/]/).pop() ?? 'No configuration open',
-)
+const fileName = computed(() => snapshot.value?.path.split(/[\\/]/).pop() ?? 'RadioSender')
 const visibleModules = computed(() =>
   modules.value.filter((m) =>
     (m.name + m.description).toLowerCase().includes(librarySearch.value.toLowerCase()),
   ),
 )
-const outputNodes = computed(() =>
-  document.value.nodes.filter((n) => modules.value.find((m) => m.type === n.type)?.outputs.length),
+const inspectorNode = computed(() =>
+  sameDocument.value && node.value && definition.value
+    ? { id: node.value.id, name: node.value.name, category: definition.value.category }
+    : null,
 )
-const inputNodes = computed(() =>
-  document.value.nodes.filter((n) => modules.value.find((m) => m.type === n.type)?.inputs.length),
+const edgeState = computed(() =>
+  sameDocument.value ? runtime.value?.edges.find((e) => e.id === edge.value?.id) : undefined,
 )
-const inspectorNode = computed(() => {
-  if (sameDocument.value && node.value && definition.value)
-    return { id: node.value.id, name: node.value.name, category: definition.value.category }
-  return null
-})
 
 watch(
   document,
@@ -110,20 +134,37 @@ watch(
   },
   { deep: true, flush: 'sync' },
 )
-
+watch(
+  [() => runtime.value?.sessionId, () => runtime.value?.revision, () => runtime.value?.documentId],
+  async () => {
+    const state = runtime.value
+    if (!state?.documentId) return
+    try {
+      const graph = await api<RuntimeGraph>('/runtime/graph')
+      if (
+        runtime.value?.sessionId === state.sessionId &&
+        runtime.value?.revision === graph.revision
+      )
+        activeGraph.value = graph
+    } catch (e) {
+      error.value = (e as Error).message
+    }
+  },
+)
 function adopt(value: DocumentSnapshot) {
   adopting = true
   snapshot.value = value
   document.value = copy(value.document)
+  document.value.filters ??= []
   editVersion.value = 0
   savedVersion.value = 0
   selectedNodeId.value = null
   selectedEdgeId.value = null
+  selectedFilterId.value = null
   saveError.value = ''
   issues.value = []
   error.value = ''
   adopting = false
-  localStorage.setItem('radiosender.lastDocument', value.path)
 }
 async function flushSave() {
   clearTimeout(saveTimer)
@@ -139,11 +180,10 @@ async function flushSave() {
       const version = editVersion.value,
         current = snapshot.value
       try {
-        const updated = await api<DocumentSnapshot>(`/documents/${current.id}`, 'PUT', {
+        snapshot.value = await api<DocumentSnapshot>(`/documents/${current.id}`, 'PUT', {
           revision: current.revision,
           document: copy(document.value),
         })
-        snapshot.value = updated
         savedVersion.value = version
         saveError.value = ''
       } catch (e) {
@@ -171,13 +211,13 @@ async function saveNow() {
     saveError.value = (e as Error).message
   }
 }
-async function selectPath(mode: 'new' | 'open' | 'save-as'): Promise<string | null> {
-  pathMode.value = mode
+async function selectPath(action: 'new' | 'open' | 'save-as'): Promise<string | null> {
+  pathMode.value = action
   const initial =
-    mode === 'open'
+    action === 'open'
       ? (snapshot.value?.path ?? defaultDirectory.value)
       : `${defaultDirectory.value}/new-flow.radiosender.json`
-  if (isDesktop) return chooseFile(mode === 'open' ? 'open' : 'save', initial)
+  if (isDesktop) return chooseFile(action === 'open' ? 'open' : 'save', initial)
   pathValue.value = initial
   pathDialog.value = true
   return new Promise((resolve) => {
@@ -189,35 +229,35 @@ function finishPath(path: string | null) {
   pendingPathResolve?.(path)
   pendingPathResolve = null
 }
-async function fileAction(mode: 'new' | 'open' | 'save-as') {
+async function fileAction(action: 'new' | 'open' | 'save-as') {
   if (busy.value) return
   busy.value = true
   error.value = ''
   notice.value = ''
   try {
-    if (mode !== 'save-as') await flushSave()
+    if (action !== 'save-as') await flushSave()
     else {
       clearTimeout(saveTimer)
       if (savingPromise) await savingPromise.catch(() => {})
     }
-    const path = await selectPath(mode)
+    const path = await selectPath(action)
     if (!path) return
-    if (mode === 'save-as' && snapshot.value) {
-      const saved = await api<DocumentSnapshot>(`/documents/${snapshot.value.id}/save-as`, 'POST', {
-        revision: snapshot.value.revision,
-        document: copy(document.value),
-        path,
-      })
-      snapshot.value = saved
+    if (action === 'save-as' && snapshot.value) {
+      snapshot.value = await api<DocumentSnapshot>(
+        `/documents/${snapshot.value.id}/save-as`,
+        'POST',
+        { revision: snapshot.value.revision, document: copy(document.value), path },
+      )
       savedVersion.value = editVersion.value
       saveError.value = ''
-      localStorage.setItem('radiosender.lastDocument', path)
-    } else
+    } else {
       adopt(
-        await api<DocumentSnapshot>(`/documents/${mode === 'new' ? 'new' : 'open'}`, 'POST', {
+        await api<DocumentSnapshot>(`/documents/${action === 'new' ? 'new' : 'open'}`, 'POST', {
           path,
         }),
       )
+      mode.value = action === 'new' ? 'editor' : 'flow'
+    }
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -227,7 +267,7 @@ async function fileAction(mode: 'new' | 'open' | 'save-as') {
 async function reload() {
   if (
     !snapshot.value ||
-    !window.confirm('Reload the file from disk? Unsaved edits in this editor will be discarded.')
+    !window.confirm('Reload the file from disk? Unsaved edits will be discarded.')
   )
     return
   clearTimeout(saveTimer)
@@ -250,7 +290,7 @@ function addNode(module: ModuleDescriptor) {
     settings: copy(module.defaults),
   })
   document.value.editor.positions[nodeId] = {
-    x: 60 + (count % 3) * 290,
+    x: 50 + (count % 3) * 350,
     y: 70 + Math.floor(count / 3) * 180,
   }
   selectNode(nodeId)
@@ -258,13 +298,16 @@ function addNode(module: ModuleDescriptor) {
 function selectNode(nodeId: string) {
   selectedNodeId.value = nodeId
   selectedEdgeId.value = null
+  selectedFilterId.value = null
 }
 function selectEdge(edgeId: string) {
+  if (mode.value !== 'editor') return
   selectedEdgeId.value = edgeId
   selectedNodeId.value = null
+  selectedFilterId.value = null
 }
 function connect(connection: Connection) {
-  if (!connection.source || !connection.target) return
+  if (mode.value !== 'editor' || !connection.source || !connection.target) return
   if (connection.source === connection.target) {
     error.value = 'A node cannot connect to itself.'
     return
@@ -283,6 +326,7 @@ function connect(connection: Connection) {
     from: { node: connection.source, port: connection.sourceHandle ?? 'out' },
     to: { node: connection.target, port: connection.targetHandle ?? 'in' },
     enabled: true,
+    delayMs: 0,
   })
   selectEdge(edgeId)
 }
@@ -300,6 +344,34 @@ function removeSelection() {
     selectedEdgeId.value = null
   }
 }
+function selectFilter(filterId: string) {
+  selectedFilterId.value = filterId
+  selectedNodeId.value = null
+  selectedEdgeId.value = null
+}
+function newLibraryFilter() {
+  selectedNodeId.value = null
+  selectedEdgeId.value = null
+  newFilter()
+}
+function deleteUnusedFilter() {
+  document.value.filters = document.value.filters.filter((f) => f.id !== namedFilter.value?.id)
+  selectedFilterId.value = null
+}
+function newFilter() {
+  filterName.value = `Filter ${document.value.filters.length + 1}`
+  filterDialog.value = true
+}
+function createFilter() {
+  const name = filterName.value.trim()
+  if (!name || document.value.filters.some((f) => f.name.toLowerCase() === name.toLowerCase()))
+    return
+  const filterId = id()
+  document.value.filters.push({ id: filterId, name, rules: emptyFilter() })
+  if (edge.value) edge.value.filterId = filterId
+  else selectedFilterId.value = filterId
+  filterDialog.value = false
+}
 async function prepareApply() {
   error.value = ''
   notice.value = ''
@@ -307,7 +379,13 @@ async function prepareApply() {
   try {
     await flushSave()
     issues.value = await api<FlowIssue[]>('/validate', 'POST', document.value)
-    if (!issues.value.length) applyDialog.value = true
+    if (!issues.value.length && snapshot.value) {
+      applyPreview.value = await api('/runtime/preview', 'POST', {
+        documentId: snapshot.value.id,
+        revision: snapshot.value.revision,
+      })
+      applyDialog.value = true
+    } else mode.value = 'editor'
   } catch (e) {
     error.value = (e as Error).message
   } finally {
@@ -326,8 +404,10 @@ async function apply() {
       { documentId: snapshot.value.id, revision: snapshot.value.revision },
     )
     await refreshRuntime()
+    activeGraph.value = await api<RuntimeGraph>('/runtime/graph')
     applyDialog.value = false
-    notice.value = `Revision ${result.revision} applied. ${result.restarted.length} node(s) started, ${result.kept.length} kept running.`
+    mode.value = 'flow'
+    notice.value = `Flow is running. ${result.restarted.length} node(s) started, ${result.kept.length} kept running.`
   } catch (e) {
     error.value = (e as Error).message
     applyDialog.value = false
@@ -339,6 +419,7 @@ async function apply() {
 async function stop() {
   busy.value = true
   error.value = ''
+  notice.value = ''
   try {
     await api('/runtime/stop', 'POST', {})
     await refreshRuntime()
@@ -357,15 +438,6 @@ async function refreshRuntime() {
     online.value = false
   }
 }
-function exportDocument() {
-  const blob = new Blob([JSON.stringify(document.value, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob),
-    link = window.document.createElement('a')
-  link.href = url
-  link.download = fileName.value
-  link.click()
-  URL.revokeObjectURL(url)
-}
 function beforeUnload(event: BeforeUnloadEvent) {
   if (saving.value || editVersion.value !== savedVersion.value || saveError.value) {
     event.preventDefault()
@@ -377,7 +449,7 @@ async function desktopClosing() {
     await flushSave()
     finishDesktopClose()
   } catch {
-    error.value = 'The window remains open because saving failed. Retry Save or choose Save As.'
+    error.value = 'Saving failed. Retry Save or choose Save As before closing.'
   }
 }
 onMounted(async () => {
@@ -390,15 +462,9 @@ onMounted(async () => {
     ])
     modules.value = catalog
     defaultDirectory.value = defaults.directory
-    const last = localStorage.getItem('radiosender.lastDocument')
-    if (last) {
-      try {
-        adopt(await api<DocumentSnapshot>('/documents/open', 'POST', { path: last }))
-      } catch {
-        notice.value = 'The previous file could not be reopened. Choose Open or New.'
-      }
-    }
     await refreshRuntime()
+    if (runtime.value?.documentId)
+      adopt(await api<DocumentSnapshot>(`/documents/${runtime.value.documentId}`))
     hub = new HubConnectionBuilder()
       .withUrl('/flowHub')
       .withAutomaticReconnect()
@@ -434,325 +500,479 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="app-header">
-      <a class="brand" href="/flows/index.html"><span class="brand-icon">↗</span>RadioSender</a>
-      <nav>
-        <span class="current">Flows</span><a href="/Log">Log</a><a href="/Stats">Statistics</a>
-      </nav>
-      <span class="connection-state"
-        ><span class="state-dot" :class="{ on: online }"></span
-        >{{ online ? 'Connected' : 'Reconnecting…' }}</span
-      >
-    </header>
-    <div class="document-toolbar">
-      <div class="document-title">
-        <strong>{{ fileName }}</strong
-        ><small :title="snapshot?.path">{{
-          snapshot?.path ?? 'Create or open a configuration to get started'
-        }}</small>
-      </div>
-      <span class="save-state" :class="{ failed: saveError }">{{ saveLabel }}</span>
-      <div class="toolbar-actions">
-        <button :disabled="busy" @click="fileAction('new')">New</button
-        ><button :disabled="busy" @click="fileAction('open')">Open</button
-        ><button :disabled="!snapshot || busy" @click="saveNow">Save</button
-        ><button :disabled="!snapshot || busy" @click="fileAction('save-as')">Save As</button
-        ><button :disabled="!snapshot" title="Download a JSON copy" @click="exportDocument">
-          Export</button
-        ><span class="toolbar-divider"></span
-        ><button v-if="runtime?.running" :disabled="busy" @click="stop">Stop</button
-        ><button class="primary" :disabled="!snapshot || busy || !online" @click="prepareApply">
-          {{ busy ? 'Working…' : runtime?.running ? 'Apply changes' : 'Apply & start' }}
-        </button>
-      </div>
-    </div>
-    <div class="runtime-strip">
-      <span class="state-dot" :class="{ on: runtime?.running }"></span
-      ><span v-if="runtime?.running"
-        >Running: <strong>{{ runtime.path?.split(/[\\/]/).pop() }}</strong> · revision
-        {{ runtime.revision }}</span
-      ><span v-else>Flow stopped</span
-      ><span v-if="snapshot && unapplied" class="tag amber">Unapplied changes</span
-      ><span class="runtime-note">Autosave keeps your work. Apply updates the running flow.</span>
-    </div>
-    <div v-if="error || saveError || runtime?.error" class="alert error" role="alert">
-      <span>{{ error || saveError || runtime?.error }}</span
-      ><button v-if="saveError" @click="saveNow">Retry save</button
-      ><button v-if="saveError" @click="reload">Reload file</button
-      ><button
-        @click="
-          error = '';
-          notice = ''
-        "
-      >
-        ×
-      </button>
-    </div>
-    <div v-if="notice" class="alert info" role="status">
-      <span>{{ notice }}</span
-      ><button @click="notice = ''">×</button>
-    </div>
-    <div v-if="issues.length" class="validation-list" role="alert">
-      <strong>Resolve these issues before applying:</strong
-      ><button
-        v-for="issue in issues"
-        :key="issue.elementId + issue.field"
-        @click="
-          document.nodes.some((n) => n.id === issue.elementId)
-            ? selectNode(issue.elementId)
-            : selectEdge(issue.elementId)
-        "
-      >
-        {{ issue.message }}
-      </button>
-    </div>
-    <main class="workspace">
-      <aside class="library">
-        <div class="panel-heading">
-          <span class="eyebrow">Build a flow</span>
-          <h2>Module library</h2>
-        </div>
-        <input
-          v-model="librarySearch"
-          class="library-search"
-          aria-label="Search modules"
-          placeholder="Search modules…"
-        />
-        <template v-for="category in ['Source', 'Processor', 'Target']" :key="category"
-          ><h3 class="category-heading">
-            {{ category === 'Processor' ? 'Processing' : category + 's' }}
-          </h3>
-          <button
-            v-for="module in visibleModules.filter((m) => m.category === category)"
-            :key="module.type"
-            class="library-module"
-            :disabled="!snapshot"
-            @click="addNode(module)"
-          >
-            <span class="module-symbol">{{
-              category === 'Source' ? '↗' : category === 'Target' ? '↙' : '→'
-            }}</span
-            ><span
-              ><strong>{{ module.name }}</strong
-              ><small>{{ module.description }}</small></span
-            ><span class="add-symbol">+</span>
-          </button></template
+  <v-app>
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="brand" href="/flows/index.html"><span class="brand-icon">↗</span>RadioSender</a>
+        <nav>
+          <button :class="{ current: mode !== 'logs' }" @click="mode = 'flow'">Flow</button
+          ><button :class="{ current: mode === 'logs' }" @click="mode = 'logs'">Logs</button>
+        </nav>
+        <span v-if="!isDesktop" class="connection-state"
+          ><span class="state-dot" :class="{ on: online }"></span
+          >{{ online ? 'Connected to RadioSender' : 'Reconnecting to RadioSender…' }}</span
         >
-        <div class="library-foot">
-          <strong>One source, many destinations</strong>
-          <p>Connect an output to multiple inputs. Add filters directly to each connection.</p>
+      </header>
+      <div class="document-toolbar">
+        <div class="document-title">
+          <span class="eyebrow">{{
+            mode === 'editor' ? 'Editor' : mode === 'logs' ? 'Application logs' : 'Flow'
+          }}</span
+          ><strong>{{ fileName }}</strong
+          ><small v-if="snapshot" :title="snapshot.path">{{ snapshot.path }}</small>
         </div>
-      </aside>
-      <div class="flow-workspace">
-        <div class="canvas-toolbar">
-          <span>{{ document.nodes.length }} nodes · {{ document.edges.length }} connections</span
-          ><button :class="{ active: showConnections }" @click="showConnections = !showConnections">
-            {{ showConnections ? 'Hide connection list' : 'Connection list' }}
-          </button>
+        <v-chip
+          v-if="mode === 'editor'"
+          :color="saveError ? 'error' : 'secondary'"
+          size="x-small"
+          >{{ saveLabel }}</v-chip
+        >
+        <div class="toolbar-actions">
+          <v-btn :disabled="busy" :prepend-icon="mdiPlus" @click="fileAction('new')">New</v-btn
+          ><v-btn :disabled="busy" :prepend-icon="mdiFolderOpenOutline" @click="fileAction('open')"
+            >Open</v-btn
+          ><template v-if="snapshot"
+            ><v-btn :disabled="busy" :prepend-icon="mdiContentSaveOutline" @click="saveNow"
+              >Save</v-btn
+            ><v-btn :disabled="busy" @click="fileAction('save-as')">Save As</v-btn
+            ><v-divider vertical class="mx-2" /><template v-if="mode === 'editor'"
+              ><v-btn :prepend-icon="mdiArrowLeft" @click="mode = 'flow'">Back to Flow</v-btn
+              ><v-btn
+                color="primary"
+                variant="flat"
+                :loading="busy"
+                :disabled="!online"
+                @click="prepareApply"
+                >Apply</v-btn
+              ></template
+            ><template v-else-if="mode === 'flow'"
+              ><v-btn :prepend-icon="mdiPencilOutline" @click="mode = 'editor'">Edit</v-btn
+              ><v-btn
+                v-if="runtime?.running && sameDocument"
+                :prepend-icon="mdiStop"
+                :disabled="busy"
+                @click="stop"
+                >Stop</v-btn
+              ><v-btn
+                v-else
+                color="primary"
+                variant="flat"
+                :prepend-icon="mdiPlay"
+                :disabled="busy || !online"
+                @click="prepareApply"
+                >Start flow</v-btn
+              ></template
+            ></template
+          >
         </div>
-        <FlowCanvas
-          :key="snapshot?.id ?? 'empty'"
-          :document="document"
-          :modules="modules"
-          :runtime="runtime"
-          :same-document="sameDocument"
-          :selected-node="selectedNodeId"
-          :selected-edge="selectedEdgeId"
-          @node="selectNode"
-          @edge="selectEdge"
-          @connect="connect"
-          @move="(nodeId, x, y) => (document.editor.positions[nodeId] = { x, y })"
-          @viewport="
-            (value) => {
-              if (snapshot) document.editor.viewport = value
-            }
-          "
-        />
-        <div v-if="showConnections" class="connection-list">
-          <form
-            @submit.prevent="
-              connect({
-                source: connectionFrom,
-                target: connectionTo,
-                sourceHandle: 'out',
-                targetHandle: 'in',
-              })
+      </div>
+      <div v-if="snapshot" class="runtime-strip">
+        <span class="state-dot" :class="{ on: runtime?.running }"></span
+        ><span v-if="runtime?.running"
+          >Running: <strong>{{ runtime.path?.split(/[\\/]/).pop() }}</strong> · revision
+          {{ runtime.revision }}</span
+        ><span v-else>Flow stopped</span
+        ><v-chip v-if="unapplied && mode === 'editor'" color="warning" size="x-small"
+          >Unapplied changes</v-chip
+        ><span class="runtime-note">{{
+          mode === 'editor'
+            ? 'Changes are saved automatically. Apply activates them.'
+            : 'Select a node to use its controls, inspect events or read its logs.'
+        }}</span>
+      </div>
+      <v-alert v-if="error || saveError || runtime?.error" type="error" class="app-alert"
+        ><div class="alert-content">
+          <span>{{ error || saveError || runtime?.error }}</span
+          ><v-btn v-if="saveError" @click="saveNow">Retry save</v-btn
+          ><v-btn v-if="saveError" @click="reload">Reload file</v-btn>
+        </div></v-alert
+      >
+      <v-alert v-if="notice" type="success" class="app-alert" closable @click:close="notice = ''">{{
+        notice
+      }}</v-alert>
+      <v-alert v-if="issues.length" type="warning" class="app-alert"
+        ><strong>Resolve these issues before applying:</strong>
+        <div class="validation-items">
+          <v-btn
+            v-for="issue in issues"
+            :key="issue.elementId + issue.field"
+            variant="text"
+            @click="
+              document.nodes.some((n) => n.id === issue.elementId)
+                ? selectNode(issue.elementId)
+                : document.filters.some((f) => f.id === issue.elementId)
+                  ? ((selectedFilterId = issue.elementId),
+                    (selectedNodeId = null),
+                    (selectedEdgeId = null))
+                  : selectEdge(issue.elementId)
             "
+            >{{ issue.message }}</v-btn
           >
-            <select v-model="connectionFrom" aria-label="Connection source" required>
-              <option value="">Output node…</option>
-              <option v-for="n in outputNodes" :key="n.id" :value="n.id">
-                {{ n.name }}
-              </option></select
-            ><span>→</span
-            ><select v-model="connectionTo" aria-label="Connection target" required>
-              <option value="">Input node…</option>
-              <option v-for="n in inputNodes" :key="n.id" :value="n.id">
-                {{ n.name }}
-              </option></select
-            ><button type="submit" :disabled="!snapshot">Connect</button>
-          </form>
-          <button
-            v-for="e in document.edges"
-            :key="e.id"
-            class="connection-row"
-            @click="selectEdge(e.id)"
-          >
-            {{ document.nodes.find((n) => n.id === e.from.node)?.name }} →
-            {{ document.nodes.find((n) => n.id === e.to.node)?.name
-            }}<span>{{ e.filter?.enabled ? 'Filter & mapping' : 'Pass through' }}</span>
-          </button>
+        </div></v-alert
+      >
+      <main v-if="mode === 'logs'" class="general-logs">
+        <div class="page-heading">
+          <span class="eyebrow">Application activity</span>
+          <h1>General logs</h1>
+          <p>Messages that do not belong to a node. Enable node logs to see everything together.</p>
         </div>
-        <NodeInspector
-          v-if="inspectorNode"
-          :key="inspectorNode.id"
-          :node-id="inspectorNode.id"
-          :name="inspectorNode.name"
-          :category="inspectorNode.category"
-          :runtime="runtime"
-          :tick="tick"
-        />
-        <div v-else class="inspector-placeholder">
-          {{
-            !sameDocument && runtime?.running
-              ? 'Open the running document to inspect its events.'
-              : 'Select a running node to inspect input, output and delivery.'
-          }}
-        </div>
-      </div>
-      <aside class="properties">
-        <template v-if="node"
-          ><div class="panel-heading">
-            <span class="eyebrow">Node settings</span>
-            <h2>{{ definition?.name ?? 'Unavailable module' }}</h2>
+        <LogViewer :tick="tick" />
+      </main>
+      <main v-else-if="!snapshot" class="welcome">
+        <div class="welcome-card">
+          <span class="welcome-icon">↗</span><span class="eyebrow">Your race. Your data flow.</span>
+          <h1>Open or create a new flow</h1>
+          <p>
+            Connect your timing sources and destinations,<br />then manage the data from one place.
+          </p>
+          <div class="welcome-actions">
+            <v-btn size="large" :prepend-icon="mdiFolderOpenOutline" @click="fileAction('open')"
+              >Open flow</v-btn
+            ><v-btn
+              size="large"
+              color="primary"
+              variant="flat"
+              :prepend-icon="mdiPlus"
+              @click="fileAction('new')"
+              >Create new flow</v-btn
+            >
           </div>
-          <div class="properties-content">
-            <label class="field"
-              ><span>Name</span><input v-model="node.name" maxlength="100" /></label
-            ><label class="field check"
-              ><span>Enabled</span><input v-model="node.enabled" type="checkbox"
-            /></label>
-            <div v-if="nodeState" class="status-card">
-              <strong>{{ nodeState.status }}</strong
-              ><small>{{ nodeState.detail }}</small
-              ><small v-if="nodeState.pending">{{ nodeState.pending }} pending delivery</small>
-            </div>
-            <SettingsForm
-              v-if="definition"
-              :node="node"
-              :definition="definition"
-              @update="(key, value) => (node!.settings[key] = value)"
-            /><ManualInput
-              v-if="definition?.view === 'manual-input' && runtime"
-              :key="node.id"
-              :node-id="node.id"
+        </div>
+      </main>
+      <main v-else class="workspace" :class="mode">
+        <aside v-if="mode === 'editor'" class="library">
+          <div class="panel-heading">
+            <span class="eyebrow">Build your flow</span>
+            <h2>Module library</h2>
+          </div>
+          <v-text-field v-model="librarySearch" label="Search modules" class="library-search" />
+          <template v-for="category in ['Source', 'Processor', 'Target']" :key="category"
+            ><h3 class="category-heading">
+              {{ category === 'Processor' ? 'Processing' : category + 's' }}
+            </h3>
+            <v-btn
+              v-for="module in visibleModules.filter((m) => m.category === category)"
+              :key="module.type"
+              variant="text"
+              class="library-module"
+              @click="addNode(module)"
+              ><span class="module-symbol">{{
+                category === 'Source' ? '↗' : category === 'Target' ? '↙' : '→'
+              }}</span
+              ><span
+                ><strong>{{ module.name }}</strong
+                ><small>{{ module.description }}</small></span
+              ></v-btn
+            ></template
+          >
+          <h3 class="category-heading">Reusable filters</h3>
+          <v-btn
+            v-for="filter in document.filters"
+            :key="filter.id"
+            class="filter-library-item"
+            variant="text"
+            @click="selectFilter(filter.id)"
+            >{{ filter.name }}</v-btn
+          ><v-btn
+            class="new-filter-button"
+            :prepend-icon="mdiPlus"
+            variant="text"
+            @click="newLibraryFilter"
+            >New filter</v-btn
+          >
+        </aside>
+        <div class="flow-workspace">
+          <div class="canvas-toolbar">
+            <span
+              >{{ displayDocument.nodes.length }} nodes ·
+              {{ displayDocument.edges.length }} connections</span
+            ><span>{{
+              mode === 'editor'
+                ? 'Drag between ports to connect'
+                : runtime?.running && sameDocument
+                  ? 'Live flow'
+                  : 'Flow preview'
+            }}</span>
+          </div>
+          <FlowCanvas
+            :key="snapshot.id + mode"
+            :document="displayDocument"
+            :modules="modules"
+            :runtime="runtime"
+            :same-document="sameDocument"
+            :selected-node="selectedNodeId"
+            :selected-edge="selectedEdgeId"
+            :read-only="mode !== 'editor'"
+            @node="selectNode"
+            @edge="selectEdge"
+            @connect="connect"
+            @move="
+              (nodeId, x, y) => {
+                if (mode === 'editor') document.editor.positions[nodeId] = { x, y }
+              }
+            "
+            @viewport="
+              (value) => {
+                if (mode === 'editor') document.editor.viewport = value
+              }
+            "
+          />
+          <section v-if="mode === 'flow' && inspectorNode" class="inspection-area">
+            <v-tabs v-model="inspectionTab" density="compact" height="38" color="primary"
+              ><v-tab value="stream">Stream inspector</v-tab
+              ><v-tab value="logs">Node logs</v-tab></v-tabs
+            ><NodeInspector
+              v-show="inspectionTab === 'stream'"
+              :key="inspectorNode.id"
+              :node-id="inspectorNode.id"
+              :name="inspectorNode.name"
+              :category="inspectorNode.category"
               :runtime="runtime"
-              :disabled="!sameDocument || !nodeState || !runtime.running"
-              @sent="refreshRuntime"
+              :tick="tick"
+            /><LogViewer
+              v-if="inspectionTab === 'logs'"
+              :node-id="inspectorNode.id"
+              :session-id="runtime?.sessionId"
+              :tick="tick"
             />
-            <p v-if="definition?.category === 'Processor'" class="hint">
-              Events pass through unchanged. Use the input and output inspector to examine this
-              point in the flow.
-            </p>
-            <button class="danger subtle wide" @click="removeSelection">Remove node</button>
-          </div></template
-        >
-        <template v-else-if="edge"
-          ><div class="panel-heading">
-            <span class="eyebrow">Connection settings</span>
-            <h2>Filter & mapping</h2>
+          </section>
+          <div v-else-if="mode === 'flow'" class="inspector-placeholder">
+            {{
+              sameDocument
+                ? 'Select a node to inspect its stream and logs.'
+                : 'Start this flow to use its controls and inspect events.'
+            }}
           </div>
-          <div class="properties-content">
-            <p class="connection-description">
-              {{ document.nodes.find((n) => n.id === edge!.from.node)?.name }}<br />↓<br />{{
-                document.nodes.find((n) => n.id === edge!.to.node)?.name
+        </div>
+        <aside class="properties">
+          <template v-if="mode === 'editor' && node"
+            ><div class="panel-heading">
+              <span class="eyebrow">Node configuration</span>
+              <h2>{{ definition?.name ?? 'Unavailable module' }}</h2>
+            </div>
+            <div class="properties-content">
+              <v-text-field v-model="node.name" label="Name" maxlength="100" /><v-switch
+                v-model="node.enabled"
+                label="Enabled"
+              /><SettingsForm
+                v-if="definition"
+                :node="node"
+                :definition="definition"
+                @update="(key, value) => (node!.settings[key] = value)"
+              />
+              <p v-if="definition?.category === 'Processor'" class="hint">
+                Passes events through unchanged. Use it as a named inspection or branching point.
+              </p>
+              <p v-if="definition?.view === 'manual-input'" class="hint">
+                Manual entry controls are available on the Flow screen after applying.
+              </p>
+              <v-btn color="error" variant="text" block @click="removeSelection">Remove node</v-btn>
+            </div></template
+          >
+          <template v-else-if="mode === 'editor' && (edge || namedFilter)"
+            ><div class="panel-heading">
+              <span class="eyebrow">{{
+                edge ? 'Connection configuration' : 'Reusable filter'
+              }}</span>
+              <h2>{{ edge ? 'Branch settings' : namedFilter?.name }}</h2>
+            </div>
+            <div class="properties-content">
+              <template v-if="edge"
+                ><p class="connection-description">
+                  {{ document.nodes.find((n) => n.id === edge!.from.node)?.name }} →
+                  {{ document.nodes.find((n) => n.id === edge!.to.node)?.name }}
+                </p>
+                <v-switch v-model="edge.enabled" label="Connection enabled" /><v-text-field
+                  :model-value="edge.delayMs ?? 0"
+                  type="number"
+                  min="0"
+                  max="60000"
+                  label="Delay (ms)"
+                  hint="Adds latency only to this branch. 0 sends immediately."
+                  persistent-hint
+                  @update:model-value="edge.delayMs = Number($event)"
+                /><v-select
+                  v-model="edge.filterId"
+                  :items="document.filters"
+                  item-title="name"
+                  item-value="id"
+                  clearable
+                  label="Filter"
+                  placeholder="No filter"
+                /><v-btn :prepend-icon="mdiPlus" block @click="newFilter">Create filter</v-btn>
+                <p v-if="edgeState" class="hint">
+                  {{ edgeState.forwarded }} forwarded · {{ edgeState.filtered }} filtered ·
+                  {{ edgeState.pending }} delayed
+                </p></template
+              ><template v-if="namedFilter"
+                ><v-divider class="my-5" /><v-text-field
+                  v-model="namedFilter.name"
+                  label="Filter name"
+                  maxlength="100"
+                />
+                <p class="hint">
+                  Used by {{ filterUses }} connection(s). Changes apply everywhere this filter is
+                  selected.
+                </p>
+                <FilterEditor :key="namedFilter.id" v-model="namedFilter.rules" /><v-btn
+                  v-if="!filterUses"
+                  color="error"
+                  variant="text"
+                  block
+                  @click="deleteUnusedFilter"
+                  >Delete unused filter</v-btn
+                ></template
+              ><v-btn v-if="edge" color="error" variant="text" block @click="removeSelection"
+                >Remove connection</v-btn
+              >
+            </div></template
+          >
+          <template v-else-if="mode === 'flow' && node"
+            ><div class="panel-heading">
+              <span class="eyebrow">{{ definition?.category }} controls</span>
+              <h2>{{ node.name }}</h2>
+            </div>
+            <div class="properties-content">
+              <div class="status-card">
+                <v-chip
+                  :color="
+                    nodeState?.status === 'Running' ||
+                    nodeState?.status === 'Connected' ||
+                    nodeState?.status === 'Listening'
+                      ? 'success'
+                      : 'secondary'
+                  "
+                  >{{ nodeState?.status ?? 'Not running' }}</v-chip
+                ><small v-if="nodeState?.detail">{{ nodeState.detail }}</small
+                ><small v-if="nodeState?.pending"
+                  >{{ nodeState.pending }} events pending delivery</small
+                >
+              </div>
+              <ModuleControls
+                v-if="definition && runtime"
+                :definition="definition"
+                :key="node.id"
+                :node-id="node.id"
+                :runtime="runtime"
+                :disabled="!sameDocument || !nodeState || !runtime.running"
+                @changed="refreshRuntime"
+              />
+              <p v-else class="hint">
+                Inspect this node's data and logs below the graph. Connection settings are available
+                in the editor.
+              </p>
+            </div></template
+          >
+          <div v-else class="properties-empty">
+            <span class="empty-symbol">⌁</span>
+            <h2>{{ mode === 'editor' ? 'Configure your flow' : 'Select a node' }}</h2>
+            <p>
+              {{
+                mode === 'editor'
+                  ? 'Select a node for its settings or a connection for a named filter and delay.'
+                  : 'Use module controls, inspect incoming and outgoing events, or view node logs.'
               }}
             </p>
-            <label class="field check"
-              ><span>Connection enabled</span><input v-model="edge.enabled" type="checkbox"
-            /></label>
-            <div class="field-pair">
-              <button @click="selectNode(edge!.from.node)">Inspect before</button
-              ><button @click="selectNode(edge!.to.node)">Inspect after</button>
-            </div>
-            <p v-if="sameDocument" class="hint">
-              {{ runtime?.edges.find((e) => e.id === edge!.id)?.forwarded ?? 0 }} forwarded ·
-              {{ runtime?.edges.find((e) => e.id === edge!.id)?.filtered ?? 0 }} filtered
-            </p>
-            <button v-if="!edge.filter" class="wide" @click="edge.filter = emptyFilter()">
-              Add filter & mapping</button
-            ><FilterEditor v-else :key="edge.id" v-model="edge.filter" /><button
-              v-if="edge.filter"
-              class="subtle wide"
-              @click="edge.filter = null"
-            >
-              Remove filter</button
-            ><button class="danger subtle wide" @click="removeSelection">Remove connection</button>
-          </div></template
-        >
-        <div v-else class="properties-empty">
-          <span class="empty-symbol">⌁</span>
-          <h2>Make a connection</h2>
-          <p>Select a node to configure it, send events and inspect its stream.</p>
-          <p>Select a connection to filter or map the events it carries.</p>
-        </div>
-      </aside>
-    </main>
-    <div v-if="pathDialog" class="modal-backdrop">
-      <form
-        class="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="path-title"
-        @submit.prevent="finishPath(pathValue)"
-      >
-        <span class="eyebrow">Configuration document</span>
-        <h2 id="path-title">
-          {{
+          </div>
+        </aside>
+      </main>
+      <v-dialog :model-value="pathDialog" max-width="540" persistent
+        ><v-card
+          ><v-card-title>{{
             pathMode === 'open'
               ? 'Open configuration'
               : pathMode === 'new'
                 ? 'New configuration'
                 : 'Save configuration as'
-          }}
-        </h2>
-        <p class="hint">
-          Choose a file on this RadioSender computer. New files start autosaving immediately.
-        </p>
-        <label class="field"
-          ><span>Full JSON file path</span><input v-model="pathValue" required autofocus /></label
-        ><small>Choose an unused name when creating or saving a copy.</small>
-        <div class="modal-actions">
-          <button type="button" @click="finishPath(null)">Cancel</button
-          ><button type="submit" class="primary">
-            {{ pathMode === 'open' ? 'Open file' : 'Save file' }}
-          </button>
-        </div>
-      </form>
+          }}</v-card-title
+          ><v-card-text
+            ><p class="hint">
+              Choose a JSON file on this RadioSender computer. New files start autosaving
+              immediately.
+            </p>
+            <v-text-field
+              v-model="pathValue"
+              label="Full JSON file path"
+              autofocus
+              @keydown.enter="finishPath(pathValue)"
+            /><small
+              >Choose an unused name when creating a file or saving a copy.</small
+            ></v-card-text
+          ><v-card-actions
+            ><v-btn @click="finishPath(null)">Cancel</v-btn
+            ><v-btn color="primary" variant="flat" @click="finishPath(pathValue)">{{
+              pathMode === 'open' ? 'Open file' : 'Save file'
+            }}</v-btn></v-card-actions
+          ></v-card
+        ></v-dialog
+      >
+      <v-dialog v-model="filterDialog" max-width="420"
+        ><v-card
+          ><v-card-title>Create reusable filter</v-card-title
+          ><v-card-text
+            ><v-text-field
+              v-model="filterName"
+              label="Filter name"
+              maxlength="100"
+              autofocus
+              @keydown.enter="createFilter"
+            />
+            <p class="hint">
+              Choose a meaningful name. It will appear on each connection using this filter.
+            </p></v-card-text
+          ><v-card-actions
+            ><v-btn @click="filterDialog = false">Cancel</v-btn
+            ><v-btn
+              color="primary"
+              variant="flat"
+              :disabled="
+                !filterName.trim() ||
+                document.filters.some(
+                  (f) => f.name.toLowerCase() === filterName.trim().toLowerCase(),
+                )
+              "
+              @click="createFilter"
+              >Create</v-btn
+            ></v-card-actions
+          ></v-card
+        ></v-dialog
+      >
+      <v-dialog v-model="applyDialog" max-width="520" :persistent="busy"
+        ><v-card
+          ><v-card-title>{{
+            mode === 'editor' ? 'Apply configuration' : 'Start flow'
+          }}</v-card-title
+          ><v-card-text
+            ><p>
+              {{ document.nodes.filter((n) => n.enabled).length }} enabled nodes and
+              {{ document.edges.filter((e) => e.enabled).length }} enabled connections.
+            </p>
+            <div v-if="applyPreview" class="apply-preview">
+              <p v-if="applyPreview.started.length">
+                <strong>Start / restart:</strong> {{ applyPreview.started.join(', ') }}
+              </p>
+              <p v-if="applyPreview.stopped.length">
+                <strong>Stop:</strong> {{ applyPreview.stopped.join(', ') }}
+              </p>
+              <p v-if="applyPreview.kept.length">
+                <strong>Keep running:</strong> {{ applyPreview.kept.join(', ') }}
+              </p>
+            </div>
+            <p class="hint">
+              Changed connection settings restart the affected nodes. Unchanged connections keep
+              running. Accepted events, including delayed events, finish before switching.
+            </p>
+            <p v-if="runtime?.running && !sameDocument" class="hint">
+              This replaces the currently running document and starts a new inspection session.
+            </p></v-card-text
+          ><v-card-actions
+            ><v-btn :disabled="busy" @click="applyDialog = false">Cancel</v-btn
+            ><v-btn color="primary" variant="flat" :loading="busy" @click="apply"
+              >Apply configuration</v-btn
+            ></v-card-actions
+          ></v-card
+        ></v-dialog
+      >
     </div>
-    <div v-if="applyDialog" class="modal-backdrop">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="apply-title">
-        <span class="eyebrow">Runtime update</span>
-        <h2 id="apply-title">Apply this configuration?</h2>
-        <p>
-          {{ document.nodes.filter((n) => n.enabled).length }} enabled nodes and
-          {{ document.edges.filter((e) => e.enabled).length }} enabled connections.
-        </p>
-        <p class="hint">
-          Changed connection settings restart the affected node. Unchanged connections keep running.
-          Events already accepted are drained before switching.
-        </p>
-        <p v-if="runtime?.running && !sameDocument" class="hint">
-          This replaces the currently running document and starts a new inspection session.
-        </p>
-        <div class="modal-actions">
-          <button :disabled="busy" @click="applyDialog = false">Cancel</button
-          ><button class="primary" :disabled="busy" @click="apply">
-            {{ busy ? 'Applying…' : 'Apply configuration' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  </v-app>
 </template>
