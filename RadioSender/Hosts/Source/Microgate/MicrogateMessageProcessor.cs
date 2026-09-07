@@ -1,6 +1,5 @@
 using Microgate.Common.Protocol.Rei2;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -9,9 +8,7 @@ using System.Runtime.InteropServices;
 namespace RadioSender.Hosts.Source.Microplus;
 
 internal sealed class MicrogateMessageProcessor(
-  FilterService filterService,
   IDispatchSink dispatcherService,
-  MicrogateSourceConfiguration configuration,
   string endpoint)
 {
   private const int MAX_BUFFER_SIZE = 8192;
@@ -203,9 +200,7 @@ internal sealed class MicrogateMessageProcessor(
       return;
     }
 
-    var punch = filterService.Transform(
-      configuration.Filter,
-      new Punch(
+    var punch = new Punch(
         ReceivedAt: DateTimeOffset.UtcNow,
         CompetitorId: competitorNumber,
         CompetitorIdType: CompetitorIdType.BibNumber,
@@ -214,7 +209,7 @@ internal sealed class MicrogateMessageProcessor(
         Time: time,
         SourceId: "Microgate " + _serialNumber,
         Cancellation: annulled,
-        CompetitorStatus: status));
+        CompetitorStatus: status);
 
     if (punch != null)
       dispatcherService.PushDispatch(new PunchDispatch([punch]));

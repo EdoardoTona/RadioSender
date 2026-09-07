@@ -9,7 +9,6 @@ public interface IDispatchSink
 {
   ILogger Logger => Log.Logger;
   void SetSourceState(string status, string? detail = null) { }
-  event EventHandler? RequestPing;
   void PushDispatch(PunchDispatch dispatch);
   void PushDispatches(IEnumerable<PunchDispatch> dispatches);
 }

@@ -1,70 +1,14 @@
 ﻿using Microsoft.IO;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using Serilog;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
-namespace RadioSender.Hosts.Target.SIRAP
+namespace RadioSender.Hosts.Target.SIRAP;
+
+public static class SirapClient
 {
-  public sealed class SirapClient : ITarget, IDisposable
-  {
-    private static readonly RecyclableMemoryStreamManager _memoryManager = new();
-    private readonly TcpClient? _tcpClient;
-
-    private readonly FilterService _filterService;
-    private readonly SirapClientConfiguration _configuration;
-    public SirapClient(
-    FilterService filterService,
-    SirapClientConfiguration configuration)
-    {
-
-      _filterService = filterService;
-      _configuration = configuration;
-
-      if (_configuration.Address == null || _configuration.Port == null)
-      {
-        Log.Warning("Invalid TcpTargetClient configuration");
-        return;
-      }
-
-      var address = _configuration.Address == "localhost" ? "127.0.0.1" : _configuration.Address;
-
-      _tcpClient = new TcpClient(address, _configuration.Port.Value);
-      _tcpClient.ConnectAsync();
-
-    }
-
-    public async Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
-    {
-      foreach (var dispatch in dispatches)
-        await SendDispatch(dispatch, ct);
-    }
-
-    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
-    {
-      if (dispatch.Punches == null || _tcpClient == null || !_tcpClient.IsConnected)
-        return Task.CompletedTask;
-
-      var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
-
-      foreach (var punch in punches)
-      {
-        var buffer = GetBytes(punch, _configuration.Version, _configuration.ZeroTime);
-
-        if (buffer == null || buffer.Length == 0)
-          continue;
-
-        _tcpClient.SendAsync(buffer);
-      }
-
-      return Task.CompletedTask;
-    }
-
+  private static readonly RecyclableMemoryStreamManager _memoryManager = new();
     public static byte[]? Encode(Punch punch, int version, TimeSpan zeroTime) => GetBytes(punch, version, zeroTime);
 
     private static byte[]? GetBytes(Punch punch, int version, TimeSpan zeroTime)
@@ -124,12 +68,5 @@ namespace RadioSender.Hosts.Target.SIRAP
 
       return ms.ToArray();
     }
-
-    public void Dispose()
-    {
-      _tcpClient?.Dispose();
-    }
-  }
-
 
 }

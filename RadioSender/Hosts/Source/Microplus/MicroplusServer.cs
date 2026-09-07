@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using NetCoreServer;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Linq;
@@ -14,7 +13,6 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.Microplus;
 
 public class MicroplusServer(
-  FilterService filterService,
   IDispatchSink dispatcherService,
   MicroplusServerConfiguration configuration)
   : UdpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IRadioSenderHost
@@ -93,20 +91,16 @@ public class MicroplusServer(
         dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, hh, mm, ss, fff);
       }
 
-      var punch = filterService.Transform(
-                    configuration.Filter,
-                    new Punch(
-                      ReceivedAt: DateTimeOffset.UtcNow,
-                    CompetitorId: bib.ToString(),
-                    CompetitorIdType: CompetitorIdType.BibNumber,
-                    Control: control,
-                    ControlType: PunchControlType.Unknown,
-                    Time: dt,
-                    SourceId: "Microplus",
-                    Cancellation: false,
-                    NetTime: netTime
-                    )
-                 );
+      var punch = new Punch(
+        ReceivedAt: DateTimeOffset.UtcNow,
+        CompetitorId: bib.ToString(),
+        CompetitorIdType: CompetitorIdType.BibNumber,
+        Control: control,
+        ControlType: PunchControlType.Unknown,
+        Time: dt,
+        SourceId: "Microplus",
+        Cancellation: false,
+        NetTime: netTime);
 
       if (configuration.IgnoreCommands != null)
       {
@@ -117,8 +111,7 @@ public class MicroplusServer(
         }
       }
 
-      if (punch != null)
-        dispatcherService.PushDispatch(new PunchDispatch([punch]));
+      dispatcherService.PushDispatch(new PunchDispatch([punch]));
     }
     catch (Exception e)
     {

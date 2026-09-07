@@ -1,6 +1,5 @@
 using Microgate.Common.Protocol.Rei2;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Threading;
@@ -17,7 +16,6 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
   private readonly IDispatchSink _sink;
 
   protected MicrogateSource(
-    FilterService filterService,
     IDispatchSink dispatcherService,
     MicrogateSourceConfiguration configuration,
     string endpoint)
@@ -27,9 +25,7 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
     Configuration = configuration;
     Endpoint = endpoint;
     _messageProcessor = new MicrogateMessageProcessor(
-      filterService,
       dispatcherService,
-      configuration,
       endpoint);
   }
 

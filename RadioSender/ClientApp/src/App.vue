@@ -841,7 +841,7 @@ onBeforeUnmount(() => {
               <ModuleControls
                 v-if="definition && runtime"
                 :definition="definition"
-                :key="node.id"
+                :key="`${runtime.sessionId}:${node.id}`"
                 :node-id="node.id"
                 :runtime="runtime"
                 :disabled="!sameDocument || !nodeState || !runtime.running"

@@ -11,7 +11,6 @@ public class TestFilter
   {
     var filter = new Filter
     {
-      Name = "test",
       MapCompetitorIds = new() { ["25"] = "250" },
       IncludeOnlyCompetitorIds = new() { "250" },
       OverrideCompetitorIdType = CompetitorIdType.BibNumber
@@ -27,13 +26,12 @@ public class TestFilter
   }
 
   [Test]
-  public void SupportsLegacyCardConfiguration()
+  public void MappedCardRetainsItsIdentifierType()
   {
     var filter = new Filter
     {
-      Name = "test",
-      MapCards = new() { ["25"] = "250" },
-      IncludeOnlyCards = new() { "250" }
+      MapCompetitorIds = new() { ["25"] = "250" },
+      IncludeOnlyCompetitorIds = new() { "250" }
     };
 
     var punch = CreatePunch("25", CompetitorIdType.PunchingCard);
@@ -43,6 +41,8 @@ public class TestFilter
     Assert.That(result, Is.Not.Null);
     Assert.That(result!.CompetitorId, Is.EqualTo("250"));
     Assert.That(result.Card, Is.EqualTo("250"));
+    Assert.That(result.CompetitorIdType, Is.EqualTo(CompetitorIdType.PunchingCard));
+    Assert.That(punch.CompetitorId, Is.EqualTo("25"));
   }
 
   private static Punch CreatePunch(string competitorId, CompetitorIdType competitorIdType)

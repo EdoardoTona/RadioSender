@@ -15,7 +15,6 @@ namespace RadioSender.UI
   public class PhotinoHostedService : IHostedService
   {
     private readonly string _port;
-    private readonly bool _isDevelopment;
 
     private static Action? _terminatePhotinoAction;
     private static Action? _terminateAppAction;
@@ -28,13 +27,11 @@ namespace RadioSender.UI
 
     public PhotinoHostedService(
       string urls,
-      IHostApplicationLifetime hostApplicationLifetime,
-      IHostEnvironment hostEnvironment
+      IHostApplicationLifetime hostApplicationLifetime
       )
     {
       _terminateAppAction = () => hostApplicationLifetime?.StopApplication();
       _port = Regex.Match(urls, @"(?<=:)\d{2,5}").Value;
-      _isDevelopment = hostEnvironment.IsDevelopment();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -44,12 +41,12 @@ namespace RadioSender.UI
       if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         return Task.CompletedTask;
 
-      _thread = new Thread(new ParameterizedThreadStart(PhotinoThread));
+      _thread = new Thread(() => RunPhotinoWindow(_port));
 
       if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         _thread.SetApartmentState(ApartmentState.STA);
 
-      _thread.Start(new { Port = _port, IsDevelopment = _isDevelopment });
+      _thread.Start();
 
       return Task.CompletedTask;
     }
@@ -75,18 +72,6 @@ namespace RadioSender.UI
     public static void StopWindow()
     {
       _terminatePhotinoAction?.Invoke();
-    }
-
-    static void PhotinoThread(object? param)
-    {
-      if (param == null)
-        return;
-
-      dynamic p = param;
-
-      var port = (string)p.Port;
-
-      RunPhotinoWindow(port);
     }
 
     private static string ResolveIcon()

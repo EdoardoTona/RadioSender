@@ -1,3 +1,4 @@
+using RadioSender.Flow.Modules;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -5,30 +6,16 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Enrichment;
-using RadioSender.Hosts.Target.Tcp;
 
 namespace Test.RadioSender;
 
-// End-to-end: TcpTargetClient connects out to a real loopback listener; asserts on the raw
+// End-to-end: The TCP target connects out to a real loopback listener; asserts on the raw
 // bytes it writes, so it also exercises the Cancellation/Status format-suppression logic.
 [TestFixture]
 public class TestTcpTargetClientIntegration
 {
-  private sealed class StubMonitor(FiltersConfiguration value) : IOptionsMonitor<FiltersConfiguration>
-  {
-    public FiltersConfiguration CurrentValue => value;
-    public FiltersConfiguration Get(string? name) => value;
-    public IDisposable? OnChange(Action<FiltersConfiguration, string?> listener) => null;
-  }
-
-  private static FilterService BuildFilterService()
-    => new(new StubMonitor(new FiltersConfiguration { List = [] }), Array.Empty<IEnrichmentSource>());
-
   private static int FreePort()
   {
     var l = new TcpListener(IPAddress.Loopback, 0);
@@ -47,16 +34,15 @@ public class TestTcpTargetClientIntegration
     Cancellation: cancellation,
     CompetitorStatus: status);
 
-  // Connects a TcpTargetClient to `listener`, accepts the connection, and returns the
+  // Connects a TCP target to `listener`, accepts the connection, and returns the
   // accepted socket's stream to read whatever bytes the client sends.
-  private static async Task<(TcpTargetClient client, NetworkStream stream, TcpClient accepted)> Connect(TcpListener listener, string format)
+  private static async Task<(TcpFlowModule client, NetworkStream stream, TcpClient accepted)> Connect(TcpListener listener, string format)
   {
-    var config = new TcpTargetConfiguration { Address = "127.0.0.1", Port = ((IPEndPoint)listener.LocalEndpoint).Port, Format = format, AsServer = false };
-    var client = new TcpTargetClient(BuildFilterService(), config);
+    var config = new TcpSettings { Address = "127.0.0.1", Port = ((IPEndPoint)listener.LocalEndpoint).Port, Format = format, AsServer = false };
+    var client = new TcpFlowModule(config, new("tcp", System.IO.Path.GetTempPath(), new CapturingOutput()), false);
+    await client.StartAsync(default);
 
     var accepted = await listener.AcceptTcpClientAsync();
-    // Give NetCoreServer's async connect a brief moment to flip IsConnected.
-    await Task.Delay(100);
 
     return (client, accepted.GetStream(), accepted);
   }
@@ -85,14 +71,14 @@ public class TestTcpTargetClientIntegration
       var (client, stream, accepted) = await Connect(listener, "{CompetitorId};{Control};{Time:HH:mm:ss,fff}{CRLF}");
       try
       {
-        await client.SendDispatch(new PunchDispatch(Punches: [Punch(cancellation: true)]));
+        await client.SendAsync(Punch(cancellation: true), default);
         var received = await ReadAvailable(stream, 500);
 
         Assert.That(received, Is.Empty);
       }
       finally
       {
-        client.Dispose();
+        await client.DisposeAsync();
         accepted.Dispose();
       }
     }
@@ -112,14 +98,14 @@ public class TestTcpTargetClientIntegration
       var (client, stream, accepted) = await Connect(listener, "{CompetitorId};{Control};{Time:HH:mm:ss,fff};{Cancellation}{CRLF}");
       try
       {
-        await client.SendDispatch(new PunchDispatch(Punches: [Punch(cancellation: true)]));
+        await client.SendAsync(Punch(cancellation: true), default);
         var received = await ReadAvailable(stream);
 
         Assert.That(received, Does.Contain("ANN"));
       }
       finally
       {
-        client.Dispose();
+        await client.DisposeAsync();
         accepted.Dispose();
       }
     }
@@ -141,14 +127,14 @@ public class TestTcpTargetClientIntegration
       var (client, stream, accepted) = await Connect(listener, "{CompetitorId};{Control};{Time:HH:mm:ss,fff}{CRLF}");
       try
       {
-        await client.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+        await client.SendAsync(Punch(status: CompetitorStatus.DNS), default);
         var received = await ReadAvailable(stream);
 
         Assert.That(received, Does.Contain("00:00:01"));
       }
       finally
       {
-        client.Dispose();
+        await client.DisposeAsync();
         accepted.Dispose();
       }
     }
@@ -168,14 +154,14 @@ public class TestTcpTargetClientIntegration
       var (client, stream, accepted) = await Connect(listener, "{CompetitorId};{Control}{CRLF}");
       try
       {
-        await client.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+        await client.SendAsync(Punch(status: CompetitorStatus.DNS), default);
         var received = await ReadAvailable(stream, 500);
 
         Assert.That(received, Is.Empty);
       }
       finally
       {
-        client.Dispose();
+        await client.DisposeAsync();
         accepted.Dispose();
       }
     }
@@ -198,7 +184,7 @@ public class TestTcpTargetClientIntegration
       var (client, stream, accepted) = await Connect(listener, "{CompetitorId};{Control};{Time:HH:mm:ss,fff};{Status}{CRLF}");
       try
       {
-        await client.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+        await client.SendAsync(Punch(status: CompetitorStatus.DNS), default);
         var received = await ReadAvailable(stream);
 
         Assert.That(received, Does.Contain("10:01:03,880"));
@@ -207,7 +193,7 @@ public class TestTcpTargetClientIntegration
       }
       finally
       {
-        client.Dispose();
+        await client.DisposeAsync();
         accepted.Dispose();
       }
     }

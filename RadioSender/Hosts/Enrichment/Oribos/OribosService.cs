@@ -2,14 +2,8 @@ using RadioSender.Hosts.Common;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Enrichment.Oribos
 {
@@ -19,7 +13,7 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     string? Nation, string? ClubId, string? ClubName, string? ClubNation,
     DateTime? StartTime, string Status, DateTime? FinishTime = null, bool SubJudice = false);
 
-  public sealed class OribosService : IEnrichmentSource, IRadioSenderHost, IDisposable
+  public static class OribosService
   {
     private const double StartBeforeRaceStartThresholdSeconds = 3600 * 11;
     private const double StartBeforeRaceStartModuloSeconds = 3600 * 12;
@@ -28,54 +22,6 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     // shared by more than one competitor.
     private static readonly HashSet<string> FinishedStatuses = new(StringComparer.OrdinalIgnoreCase)
       { "CL", "NP", "SQ", "RI", "FT", "PE", "PM", "DI" };
-
-    // Lazy to break the DI cycle: FilterService -> IEnrichmentSource (this) -> DispatcherService -> FilterService.
-    // DispatcherService is only needed at runtime to publish status changes, not at construction.
-    private readonly Lazy<DispatcherService> _dispatcherService;
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly OribosEnrichmentConfiguration _configuration;
-
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-      PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
-    // lookup maps rebuilt on every fullweb fetch
-    private volatile IReadOnlyDictionary<string, OribosEntry> _cardMap = new Dictionary<string, OribosEntry>();
-    private volatile IReadOnlyDictionary<string, OribosEntry> _bibMap = new Dictionary<string, OribosEntry>();
-
-    // status snapshot for change detection (only well-defined, non-ambiguous bibs)
-    private Dictionary<string, string> _statusSnapshot = new();
-    private bool _snapshotInitialized;
-
-    // card→bib snapshot to log changes in the mapping (skips the initial load)
-    private Dictionary<string, string> _cardBibSnapshot = new();
-    private bool _mappingInitialized;
-
-    // keys already warned about (ambiguous), to log only once
-    private readonly HashSet<string> _warnedKeys = [];
-
-    private CancellationTokenSource _cts = new();
-    private Task? _executingTask;
-    private string? _lastUpdate;
-
-    private DateTimeOffset _lastFetch;
-
-    public string Name => _configuration.Name;
-
-    public OribosService(
-      Lazy<DispatcherService> dispatcherService,
-      IHttpClientFactory httpClientFactory,
-      OribosEnrichmentConfiguration configuration)
-    {
-      _dispatcherService = dispatcherService;
-      _httpClientFactory = httpClientFactory;
-      _configuration = configuration;
-    }
-
-    #region enrichment
-
-    public Punch Enrich(Punch punch) => Enrich(punch, _cardMap, _bibMap);
 
     // Pure resolution against the given lookup maps (static for testability).
     // For an unknown id type, the map that resolves the entry also tells us what the
@@ -129,125 +75,6 @@ namespace RadioSender.Hosts.Enrichment.Oribos
     private static OribosEntry? Lookup(IReadOnlyDictionary<string, OribosEntry> map, string? key)
       => key != null && map.TryGetValue(key, out var e) ? e : null;
 
-    #endregion
-
-    #region lifecycle / longpolling
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-      _executingTask = ExecuteAsync(_cts.Token);
-      return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-      _cts.Cancel();
-      return _executingTask ?? Task.CompletedTask;
-    }
-
-    private async Task ExecuteAsync(CancellationToken ct)
-    {
-      await Task.Yield();
-
-      if (string.IsNullOrWhiteSpace(_configuration.Host) || !_configuration.Host.StartsWith("http"))
-      {
-        Log.Error("Oribos enrichment '{name}': invalid Host '{host}'", _configuration.Name, _configuration.Host);
-        return;
-      }
-
-      var host = _configuration.Host.Replace("http://localhost:", "http://127.0.0.1:").TrimEnd('/');
-
-      Log.Information("Oribos enrichment '{name}' listening on {host} (emitStatusChanges={emit})",
-        _configuration.Name, host, _configuration.EmitStatusChanges);
-
-      while (!ct.IsCancellationRequested)
-      {
-        try
-        {
-          await PollOnce(host, ct);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception e)
-        {
-          Log.Warning("Oribos enrichment '{name}' error: {message}", _configuration.Name, e.Message);
-          await Task.Delay(5000, ct);
-        }
-      }
-    }
-
-    private async Task PollOnce(string host, CancellationToken ct)
-    {
-      using var longClient = _httpClientFactory.CreateClient();
-      longClient.Timeout = TimeSpan.FromSeconds(70);
-
-      var update = await longClient.GetFromJsonAsync<OrServerUpdate>(
-        $"{host}/ORServer.lastupdate.jsp?u={_lastUpdate}", _jsonOptions, ct);
-
-      var changed = _lastUpdate != update?.Update;
-      var stale = DateTimeOffset.UtcNow - _lastFetch > TimeSpan.FromMinutes(2);
-
-      if (changed || stale)
-      {
-        await FetchFullweb(host, ct);
-        _lastUpdate = update?.Update;
-      }
-    }
-
-    private async Task FetchFullweb(string host, CancellationToken ct)
-    {
-      using var client = _httpClientFactory.CreateClient();
-      client.Timeout = TimeSpan.FromSeconds(10);
-
-      var merged = _configuration.Merged ? "true" : "false";
-      var data = await client.GetFromJsonAsync<OrServer>(
-        $"{host}/ORServer.fullweb.jsp?courses=true&merged={merged}", _jsonOptions, ct);
-
-      if (data == null)
-        return;
-
-      _lastFetch = DateTimeOffset.UtcNow;
-
-      var (cardMap, bibMap, _) = BuildLookups(data, _warnedKeys);
-      _cardMap = cardMap;
-      _bibMap = bibMap;
-
-      LogMappingChanges(cardMap);
-
-      if (_configuration.EmitStatusChanges)
-        DetectAndEmitStatusChanges(bibMap, data.Update);
-    }
-
-    // Logs additions/changes/removals in the card→bib mapping. The initial load is not logged.
-    private void LogMappingChanges(IReadOnlyDictionary<string, OribosEntry> cardMap)
-    {
-      var current = cardMap.ToDictionary(kv => kv.Key, kv => kv.Value.Bib);
-
-      if (_mappingInitialized)
-      {
-        foreach (var (card, bib) in current)
-        {
-          if (!_cardBibSnapshot.TryGetValue(card, out var prevBib))
-            Log.Information("Oribos '{name}': card {card} mapped to bib {bib}", _configuration.Name, card, bib);
-          else if (prevBib != bib)
-            Log.Information("Oribos '{name}': card {card} remapped from bib {prev} to bib {bib}", _configuration.Name, card, prevBib, bib);
-        }
-
-        foreach (var (card, prevBib) in _cardBibSnapshot)
-        {
-          if (!current.ContainsKey(card))
-            Log.Information("Oribos '{name}': card {card} unmapped (was bib {prev})", _configuration.Name, card, prevBib);
-        }
-      }
-
-      _cardBibSnapshot = current;
-      _mappingInitialized = true;
-    }
-
-    #endregion
-
-    #region pure logic (testable)
 
     // Builds card→entry and bib→entry maps. A competitor's Card and Card2 both index to it.
     // Keys shared by more than one competitor are disambiguated by status (keep the only one
@@ -500,49 +327,6 @@ namespace RadioSender.Hosts.Enrichment.Oribos
       return (snapshot, toEmit);
     }
 
-    #endregion
 
-    #region status change detection
-
-    private void DetectAndEmitStatusChanges(IReadOnlyDictionary<string, OribosEntry> bibMap, DateTimeOffset update)
-    {
-      var (snapshot, transitions) = ComputeStatusChanges(bibMap, _statusSnapshot, _snapshotInitialized);
-      _statusSnapshot = snapshot;
-      _snapshotInitialized = true;
-
-      var toEmit = new List<Punch>();
-
-      foreach (var (entry, status, useFinishTime) in transitions)
-      {
-        toEmit.Add(new Punch(
-          CompetitorId: entry.Bib,
-          CompetitorIdType: CompetitorIdType.BibNumber,
-          Time: useFinishTime ? entry.FinishTime!.Value : update.LocalDateTime,
-          Control: 10,
-          ControlType: useFinishTime ? PunchControlType.Finish : PunchControlType.Unknown,
-          SourceId: _configuration.Name,
-          ReceivedAt: DateTimeOffset.UtcNow,
-          CompetitorStatus: status,
-          Cancellation: false,
-          Competitor: ToCompetitor(entry)));
-      }
-
-      if (toEmit.Count > 0)
-      {
-        Log.Information("Oribos enrichment '{name}' emitting {count} status change(s): {changes}",
-          _configuration.Name, toEmit.Count,
-          string.Join(", ", toEmit.Select(p => $"{p.CompetitorId}:{p.CompetitorStatus}@{p.Time:HH:mm:ss}")));
-        _dispatcherService.Value.PushDispatch(new PunchDispatch(Punches: toEmit));
-      }
-    }
-
-    #endregion
-
-    public void Dispose()
-    {
-      _cts.Cancel();
-      _cts.Dispose();
-      _executingTask?.Dispose();
-    }
   }
 }

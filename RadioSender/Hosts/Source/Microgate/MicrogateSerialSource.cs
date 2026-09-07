@@ -1,5 +1,4 @@
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.IO;
@@ -15,10 +14,9 @@ public sealed class MicrogateSerialSource : MicrogateSource
   private Task? _readTask;
 
   public MicrogateSerialSource(
-    FilterService filterService,
     IDispatchSink dispatcherService,
     MicrogateSourceConfiguration configuration)
-    : base(filterService, dispatcherService, configuration, GetEndpoint(configuration))
+    : base(dispatcherService, configuration, GetEndpoint(configuration))
   {
   }
 

@@ -1,7 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using NetCoreServer;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -15,7 +14,6 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.SIRAP
 {
   public sealed class SirapServer(
-    FilterService filterService,
     IDispatchSink dispatcherService,
     SirapServerConfiguration configuration)
     : TcpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IRadioSenderHost, IDisposable
@@ -84,23 +82,18 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
-      var punch = filterService.Transform(
-                    configuration.Filter,
-                     new Punch(
-                      ReceivedAt: DateTimeOffset.UtcNow,
-                     CompetitorId: chipNo.ToString(),
-                     CompetitorIdType: CompetitorIdType.PunchingCard,
-                     Control: codeNo,
-                     ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-                     Time: dt,
-                     SourceId: "Sirap", // TODO
-                     Cancellation: isCancellation,
-                     CompetitorStatus: competitorStatus
-                     )
-                  );
+      var punch = new Punch(
+        ReceivedAt: DateTimeOffset.UtcNow,
+        CompetitorId: chipNo.ToString(),
+        CompetitorIdType: CompetitorIdType.PunchingCard,
+        Control: codeNo,
+        ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
+        Time: dt,
+        SourceId: "Sirap", // TODO
+        Cancellation: isCancellation,
+        CompetitorStatus: competitorStatus);
 
-      if (punch != null)
-        dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+      dispatcherService.PushDispatch(new PunchDispatch([punch]));
     }
 
     internal void OnReceivedV2(TcpSirapSession session, ReadOnlySpan<byte> buffer)
@@ -127,23 +120,18 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       var dt = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) + time;
 
-      var punch = filterService.Transform(
-                    configuration.Filter,
-                     new Punch(
-                      ReceivedAt: DateTimeOffset.UtcNow,
-                     CompetitorId: chipNo.ToString(),
-                     CompetitorIdType: CompetitorIdType.PunchingCard,
-                     Control: codeNo,
-                     ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
-                     Time: dt,
-                     SourceId: "Sirap", // TODO
-                     Cancellation: isCancellation,
-                     CompetitorStatus: competitorStatus
-                     )
-                  );
+      var punch = new Punch(
+        ReceivedAt: DateTimeOffset.UtcNow,
+        CompetitorId: chipNo.ToString(),
+        CompetitorIdType: CompetitorIdType.PunchingCard,
+        Control: codeNo,
+        ControlType: codeNo == 9 ? PunchControlType.Finish : PunchControlType.Unknown,
+        Time: dt,
+        SourceId: "Sirap", // TODO
+        Cancellation: isCancellation,
+        CompetitorStatus: competitorStatus);
 
-      if (punch != null)
-        dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
+      dispatcherService.PushDispatch(new PunchDispatch([punch]));
     }
 
     internal static bool ManageSpecialFlags(int codeDay,

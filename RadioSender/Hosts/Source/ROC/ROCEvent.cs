@@ -1,9 +1,8 @@
-﻿using CsvHelper;
+using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Concurrent;
@@ -25,7 +24,6 @@ namespace RadioSender.Hosts.Source.ROC
     public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;
     private readonly IDispatchSink _dispatcherService;
-    private readonly FilterService _filterService;
     private readonly int _eventId;
 
     private readonly Event? _configuration;
@@ -44,13 +42,11 @@ namespace RadioSender.Hosts.Source.ROC
     public ROCEvent(
       IHttpClientFactory clientFactory,
       IDispatchSink dispatcherService,
-      FilterService filterService,
       Event configuration,
       int eventId)
     {
       _httpClient = clientFactory.CreateClient(HTTPCLIENT_NAME + eventId);
       _dispatcherService = dispatcherService;
-      _filterService = filterService;
       _eventId = eventId;
       _csvReaderConfiguration = new CsvConfiguration(CultureInfo.InvariantCulture)
       {
@@ -108,9 +104,6 @@ namespace RadioSender.Hosts.Source.ROC
           return;
         }
 
-        if (!_configuration.Enable)
-          return;
-
         var path = _configuration.Path.Replace("{EventId}", _configuration.EventId.ToString()).Replace("{LastId}", _lastReceivedId.ToString());
 
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
@@ -154,20 +147,14 @@ namespace RadioSender.Hosts.Source.ROC
           IEnumerable<Punch>? punches = null;
           if (list.Count != 0)
           {
-            punches = _filterService.Transform(
-                        _configuration.Filter,
-                        list.Select(p =>
-                        new Punch(
-                      ReceivedAt: DateTimeOffset.UtcNow,
-                          CompetitorId: p.Card.ToString(),
-                          CompetitorIdType: CompetitorIdType.PunchingCard,
-                          Time: p.Time,
-                          Control: p.Code,
-                          ControlType: PunchControlType.Unknown,
-                          SourceId: HTTPCLIENT_NAME + _eventId
-                        )
-                      )
-                    );
+            punches = list.Select(p => new Punch(
+              ReceivedAt: DateTimeOffset.UtcNow,
+              CompetitorId: p.Card.ToString(),
+              CompetitorIdType: CompetitorIdType.PunchingCard,
+              Time: p.Time,
+              Control: p.Code,
+              ControlType: PunchControlType.Unknown,
+              SourceId: HTTPCLIENT_NAME + _eventId));
 
             _lastReceivedId = list.Last().Id;
           }

@@ -1,6 +1,8 @@
 # Proposta: configurazione a nodi e modifica a runtime
 
-Stato: passi 1–4 implementati, inclusi deduplicazione, provider Oribos condiviso, adapter dei protocolli, nuovi form tipizzati e vista operativa del modulo TmF. La [guida operativa](flow-editor.md) descrive comportamento effettivo, esempi e limiti. Restano al passo 5 la rimozione delle pagine/programmi legacy e il consolidamento dei pacchetti Windows/macOS.
+Stato: passi 1–5 implementati per il codice applicativo, inclusi deduplicazione, provider Oribos condiviso, adapter dei protocolli, form tipizzati, vista operativa TmF e rimozione di ManualSender, target UI globale, pagine legacy, dispatcher precedente e Hangfire. La [guida operativa](flow-editor.md) descrive comportamento effettivo, esempi e limiti. GitHub Actions, deploy e aggiornamento dei pacchetti Windows/macOS sono esclusi da questa chiusura su richiesta dell'utente. La verifica nativa di Photino e delle periferiche resta da eseguire sulle installazioni operative.
+
+Il seguito conserva la proposta e le motivazioni iniziali. I riferimenti al «codice attuale» descrivono la base precedente all'implementazione; dove le scelte sono evolute (per esempio Hangfire sostituito dalle code del runtime), fa fede la guida operativa.
 
 L'obiettivo è rendere configurabili dalla UI sorgenti, destinazioni, trasformazioni e collegamenti, applicando le modifiche senza riavviare RadioSender. Il documento JSON resta il formato portabile della configurazione. La modularità dei protocolli rimane il criterio principale del progetto.
 

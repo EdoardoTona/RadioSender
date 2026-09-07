@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Protocol.TmF;
 using RJCP.IO.Ports;
 using Serilog;
@@ -19,7 +18,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
     public const uint BROADCAST = 0xffffffff;
 
     private readonly IDispatchSink _dispatcherService;
-    private readonly FilterService _filterService;
     private readonly Gateway _configuration;
     private readonly SerialPortStream _port;
     //private readonly SerialPortStream _serialPort;
@@ -32,11 +30,9 @@ namespace RadioSender.Hosts.Source.TmFRadio
     private bool disposed;
 
     public TmFRadioGateway(
-      FilterService filterService,
       IDispatchSink dispatcherService,
       Gateway configuration)
     {
-      _filterService = filterService;
       _dispatcherService = dispatcherService;
       _configuration = configuration;
       _port = new SerialPortStream(_configuration.PortName, _configuration.Baudrate, 8, Parity.None, StopBits.One)
@@ -56,19 +52,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
       //_port.ErrorReceived += _port_ErrorReceived;
       //_port.DataReceived += _port_DataReceived;
 
-      _dispatcherService.RequestPing += DispatcherService_RequestPing;
-    }
-
-    private async void DispatcherService_RequestPing(object? sender, EventArgs e)
-    {
-      try
-      {
-        await CheckPathAndStatus(delay: false);
-      }
-      catch
-      {
-        // quiet
-      }
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -144,7 +127,6 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
       disposed = true;
 
-      _dispatcherService.RequestPing -= DispatcherService_RequestPing;
       _cts.Cancel();
 
       if (_port.IsOpen) { _port.DtrEnable = false; _port.Close(); }
@@ -307,7 +289,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
       if (dispatch.Punches != null)
       {
-        var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches).ToArray();
+        var punches = dispatch.Punches.ToArray();
         if (punches.Length == 0)
           return;
 

@@ -1,10 +1,6 @@
-using Microsoft.Extensions.Options;
+using RadioSender.Flow.Modules;
 using NUnit.Framework;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Enrichment;
-using RadioSender.Hosts.Source.Tcp;
-using RadioSender.Hosts.Target;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -17,38 +13,10 @@ using System.Threading.Tasks;
 
 namespace Test.RadioSender;
 
-// End-to-end: real TCP socket -> TcpSourceServer -> line reader -> FilterService ->
-// DispatcherService -> capturing target. Exercises the runtime path, not just the parser.
+// End-to-end: real TCP socket -> current TCP source module -> captured output.
 [TestFixture]
 public class TestTcpSourceIntegration
 {
-  private sealed class StubMonitor(FiltersConfiguration value) : IOptionsMonitor<FiltersConfiguration>
-  {
-    public FiltersConfiguration CurrentValue => value;
-    public FiltersConfiguration Get(string? name) => value;
-    public IDisposable? OnChange(Action<FiltersConfiguration, string?> listener) => null;
-  }
-
-  private sealed class CapturingTarget : ITarget
-  {
-    public ConcurrentQueue<Punch> Received { get; } = new();
-
-    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
-    {
-      if (dispatch.Punches != null)
-        foreach (var p in dispatch.Punches)
-          Received.Enqueue(p);
-      return Task.CompletedTask;
-    }
-
-    public Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
-    {
-      foreach (var d in dispatches)
-        SendDispatch(d, ct);
-      return Task.CompletedTask;
-    }
-  }
-
   private static int FreePort()
   {
     var l = new TcpListener(IPAddress.Loopback, 0);
@@ -58,21 +26,15 @@ public class TestTcpSourceIntegration
     return port;
   }
 
-  private static (TcpSourceServer server, CapturingTarget target) BuildServer(int port, string format)
+  private static (TcpFlowModule server, CapturingOutput target) BuildServer(int port, string format)
   {
-    var filterService = new FilterService(
-      new StubMonitor(new FiltersConfiguration { List = [] }),
-      Array.Empty<IEnrichmentSource>());
-
-    var target = new CapturingTarget();
-    var dispatcher = new DispatcherService(filterService, new ITarget[] { target }, new DispatcherConfiguration());
-
-    var config = new TcpSourceConfiguration { Port = port, Format = format, AsServer = true, SourceId = "tcp-test" };
-    var server = new TcpSourceServer(filterService, dispatcher, config);
+    var target = new CapturingOutput();
+    var server = new TcpFlowModule(new() { Port = port, Format = format, AsServer = true },
+      new("tcp-test", System.IO.Path.GetTempPath(), target), true);
     return (server, target);
   }
 
-  private static async Task<Punch> WaitForOne(CapturingTarget target, int timeoutMs = 3000)
+  private static async Task<Punch> WaitForOne(CapturingOutput target, int timeoutMs = 3000)
   {
     var sw = System.Diagnostics.Stopwatch.StartNew();
     while (sw.ElapsedMilliseconds < timeoutMs)
@@ -88,7 +50,7 @@ public class TestTcpSourceIntegration
   public async Task ReceivesPunchOverRealSocket_DefaultFormat()
   {
     var port = FreePort();
-    var (server, target) = BuildServer(port, ConfigureTcpSource.DefaultFormat);
+    var (server, target) = BuildServer(port, new TcpSettings().Format);
     await server.StartAsync(CancellationToken.None);
 
     try
@@ -117,7 +79,7 @@ public class TestTcpSourceIntegration
     finally
     {
       await server.StopAsync(CancellationToken.None);
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 
@@ -125,7 +87,7 @@ public class TestTcpSourceIntegration
   public async Task ReassemblesLineSplitAcrossTwoTcpPackets()
   {
     var port = FreePort();
-    var (server, target) = BuildServer(port, ConfigureTcpSource.DefaultFormat);
+    var (server, target) = BuildServer(port, new TcpSettings().Format);
     await server.StartAsync(CancellationToken.None);
 
     try
@@ -149,7 +111,7 @@ public class TestTcpSourceIntegration
     finally
     {
       await server.StopAsync(CancellationToken.None);
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 
@@ -157,7 +119,7 @@ public class TestTcpSourceIntegration
   public async Task DecodesSpecialStatusTimeOverSocket()
   {
     var port = FreePort();
-    var (server, target) = BuildServer(port, ConfigureTcpSource.DefaultFormat);
+    var (server, target) = BuildServer(port, new TcpSettings().Format);
     await server.StartAsync(CancellationToken.None);
 
     try
@@ -176,7 +138,7 @@ public class TestTcpSourceIntegration
     finally
     {
       await server.StopAsync(CancellationToken.None);
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 }

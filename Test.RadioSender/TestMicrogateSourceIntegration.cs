@@ -1,10 +1,6 @@
-using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Enrichment;
 using RadioSender.Hosts.Source.Microplus;
-using RadioSender.Hosts.Target;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -25,30 +21,6 @@ namespace Test.RadioSender;
 [TestFixture]
 public class TestMicrogateSourceIntegration
 {
-  private sealed class StubMonitor(FiltersConfiguration value) : IOptionsMonitor<FiltersConfiguration>
-  {
-    public FiltersConfiguration CurrentValue => value;
-    public FiltersConfiguration Get(string? name) => value;
-    public IDisposable? OnChange(Action<FiltersConfiguration, string?> listener) => null;
-  }
-
-  private sealed class CapturingTarget : ITarget
-  {
-    public ConcurrentQueue<Punch> Received { get; } = new();
-    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
-    {
-      if (dispatch.Punches != null)
-        foreach (var p in dispatch.Punches)
-          Received.Enqueue(p);
-      return Task.CompletedTask;
-    }
-    public Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
-    {
-      foreach (var d in dispatches) SendDispatch(d, ct);
-      return Task.CompletedTask;
-    }
-  }
-
   private static int FreePort()
   {
     var l = new TcpListener(IPAddress.Loopback, 0);
@@ -60,13 +32,9 @@ public class TestMicrogateSourceIntegration
 
   private static MicrogateTcpSource BuildSource(string address, int port)
   {
-    var filterService = new FilterService(
-      new StubMonitor(new FiltersConfiguration { List = [] }),
-      Array.Empty<IEnrichmentSource>());
-    var target = new CapturingTarget();
-    var dispatcher = new DispatcherService(filterService, new ITarget[] { target }, new DispatcherConfiguration());
+    var output = new CapturingOutput();
     var config = new MicrogateSourceConfiguration { Address = address, Port = port };
-    return new MicrogateTcpSource(filterService, dispatcher, config);
+    return new MicrogateTcpSource(output, config);
   }
 
   private sealed class CapturingSink : ILogEventSink

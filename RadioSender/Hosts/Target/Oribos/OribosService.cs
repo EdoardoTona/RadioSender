@@ -1,57 +1,10 @@
-﻿using Hangfire;
-using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using Serilog;
+﻿using RadioSender.Hosts.Common;
 using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.Oribos;
 
-public class OribosService : ITarget
+public static class OribosService
 {
-  private readonly IBackgroundJobClient _backgroundJobClient;
-  private static IHttpClientFactory? _httpClientFactory; // static for hangfire
-  private OribosServer _configuration;
-  private readonly FilterService _filterService;
-
-  public OribosService(
-    FilterService filterService,
-    IBackgroundJobClient backgroundJobClient,
-    IHttpClientFactory httpClientFactory,
-    OribosServer configuration)
-  {
-    _filterService = filterService;
-    _configuration = configuration;
-    _backgroundJobClient = backgroundJobClient;
-    _httpClientFactory = httpClientFactory;
-
-  }
-
-  public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
-  {
-    if (dispatch.Punches == null)
-      return Task.CompletedTask;
-
-    var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
-
-    foreach (var punch in punches)
-    {
-      _backgroundJobClient.Enqueue(() => SendPunchAction(_configuration, punch, default));
-    }
-    return Task.CompletedTask;
-  }
-
-  public Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
-  {
-    foreach (var dispatch in dispatches)
-      SendDispatch(dispatch, ct);
-
-    return Task.CompletedTask;
-  }
-
   public static string? BuildPunchPath(Punch punch)
   {
     if ((punch.CompetitorIdType == CompetitorIdType.PunchingCard || punch.NetTime) &&
@@ -127,66 +80,6 @@ public class OribosService : ITarget
     }
 
     return url;
-  }
-
-  public static async Task SendPunchAction(OribosServer _configuration, Punch punch, CancellationToken ct = default)
-  {
-    if (string.IsNullOrEmpty(_configuration.Host) || _httpClientFactory == null)
-      throw new ArgumentException("Missing host");
-
-    using var httpClient = _httpClientFactory.CreateClient();
-
-    var host = _configuration.Host.Contains("localhost") ? _configuration.Host.Replace("localhost", "127.0.0.1") : _configuration.Host; // optimization to skip the dns resolution
-    httpClient.BaseAddress = new Uri(host);
-
-    var url = BuildPunchPath(punch);
-    if (url == null) return;
-
-    HttpResponseMessage response;
-    try
-    {
-      response = await httpClient.GetAsync(url, ct);
-    }
-    catch
-    {
-      Log.Warning("Oribos not reachable: {host}", host);
-      throw;
-    }
-
-    try
-    {
-      response.EnsureSuccessStatusCode();
-    }
-    catch
-    {
-      Log.Warning("Oribos responded: {status}", response.StatusCode);
-      throw;
-    }
-
-    var text = await response.Content.ReadAsStringAsync(ct);
-
-    if (text.Contains("Ok"))
-    {
-      text = text.Replace("<html><body><h1>", "").Replace("</h1></body></html>", "");
-      string[] r = text.Split(';');
-      // r[0] è "Ok"
-      if (r.Length > 1)
-      {
-#pragma warning disable IDE0059 // Assegnazione non necessaria di un valore
-        var nome = r[1];
-        var societa = r[2];
-        var nazione = r[3];
-        var tempotot = r[4];
-#pragma warning restore IDE0059 // Assegnazione non necessaria di un valore
-      }
-    }
-    else
-    {
-      Log.Warning(text);
-    }
-
-
-
   }
 
 }

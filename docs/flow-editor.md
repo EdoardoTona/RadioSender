@@ -1,6 +1,6 @@
 # Flow configuration
 
-Increments 1–4 of the graph architecture are implemented. All existing input/output protocols have graph modules, with explicit deduplication and shared Oribos enrichment. The old implementations remain for protocol reuse and regression tests; the application does not start instances from `appsettings.json`. ManualSender and the remaining legacy pages are scheduled for cleanup in increment 5.
+Increments 1–5 of the application architecture are implemented. All existing input/output protocols have graph modules, with explicit deduplication and shared Oribos enrichment. Flow is the only application UI: the standalone ManualSender, global UI target, legacy pages and SignalR hub, dispatcher orchestration and Hangfire services have been removed. Protocol decoders, encoders and Oribos lookup rules remain shared with regression tests. Windows/macOS packaging and deployment changes are outside this cleanup.
 
 ## Create and run a flow
 
@@ -38,7 +38,7 @@ Apply waits up to 15 seconds for accepted delayed events and target deliveries b
 
 Microgate uses serial when `portName` is set, otherwise TCP `address` and `port`. MQTT supports topic lists, SPORTident/TmF payload selection, protocol version, TLS/WebSocket and authentication settings. ROC and SPORTident Center retain their existing polling/cursor semantics. Decoder callbacks enter a bounded 256-event queue; overflow is logged on that node. There is no implicit dispatcher deduplication or enrichment in these adapters.
 
-HTTP, OResults and Oribos deliveries use the running target's queue and cancellation token. They do not enqueue Hangfire jobs or retry automatically in the background. Review failures and use **Retry target** when appropriate. Apply drains accepted requests at the old destination before replacing it. HTTP errors produce `Failed`; Oribos also requires its `Ok` acknowledgement. Events that a protocol cannot represent produce `Suppressed`. SIRAP cannot represent cancellations, status changes or net-time events. OResults needs a card identifier, resolved by enrichment when available.
+HTTP, OResults and Oribos deliveries use the running target's queue and cancellation token. They do not retry automatically in the background. Review failures and use **Retry target** when appropriate. Apply drains accepted requests at the old destination before replacing it. HTTP errors produce `Failed`; Oribos also requires its `Ok` acknowledgement. Events that a protocol cannot represent produce `Suppressed`. SIRAP cannot represent cancellations, status changes or net-time events. OResults needs a card identifier, resolved by enrichment when available.
 
 The ESC/POS target requires Windows and a configured USB printer. It submits to the Windows spooler; `Submitted` is not proof of physical printing. Native printer calls may not respond to cancellation until the driver returns. Serial hardware, printer output and Photino WebViews still need verification on the operator's Windows/macOS installations; automated tests use protocol fixtures, local sockets and Chromium.
 
@@ -80,16 +80,20 @@ Writes use a temporary file and atomic replacement with a `.bak` copy of the pre
 
 ## Extending a module
 
-- Add a settings record with `Display`, `Required`, `Range` and related validation attributes. `ModuleDefinition<TSettings>` generates defaults and field descriptors for the UI. The form supports strings, passwords, nullable integers, Booleans, enums and row editors for lists. Provider references use a node selector. Inherited legacy `Filter`, `Enable` and obsolete properties are excluded: edges and node enablement own those concerns.
+- Add a settings record with `Display`, `Required`, `Range` and related validation attributes. `ModuleDefinition<TSettings>` generates defaults and field descriptors for the UI. The form supports strings, passwords, nullable integers, Booleans, enums and row editors for lists. Provider references use a node selector. Keep filter rules and enablement out of module settings: edges and nodes own those concerns. Obsolete properties are excluded from generated forms.
 - Derive from `FlowModule`. Constructors must not open resources. Acquire resources in `StartAsync`, stop background work and close resources in `StopAsync`, and make disposal safe after partial startup. Sources publish through `ModuleContext.Output`; targets implement `SendAsync` and return a precise `DeliveryResult`. Respect cancellation and keep background work bounded.
 - Register one factory in `ModuleRegistry.CreateDefault`. The runtime owns each instance and routes data by node ID. The existing `Filter.Transform` handles branch mappings without mutating the original `Punch`.
 - Declare optional `ModuleCommand` entries and implement `ExecuteCommandAsync`. Commands are checked against the node descriptor, session and revision. A `CommandResult` can return output events for routing; simple actions are rendered as buttons automatically. ManualFlowModule is the first example.
 - Declare an optional view key and register its Vue component in `ClientApp/src/modules/views.ts`. The operational component receives node ID, runtime and disabled state. It invokes `/api/flow/nodes/{id}/commands/{command}` with `{ sessionId, revision, arguments }`. Configuration fields remain in Editor.
-- Use the module's protected `Logger` for scoped messages. `SetState` also records state changes automatically. TmF exposes **Radio network** as an instance view. `GET /api/flow/nodes/{id}/view?sessionId=...&revision=...` returns its bounded snapshot; retired or stale instances are rejected. The old global Graph page is not linked from the new UI.
+- Use the module's protected `Logger` for scoped messages. `SetState` also records state changes automatically. TmF exposes **Radio network** as an instance view. `GET /api/flow/nodes/{id}/view?sessionId=...&revision=...` returns its bounded snapshot; retired or stale instances are rejected. There is no global Graph page or shared radio-command broadcast.
+
+Protocol adapters can reuse a decoder through `ProtocolSourceModule` and `IDispatchSink`, which provide instance-scoped logging, state and bounded event publication. Decoders do not resolve filters or destinations. Configuration records describe protocol settings; no per-protocol appsettings registration or global service is needed.
 
 The runtime and document format have no dependency on Vue Flow or Vuetify. UI positions and viewport live separately under `editor`. `Runtime/FlowRuntime.cs` owns apply/stop/replay ordering; `TargetQueue` and `DelayedEdgeQueue` own bounded asynchronous delivery; `FlowJournal` and `FlowLogs` own inspection history; `Configuration/FlowDocuments.cs` owns persistence.
 
 ## Build and verify
+
+`appsettings.json` configures only `Urls`, `Desktop:Enabled` and `Serilog`. Graph documents own every source, target and processing rule. The old `appsettings.complex.example.json` remains a historical reference, not an openable flow.
 
 Use .NET 10 and Node.js 24. `dotnet build RadioSender/RadioSender.csproj` restores and builds the frontend when needed and embeds the generated assets, including clean publishes. Node.js is needed only during development/build, not on an operator's computer.
 

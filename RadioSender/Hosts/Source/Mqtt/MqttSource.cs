@@ -1,7 +1,6 @@
 using MQTTnet;
 using MQTTnet.Protocol;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Protocol.Sportident;
 using RadioSender.Hosts.Protocol.TmF;
 using Serilog;
@@ -14,7 +13,6 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.Mqtt;
 
 public sealed class MqttSource(
-  FilterService filterService,
   IDispatchSink dispatcherService,
   MqttSourceConfiguration configuration) : ISource, IRadioSenderHost, IAsyncDisposable
 {
@@ -275,7 +273,7 @@ public sealed class MqttSource(
     if (dispatch.Punches == null)
       return dispatch;
 
-    var punches = filterService.Transform(configuration.Filter, dispatch.Punches).ToArray();
+    var punches = dispatch.Punches.ToArray();
     if (punches.Length == 0 && dispatch.Hops == null && dispatch.Nodes == null)
       return null;
 

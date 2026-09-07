@@ -1,17 +1,9 @@
-using Hangfire;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RadioSender.Hosts.Target.OResults
 {
@@ -26,54 +18,8 @@ namespace RadioSender.Hosts.Target.OResults
     [property: JsonPropertyName("time")] string Time,
     [property: JsonPropertyName("punch_type")] int? PunchType);
 
-  public sealed class OResultsService : ITarget
+  public static class OResultsService
   {
-    private readonly FilterService _filterService;
-    private readonly IBackgroundJobClient _backgroundJobClient;
-    private static IHttpClientFactory? _httpClientFactory; // static for hangfire
-    private readonly OResultsConfiguration _configuration;
-
-    public OResultsService(
-      FilterService filterService,
-      IBackgroundJobClient backgroundJobClient,
-      IHttpClientFactory httpClientFactory,
-      OResultsConfiguration configuration)
-    {
-      _filterService = filterService;
-      _backgroundJobClient = backgroundJobClient;
-      _httpClientFactory = httpClientFactory;
-      _configuration = configuration;
-    }
-
-    public Task SendDispatches(IEnumerable<PunchDispatch> dispatches, CancellationToken ct = default)
-    {
-      foreach (var dispatch in dispatches)
-        SendDispatch(dispatch, ct);
-
-      return Task.CompletedTask;
-    }
-
-    public Task SendDispatch(PunchDispatch dispatch, CancellationToken ct = default)
-    {
-      if (dispatch.Punches == null)
-        return Task.CompletedTask;
-
-      var punches = _filterService.Transform(_configuration.Filter, dispatch.Punches);
-
-      var records = punches
-        .Select(p => ToRecord(p, _configuration.UseUtc, _configuration.IgnoreCompetitorIdType))
-        .Where(r => r != null)
-        .Select(r => r!)
-        .ToList();
-
-      if (records.Count == 0)
-        return Task.CompletedTask;
-
-      _backgroundJobClient.Enqueue(() => SendRecordsAction(_configuration, records, default));
-
-      return Task.CompletedTask;
-    }
-
     public static OResultsPunch? Encode(Punch punch, bool useUtc, bool ignoreCompetitorIdType) => ToRecord(punch, useUtc, ignoreCompetitorIdType);
 
     private static OResultsPunch? ToRecord(Punch punch, bool useUtc, bool ignoreCompetitorIdType)
@@ -114,47 +60,5 @@ namespace RadioSender.Hosts.Target.OResults
       return new OResultsPunch(card, punch.Control, time, punchType);
     }
 
-    public static async Task SendRecordsAction(OResultsConfiguration _configuration, IReadOnlyList<OResultsPunch> records, CancellationToken ct = default)
-    {
-      if (string.IsNullOrEmpty(_configuration.ApiKey) || _httpClientFactory == null)
-        throw new ArgumentException("Missing OResults ApiKey");
-
-      using var httpClient = _httpClientFactory.CreateClient();
-
-      var host = _configuration.Host.Contains("localhost") ? _configuration.Host.Replace("localhost", "127.0.0.1") : _configuration.Host; // optimization to skip the dns resolution
-      httpClient.BaseAddress = new Uri(host);
-
-      var body = new OResultsRequest(_configuration.ApiKey, records);
-
-      HttpResponseMessage response;
-      try
-      {
-        response = await httpClient.PostAsJsonAsync(_configuration.Path, body, ct);
-      }
-      catch
-      {
-        Log.Warning("OResults not reachable: {host}", host);
-        throw;
-      }
-
-      if (!response.IsSuccessStatusCode)
-      {
-        var text = await response.Content.ReadAsStringAsync(ct);
-        Log.Warning("OResults responded {status}: {body}", response.StatusCode, SummarizeErrorBody(text));
-        response.EnsureSuccessStatusCode();
-      }
-    }
-
-    private const int MaxErrorBodyChars = 500;
-
-    private static string SummarizeErrorBody(string body)
-    {
-      var stripped = Regex.Replace(body, "<[^>]*>", " ");
-      stripped = Regex.Replace(stripped, @"\s+", " ").Trim();
-
-      return stripped.Length > MaxErrorBodyChars
-        ? stripped[..MaxErrorBodyChars] + "..."
-        : stripped;
-    }
   }
 }

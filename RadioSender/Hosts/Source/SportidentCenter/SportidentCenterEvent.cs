@@ -1,8 +1,7 @@
-﻿using CsvHelper;
+using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Concurrent;
@@ -21,7 +20,6 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 {
   public record SimplePunch(long Id, long Card, long Time, int Code, string Mode);
   public class SportidentCenterEvent(
-    FilterService filterService,
     IHttpClientFactory clientFactory,
     IDispatchSink dispatcherService,
     Event configuration) : IRadioSenderHost, ISource, IDisposable
@@ -138,21 +136,14 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           IEnumerable<Punch>? punches = null;
           if (list.Count != 0)
           {
-            punches = filterService.Transform(
-                      configuration.Filter,
-                        list.Select(p =>
-                              new Punch(
-
-                      ReceivedAt: DateTimeOffset.UtcNow,
-                               CompetitorId: p.Card.ToString(),
-                               CompetitorIdType: CompetitorIdType.PunchingCard,
-                               Control: p.Code,
-                               ControlType: MapControlType(p.Mode),
-                               Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
-                               SourceId: HTTPCLIENT_NAME
-                              )
-                      )
-                    );
+            punches = list.Select(p => new Punch(
+              ReceivedAt: DateTimeOffset.UtcNow,
+              CompetitorId: p.Card.ToString(),
+              CompetitorIdType: CompetitorIdType.PunchingCard,
+              Control: p.Code,
+              ControlType: MapControlType(p.Mode),
+              Time: DateTimeOffset.FromUnixTimeMilliseconds(p.Time).DateTime,
+              SourceId: HTTPCLIENT_NAME));
 
             _lastReceivedId = list.Last().Id;
           }

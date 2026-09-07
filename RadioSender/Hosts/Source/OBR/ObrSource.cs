@@ -1,5 +1,4 @@
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Net;
@@ -11,7 +10,6 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.OBR;
 
 public sealed class ObrSource(
-  FilterService filterService,
   IDispatchSink dispatcherService,
   ObrSourceConfiguration configuration) : ISource, IRadioSenderHost, IDisposable
 {
@@ -163,27 +161,16 @@ public sealed class ObrSource(
 
       var time = ParseTm(tmStr);
 
-      var punch = filterService.Transform(
-        configuration.Filter,
-        new Punch(
-          ReceivedAt: DateTimeOffset.UtcNow,
-          CompetitorId: card.ToString(),
-          CompetitorIdType: CompetitorIdType.PunchingCard,
-          Control: cp,
-          ControlType: PunchControlType.Unknown,
-          Time: time,
-          SourceId: ResolveSourceId(senderIp)
-        )
-      );
+      var punch = new Punch(
+        ReceivedAt: DateTimeOffset.UtcNow,
+        CompetitorId: card.ToString(),
+        CompetitorIdType: CompetitorIdType.PunchingCard,
+        Control: cp,
+        ControlType: PunchControlType.Unknown,
+        Time: time,
+        SourceId: ResolveSourceId(senderIp));
 
-      if (punch != null)
-      {
-        dispatcherService.PushDispatch(new PunchDispatch(new[] { punch }));
-      }
-      else
-      {
-        dispatcherService.Logger.Debug("OBR punch filtered out card={card} cp={cp} tm={tm} from {ip}", card, cp, tmStr ?? "(now)", senderIp);
-      }
+      dispatcherService.PushDispatch(new PunchDispatch([punch]));
     }
     catch (Exception e)
     {

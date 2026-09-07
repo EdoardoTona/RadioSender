@@ -319,3 +319,107 @@ test('radio module view shows its gateway snapshot and addresses ping to that in
   await dialog.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(page.locator('.module-commands')).toContainText('Radio status and path requested.')
 })
+
+test('the flow UI replaces legacy pages and endpoints', async ({ request }) => {
+  for (const path of ['/', '/Flows']) {
+    const response = await request.get(path, { maxRedirects: 0 })
+    expect(response.status()).toBe(302)
+    expect(response.headers().location).toBe('/flows/index.html')
+  }
+  for (const path of ['/Punches', '/Graph', '/Stats', '/Log', '/hangfire']) {
+    expect((await request.get(path)).status(), path).toBe(404)
+  }
+  expect((await request.post('/deviceHub/negotiate?negotiateVersion=1')).status()).toBe(404)
+})
+
+test('manual controls route to their own branch and reset after a runtime restart', async ({
+  page,
+  request,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), 'radiosender-controls-'))
+  const path = join(directory, 'two-inputs.json')
+  const document = {
+    schemaVersion: 1,
+    filters: [],
+    nodes: ['left', 'right'].flatMap((side) => [
+      { id: side, name: `${side} input`, type: 'source.manual', settings: {}, enabled: true },
+      {
+        id: `${side}-out`,
+        name: `${side} output`,
+        type: 'processor.passthrough',
+        settings: {},
+        enabled: true,
+      },
+    ]),
+    edges: ['left', 'right'].map((side) => ({
+      id: side,
+      from: { node: side, port: 'out' },
+      to: { node: `${side}-out`, port: 'in' },
+      enabled: true,
+    })),
+    editor: {
+      positions: {
+        left: { x: 50, y: 50 },
+        'left-out': { x: 380, y: 50 },
+        right: { x: 50, y: 220 },
+        'right-out': { x: 380, y: 220 },
+      },
+    },
+  }
+  try {
+    await writeFile(path, JSON.stringify(document))
+    const opened = await request.post('/api/flow/documents/open', { headers, data: { path } })
+    expect(opened.ok()).toBe(true)
+    const { id: documentId } = await opened.json()
+    const apply = async () => {
+      const { revision } = await (await request.get(`/api/flow/documents/${documentId}`)).json()
+      const response = await request.post('/api/flow/runtime/apply', {
+        headers,
+        data: { documentId, revision },
+      })
+      expect(response.ok(), await response.text()).toBe(true)
+      return response
+    }
+    expect((await apply()).ok()).toBe(true)
+    const previous = await (await request.get('/api/flow/runtime')).json()
+    await page.goto('/flows/index.html')
+    for (const [side, competitor] of [
+      ['left', '101'],
+      ['right', '202'],
+    ]) {
+      await page
+        .locator('.vue-flow__node')
+        .filter({ hasText: `${side} input` })
+        .click()
+      await expect(page.getByLabel('Competitor ID', { exact: true })).toHaveValue('')
+      await page.getByLabel('Competitor ID', { exact: true }).fill(competitor!)
+      await page.getByRole('button', { name: 'Send event', exact: true }).click()
+      await expect(page.locator('.manual-form')).toContainText('Event accepted.')
+      const observations = await (
+        await request.get(`/api/flow/nodes/${side}-out/observations?direction=output`)
+      ).json()
+      expect(
+        observations.items.map(
+          (item: { punch: { competitorId: string } }) => item.punch.competitorId,
+        ),
+      ).toEqual([competitor])
+    }
+    await page.getByLabel('Competitor ID', { exact: true }).fill('unsent draft')
+    expect((await request.post('/api/flow/runtime/stop', { headers })).ok()).toBe(true)
+    expect((await apply()).ok()).toBe(true)
+    await expect(page.getByLabel('Competitor ID', { exact: true })).toHaveValue('')
+    await expect(page.locator('.manual-form')).not.toContainText('Event accepted.')
+    const stale = await request.post('/api/flow/nodes/right/commands/send', {
+      headers,
+      data: {
+        sessionId: previous.sessionId,
+        revision: (await (await request.get('/api/flow/runtime')).json()).revision,
+        arguments: {},
+      },
+    })
+    expect(stale.status()).toBe(409)
+  } finally {
+    await request.post('/api/flow/runtime/stop', { headers })
+    await rm(directory, { recursive: true, force: true })
+  }
+})

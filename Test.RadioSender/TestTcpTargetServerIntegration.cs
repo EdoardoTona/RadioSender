@@ -1,32 +1,19 @@
+using RadioSender.Flow.Modules;
 using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Enrichment;
-using RadioSender.Hosts.Target.Tcp;
 
 namespace Test.RadioSender;
 
-// End-to-end: TcpTargetServer listens; a plain socket connects in as a client and reads the
+// End-to-end: The TCP target listens; a plain socket connects in as a client and reads the
 // raw bytes the server pushes, exercising the Cancellation/Status format-suppression logic.
 [TestFixture]
 public class TestTcpTargetServerIntegration
 {
-  private sealed class StubMonitor(FiltersConfiguration value) : IOptionsMonitor<FiltersConfiguration>
-  {
-    public FiltersConfiguration CurrentValue => value;
-    public FiltersConfiguration Get(string? name) => value;
-    public IDisposable? OnChange(Action<FiltersConfiguration, string?> listener) => null;
-  }
-
-  private static FilterService BuildFilterService()
-    => new(new StubMonitor(new FiltersConfiguration { List = [] }), Array.Empty<IEnrichmentSource>());
-
   private static int FreePort()
   {
     var l = new TcpListener(IPAddress.Loopback, 0);
@@ -45,11 +32,12 @@ public class TestTcpTargetServerIntegration
     Cancellation: cancellation,
     CompetitorStatus: status);
 
-  private static async Task<(TcpTargetServer server, NetworkStream stream, TcpClient connected)> StartAndConnect(string format)
+  private static async Task<(TcpFlowModule server, NetworkStream stream, TcpClient connected)> StartAndConnect(string format)
   {
     var port = FreePort();
-    var config = new TcpTargetConfiguration { Port = port, Format = format, AsServer = true };
-    var server = new TcpTargetServer(BuildFilterService(), config);
+    var config = new TcpSettings { Port = port, Format = format, AsServer = true };
+    var server = new TcpFlowModule(config, new("tcp", System.IO.Path.GetTempPath(), new CapturingOutput()), false);
+    await server.StartAsync(default);
 
     var connected = new TcpClient();
     await connected.ConnectAsync(IPAddress.Loopback, port);
@@ -78,7 +66,7 @@ public class TestTcpTargetServerIntegration
     var (server, stream, connected) = await StartAndConnect("{CompetitorId};{Control};{Time:HH:mm:ss,fff}{CRLF}");
     try
     {
-      await server.SendDispatch(new PunchDispatch(Punches: [Punch(cancellation: true)]));
+      await server.SendAsync(Punch(cancellation: true), default);
       var received = await ReadAvailable(stream, 500);
 
       Assert.That(received, Is.Empty);
@@ -86,7 +74,7 @@ public class TestTcpTargetServerIntegration
     finally
     {
       connected.Dispose();
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 
@@ -96,7 +84,7 @@ public class TestTcpTargetServerIntegration
     var (server, stream, connected) = await StartAndConnect("{CompetitorId};{Control}{CRLF}");
     try
     {
-      await server.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+      await server.SendAsync(Punch(status: CompetitorStatus.DNS), default);
       var received = await ReadAvailable(stream, 500);
 
       Assert.That(received, Is.Empty);
@@ -104,7 +92,7 @@ public class TestTcpTargetServerIntegration
     finally
     {
       connected.Dispose();
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 
@@ -114,7 +102,7 @@ public class TestTcpTargetServerIntegration
     var (server, stream, connected) = await StartAndConnect("{CompetitorId};{Control};{Time:HH:mm:ss,fff}{CRLF}");
     try
     {
-      await server.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+      await server.SendAsync(Punch(status: CompetitorStatus.DNS), default);
       var received = await ReadAvailable(stream);
 
       Assert.That(received, Does.Contain("00:00:01"));
@@ -122,7 +110,7 @@ public class TestTcpTargetServerIntegration
     finally
     {
       connected.Dispose();
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 
@@ -132,7 +120,7 @@ public class TestTcpTargetServerIntegration
     var (server, stream, connected) = await StartAndConnect("{CompetitorId};{Control};{Time:HH:mm:ss,fff};{Status}{CRLF}");
     try
     {
-      await server.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+      await server.SendAsync(Punch(status: CompetitorStatus.DNS), default);
       var received = await ReadAvailable(stream);
 
       Assert.That(received, Does.Contain("10:01:03,880"));
@@ -142,7 +130,7 @@ public class TestTcpTargetServerIntegration
     finally
     {
       connected.Dispose();
-      server.Dispose();
+      await server.DisposeAsync();
     }
   }
 }

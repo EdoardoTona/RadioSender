@@ -1,28 +1,15 @@
+using RadioSender.Flow.Modules;
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Enrichment;
-using RadioSender.Hosts.Target.File;
 
 namespace Test.RadioSender;
 
 [TestFixture]
 public class TestFileTargetSuppression
 {
-  private sealed class StubMonitor(FiltersConfiguration value) : IOptionsMonitor<FiltersConfiguration>
-  {
-    public FiltersConfiguration CurrentValue => value;
-    public FiltersConfiguration Get(string? name) => value;
-    public IDisposable? OnChange(Action<FiltersConfiguration, string?> listener) => null;
-  }
-
-  private static FilterService BuildFilterService()
-    => new(new StubMonitor(new FiltersConfiguration { List = [] }), Array.Empty<IEnrichmentSource>());
-
   private static Punch Punch(bool cancellation = false, CompetitorStatus status = CompetitorStatus.Unknown) => new(
     CompetitorId: "7",
     Control: 90,
@@ -38,9 +25,10 @@ public class TestFileTargetSuppression
     var path = Path.Combine(Path.GetTempPath(), $"radiosender-test-{Guid.NewGuid()}.csv");
     try
     {
-      var target = new FileTarget(BuildFilterService(), new FileConfiguration { Path = path, Format = "{CompetitorId};{Control}{CRLF}" });
+      await using var target = new FileFlowModule(new FileSettings { Path = path, Format = "{CompetitorId};{Control}{CRLF}" }, new("file", Path.GetTempPath(), new CapturingOutput()));
+      await target.StartAsync(default);
 
-      await target.SendDispatch(new PunchDispatch(Punches: [Punch(cancellation: true)]));
+      await target.SendAsync(Punch(cancellation: true), default);
 
       // FileMode.Append creates an empty file even when nothing ends up written to it.
       Assert.That(System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : "", Is.Empty);
@@ -58,9 +46,10 @@ public class TestFileTargetSuppression
     var path = Path.Combine(Path.GetTempPath(), $"radiosender-test-{Guid.NewGuid()}.csv");
     try
     {
-      var target = new FileTarget(BuildFilterService(), new FileConfiguration { Path = path, Format = "{CompetitorId};{Control};{Cancellation}{CRLF}" });
+      await using var target = new FileFlowModule(new FileSettings { Path = path, Format = "{CompetitorId};{Control};{Cancellation}{CRLF}" }, new("file", Path.GetTempPath(), new CapturingOutput()));
+      await target.StartAsync(default);
 
-      await target.SendDispatch(new PunchDispatch(Punches: [Punch(cancellation: true)]));
+      await target.SendAsync(Punch(cancellation: true), default);
 
       Assert.That(System.IO.File.Exists(path), Is.True);
       Assert.That(System.IO.File.ReadAllText(path), Does.Contain("ANN"));
@@ -78,9 +67,10 @@ public class TestFileTargetSuppression
     var path = Path.Combine(Path.GetTempPath(), $"radiosender-test-{Guid.NewGuid()}.csv");
     try
     {
-      var target = new FileTarget(BuildFilterService(), new FileConfiguration { Path = path, Format = "{CompetitorId};{Control};{Time:HH:mm:ss.fff}{CRLF}" });
+      await using var target = new FileFlowModule(new FileSettings { Path = path, Format = "{CompetitorId};{Control};{Time:HH:mm:ss.fff}{CRLF}" }, new("file", Path.GetTempPath(), new CapturingOutput()));
+      await target.StartAsync(default);
 
-      await target.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+      await target.SendAsync(Punch(status: CompetitorStatus.DNS), default);
 
       Assert.That(System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : "", Is.Empty);
     }
@@ -97,9 +87,10 @@ public class TestFileTargetSuppression
     var path = Path.Combine(Path.GetTempPath(), $"radiosender-test-{Guid.NewGuid()}.csv");
     try
     {
-      var target = new FileTarget(BuildFilterService(), new FileConfiguration { Path = path, Format = "{CompetitorId};{Control};{Time:HH:mm:ss.fff};{Status}{CRLF}" });
+      await using var target = new FileFlowModule(new FileSettings { Path = path, Format = "{CompetitorId};{Control};{Time:HH:mm:ss.fff};{Status}{CRLF}" }, new("file", Path.GetTempPath(), new CapturingOutput()));
+      await target.StartAsync(default);
 
-      await target.SendDispatch(new PunchDispatch(Punches: [Punch(status: CompetitorStatus.DNS)]));
+      await target.SendAsync(Punch(status: CompetitorStatus.DNS), default);
 
       Assert.That(System.IO.File.Exists(path), Is.True);
       var content = System.IO.File.ReadAllText(path);

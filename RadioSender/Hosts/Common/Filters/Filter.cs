@@ -4,23 +4,13 @@ using System.Linq;
 
 namespace RadioSender.Hosts.Common.Filters
 {
-  public record Filter : IFilter
+  public record Filter
   {
-    public static Filter Invariant { get => new() { Enable = false }; }
-
-    public string Name { get; init; } = null!;
     public bool Enable { get; init; } = true;
-    // Names of the enrichment sources to apply, in order (later ones can overwrite earlier ones).
-    // Applied by FilterService (this record has no access to DI services).
-    public IReadOnlyList<string> Enrichers { get; init; } = [];
     public HashSet<int> IncludeOnlyControls { get; init; } = new HashSet<int>();
     public HashSet<string> IncludeOnlyCompetitorIds { get; init; } = new HashSet<string>();
-    [Obsolete("Use IncludeOnlyCompetitorIds instead")]
-    public HashSet<string> IncludeOnlyCards { get; init; } = new HashSet<string>();
     public Dictionary<string, int> MapControls { get; init; } = new();
     public Dictionary<string, string> MapCompetitorIds { get; init; } = new();
-    [Obsolete("Use MapCompetitorIds instead")]
-    public Dictionary<string, string> MapCards { get; init; } = new();
     public Dictionary<PunchControlType, HashSet<int>> TypeFromCode { get; init; } = new();
     public CompetitorIdType? OverrideCompetitorIdType { get; init; }
     public TimeSpan IgnoreOlderThan { get; init; }
@@ -48,16 +38,11 @@ namespace RadioSender.Hosts.Common.Filters
         return null; // discard
       }
 
-#pragma warning disable CS0618 // Type or member is obsolete
-      var mapCompetitorIds = MapCompetitorIds.Count != 0 ? MapCompetitorIds : MapCards;
-      var includeOnlyCompetitorIds = IncludeOnlyCompetitorIds.Count != 0 ? IncludeOnlyCompetitorIds : IncludeOnlyCards;
-#pragma warning restore CS0618 // Type or member is obsolete
-
-      var competitorId = mapCompetitorIds.TryGetValue(punch.CompetitorId, out var mapped)
+      var competitorId = MapCompetitorIds.TryGetValue(punch.CompetitorId, out var mapped)
                         ? mapped
                         : punch.CompetitorId;
 
-      if (string.IsNullOrEmpty(competitorId) || (includeOnlyCompetitorIds.Count != 0 && !includeOnlyCompetitorIds.Contains(competitorId)))
+      if (string.IsNullOrEmpty(competitorId) || (IncludeOnlyCompetitorIds.Count != 0 && !IncludeOnlyCompetitorIds.Contains(competitorId)))
       {
         return null; // discard
       }
@@ -98,16 +83,4 @@ namespace RadioSender.Hosts.Common.Filters
 
   }
 
-  public static class IEnumerableFilterExtension
-  {
-    public static IFilter GetFilter(this IEnumerable<IFilter> filters, string? name)
-    {
-      // filter name null = no filter (invariant)
-
-      if (!string.IsNullOrWhiteSpace(name) && filters.Any(f => f.Name == name))
-        return filters.First(f => f.Name == name);
-
-      return Filter.Invariant;
-    }
-  }
 }

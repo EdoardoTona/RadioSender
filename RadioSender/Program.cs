@@ -1,5 +1,4 @@
 using CliWrap;
-using Hangfire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -9,26 +8,6 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hubs;
-using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
-using RadioSender.Hosts.Source.Microplus;
-using RadioSender.Hosts.Source.Mqtt;
-using RadioSender.Hosts.Source.OBR;
-using RadioSender.Hosts.Source.ROC;
-using RadioSender.Hosts.Source.SIRAP;
-using RadioSender.Hosts.Enrichment.Oribos;
-using RadioSender.Hosts.Source.SportidentCenter;
-using RadioSender.Hosts.Source.SportidentSerial;
-using RadioSender.Hosts.Source.Tcp;
-using RadioSender.Hosts.Source.TmFRadio;
-using RadioSender.Hosts.Target.File;
-using RadioSender.Hosts.Target.Http;
-using RadioSender.Hosts.Target.Oribos;
-using RadioSender.Hosts.Target.OResults;
-using RadioSender.Hosts.Target.PosPrinter;
-using RadioSender.Hosts.Target.SIRAP;
-using RadioSender.Hosts.Target.Tcp;
-using RadioSender.Hosts.Target.UI;
 using RadioSender.UI;
 using RadioSender.Api;
 using Serilog;
@@ -37,10 +16,8 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using System.Threading;
 
 namespace RadioSender;
 
@@ -76,38 +53,18 @@ public static class Program
 
       Log.Information("**** Starting up {application} {version} ****", assembly.Name, assembly.Version);
 
-      var app = BuildApp(args);
+      using var app = BuildApp(args);
 
       // On macOS, Photino must run on the main thread (AppKit requirement).
-      // We start the web host on a background thread and run Photino here.
+      // Wait until the web host is listening before opening the window.
       if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && app.Configuration.GetValue("Desktop:Enabled", true))
       {
         var urls = app.Configuration.GetSection("Urls").Get<string>() ?? "http://127.0.0.1:8082";
         var port = Regex.Match(urls, @"(?<=:)\d{2,5}").Value;
 
-        // Start the web host on a background thread
-        var cts = new CancellationTokenSource();
-        var webHostThread = new Thread(() =>
-        {
-          try
-          {
-            app.Run();
-          }
-          catch (OperationCanceledException) { }
-          catch (Exception ex) { Log.Fatal(ex, "**** Web host crashed ****"); }
-        });
-        webHostThread.IsBackground = true;
-        webHostThread.Start();
-
-        // Give the web host a moment to start listening
-        Thread.Sleep(1500);
-
-        // Run Photino on the main thread (blocks until window closes)
-        PhotinoHostedService.RunOnMainThread(port, () =>
-        {
-          cts.Cancel();
-          app.StopAsync().Wait();
-        });
+        app.StartAsync().GetAwaiter().GetResult();
+        PhotinoHostedService.RunOnMainThread(port, app.Lifetime.StopApplication);
+        app.WaitForShutdownAsync().GetAwaiter().GetResult();
       }
       else
       {
@@ -167,23 +124,13 @@ public static class Program
     }
 
     builder.Host.UseSerilog();
-    builder.Host.UseHangfire();
-    builder.Host.UseFilters();
     builder.Host.ActivatePhotino();
     builder.Services.AddHttpClient();
 
     builder.Services.AddFlowServices();
-    // Existing operational pages stay available while their UI is migrated.
-    // Protocol instances are owned exclusively by the graph runtime.
-    builder.Services.AddSingleton(sp => new DispatcherService(sp.GetRequiredService<FilterService>(), [], new DispatcherConfiguration()));
-    builder.Services.AddHostedService<LogService>();
-    builder.Services.AddHostedService<StatsService>();
-
     builder.Services.AddHealthChecks();
-    builder.Services.AddRazorPages();
     builder.Services.AddSignalR()
                     .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-    builder.Services.AddSingleton<HubEvents>();
 
     /////////////////////////////////////////////////////////////////////////////////
 
@@ -215,14 +162,10 @@ public static class Program
       }
     });
 
-    app.UseHangfireDashboard();
     app.UseRouting();
     app.MapHealthChecks("healthz");
-    app.MapRazorPages();
     app.MapGet("/", () => Results.Redirect("/flows/index.html"));
     app.MapGet("/Flows", () => Results.Redirect("/flows/index.html"));
-    app.MapHub<DeviceHub>("/deviceHub");
-    app.MapHangfireDashboard();
 
     return app;
   }

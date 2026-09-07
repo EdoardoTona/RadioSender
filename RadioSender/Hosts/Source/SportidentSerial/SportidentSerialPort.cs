@@ -1,7 +1,6 @@
 using Microsoft.IO;
 using RadioSender.Helpers;
 using RadioSender.Hosts.Common;
-using RadioSender.Hosts.Common.Filters;
 using RadioSender.Hosts.Protocol.Sportident;
 using Serilog;
 using System;
@@ -14,7 +13,6 @@ using System.Threading.Tasks;
 namespace RadioSender.Hosts.Source.SportidentSerial
 {
   public sealed class SportidentSerialPort(
-    FilterService filterService,
     IDispatchSink dispatcherService,
     Port configuration) : ISource, IRadioSenderHost, IAsyncDisposable
   {
@@ -201,7 +199,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           Buffer.BlockCopy(buffer, 0, data, 3, buffer.Length);
 
 
-          var punch = filterService.Transform(configuration.Filter, SportidentProtocol.MessageToPunch(data, _port.PortName));
+          var punch = SportidentProtocol.MessageToPunch(data, _port.PortName);
 
           if (punch != null)
             dispatcherService.PushDispatch(new PunchDispatch([punch]));

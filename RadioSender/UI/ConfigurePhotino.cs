@@ -18,8 +18,7 @@ namespace Microsoft.Extensions.Hosting
 
           services.AddHostedService(sp => new PhotinoHostedService(
             urls!,
-            sp.GetRequiredService<IHostApplicationLifetime>(),
-            sp.GetRequiredService<IHostEnvironment>()
+            sp.GetRequiredService<IHostApplicationLifetime>()
             ));
 
         });

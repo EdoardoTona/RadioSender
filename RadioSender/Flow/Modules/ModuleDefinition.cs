@@ -72,7 +72,7 @@ public sealed class ModuleDefinition<TSettings>(string type, string name, string
     ToJson(new TSettings()), GetFields(), commands ?? [], view);
 
   private static IEnumerable<PropertyInfo> Properties => typeof(TSettings).GetProperties()
-    .Where(p => p.Name is not ("Filter" or "Enable") && !p.IsDefined(typeof(ObsoleteAttribute)));
+    .Where(p => !p.IsDefined(typeof(ObsoleteAttribute)));
   private static JsonObject ToJson(TSettings settings)
   {
     var json = JsonSerializer.SerializeToNode(settings, FlowJson.Options)!.AsObject();
