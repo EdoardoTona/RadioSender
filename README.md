@@ -33,7 +33,7 @@ Flow documents are ordinary JSON files that can be copied and opened on another 
 
 `RadioSender/appsettings.json` contains only application settings: the local HTTP address (`Urls`), whether to show the desktop window (`Desktop:Enabled`) and logging (`Serilog`). Source/target settings belong to flow documents. The former appsettings configuration is not imported; create a new flow for this version. `appsettings.complex.example.json` is retained only as a historical topology reference.
 
-The former Punches, Graph, Stats and Log pages, global UI target, Hangfire dashboard and standalone ManualSender have been retired. Inspection and operational controls now belong to the running nodes. Deliveries use bounded runtime queues; failed sends can be inspected and retried explicitly.
+The former Punches, Graph, Stats and Log pages, global UI target, Hangfire dashboard and standalone ManualSender have been retired. Inspection and operational controls now belong to the running nodes. Deliveries use bounded runtime queues. HTTP targets make up to three automatic retries for transient failures within the five-second delivery deadline; final failures can be inspected and retried explicitly.
 
 ## Build and run
 

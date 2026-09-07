@@ -34,16 +34,18 @@ internal sealed class TargetQueue(FlowModule module, Action<FlowEvent, string, l
   {
     await foreach (var work in _queue.Reader.ReadAllAsync())
     {
+      using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+      timeout.CancelAfter(TimeSpan.FromSeconds(5));
       try
       {
         _lifetime.Token.ThrowIfCancellationRequested();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         var result = await module.SendAsync(work.Event.Punch, timeout.Token);
         observe(work.Event, work.EdgeId, work.Revision, result);
       }
       catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
       { observe(work.Event, work.EdgeId, work.Revision, new("Rejected", "Delivery cancelled when the flow stopped. The receiver may have received a partial message.")); }
+      catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+      { observe(work.Event, work.EdgeId, work.Revision, new("Failed", "Delivery exceeded the five-second deadline. The receiver may have received the event; check before retrying.")); }
       catch (Exception e) { observe(work.Event, work.EdgeId, work.Revision, new("Failed", e.Message)); }
       finally { Complete(); }
     }

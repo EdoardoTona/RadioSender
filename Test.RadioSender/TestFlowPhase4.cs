@@ -160,12 +160,19 @@ public class TestFlowPhase4 : IAsyncDisposable
   }
 
   [Test]
-  public async Task PendingHttpDeliveries_CompleteAtOldDestinationBeforeApply_WithoutGlobalJobs()
+  public async Task PendingHttpRetries_CompleteAtOldDestinationBeforeApply_WithoutGlobalJobs()
   {
     var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     var oldCount = 0; var newCount = 0;
-    await using var oldServer = new LocalHttp(async _ => { Interlocked.Increment(ref oldCount); arrived.TrySetResult(); await release.Task; return "OK"; });
+    await using var oldServer = new LocalHttp(async context =>
+    {
+      var attempt = Interlocked.Increment(ref oldCount);
+      arrived.TrySetResult();
+      if (attempt == 1) { context.Response.StatusCode = 503; return "Busy"; }
+      await release.Task;
+      return "OK";
+    });
     await using var newServer = new LocalHttp(_ => { Interlocked.Increment(ref newCount); return Task.FromResult("OK"); });
     FlowDocument Graph(string url) => new()
     {
@@ -183,7 +190,7 @@ public class TestFlowPhase4 : IAsyncDisposable
       release.SetResult();
       await apply;
       await Send(); await _runtime.StopFlowAsync();
-      Assert.That(oldCount, Is.EqualTo(2)); Assert.That(newCount, Is.EqualTo(1));
+      Assert.That(oldCount, Is.EqualTo(3)); Assert.That(newCount, Is.EqualTo(1));
       Assert.That(_journal.Read("http", "delivery").Items.Select(i => i.Revision), Is.EqualTo(new long[] { 1, 1, 2 }));
     }
     finally { release.TrySetResult(); }
@@ -267,6 +274,181 @@ public class TestFlowPhase4 : IAsyncDisposable
     Assert.That(body.RootElement.GetProperty("records")[0].GetProperty("card").GetInt32(), Is.EqualTo(1234));
     Assert.That(_journal.Read("oribos", "delivery").Items.Select(i => i.Status), Is.EqualTo(new[] { "Accepted", "Suppressed" }));
     Assert.That(_journal.Read("oresults", "delivery").Items.Select(i => i.Status), Is.EqualTo(new[] { "Accepted", "Suppressed" }));
+  }
+
+  [TestCase("target.http")]
+  [TestCase("target.oribos")]
+  [TestCase("target.oresults")]
+  public async Task HttpRetries_RecoverWithTheSamePayload_AndRecordOneDelivery(string type)
+  {
+    var paths = new ConcurrentQueue<string>();
+    var bodies = new ConcurrentQueue<string>();
+    var count = 0;
+    await using var server = new LocalHttp(async context =>
+    {
+      paths.Enqueue(context.Request.RawUrl!);
+      using var reader = new StreamReader(context.Request.InputStream);
+      bodies.Enqueue(await reader.ReadToEndAsync());
+      context.Response.StatusCode = Interlocked.Increment(ref count) <= 2 ? 503 : 200;
+      return "Ok";
+    });
+    object settings = type == "target.http" ? new HttpSettings { Url = server.Url + "?card={CompetitorId}" } :
+      new { host = server.Url, apiKey = "test-key" };
+    if (type == "target.oribos") settings = new OribosTargetSettings { Host = server.Url };
+    await Apply(new()
+    {
+      Nodes = [Node("manual", "source.manual"), Node("http", type, settings)],
+      Edges = [Edge("send", "manual", "http")]
+    });
+    await Send();
+    await WaitUntil(() => _journal.Read("http", "delivery").Items.Count == 1);
+    var delivery = _journal.Read("http", "delivery").Items.Single();
+    Assert.That(count, Is.EqualTo(3));
+    Assert.That(paths.Distinct().Count(), Is.EqualTo(1));
+    Assert.That(bodies.Distinct().Count(), Is.EqualTo(1), "Every retry recreates the same request body.");
+    if (type == "target.oresults") Assert.That(bodies.First(), Does.Contain("test-key"));
+    Assert.That(delivery.Status, Is.EqualTo("Accepted"));
+    Assert.That(delivery.Detail, Does.Contain("3 attempts"));
+  }
+
+  [TestCase(408, 4)]
+  [TestCase(429, 4)]
+  [TestCase(500, 4)]
+  [TestCase(503, 4)]
+  [TestCase(400, 1)]
+  [TestCase(401, 1)]
+  [TestCase(404, 1)]
+  public async Task HttpRetries_StopAfterTheLimit_AndManualRetryOnlySendsToThatTarget(int status, int attempts)
+  {
+    var count = 0;
+    var healthy = false;
+    await using var server = new LocalHttp(context =>
+    {
+      Interlocked.Increment(ref count);
+      context.Response.StatusCode = Volatile.Read(ref healthy) ? 200 : status;
+      return Task.FromResult("Ok");
+    });
+    await Apply(new()
+    {
+      Nodes = [Node("manual", "source.manual"), Node("http", "target.http", new HttpSettings { Url = server.Url }),
+        Node("other", "processor.passthrough")],
+      Edges = [Edge("send", "manual", "http"), Edge("other", "manual", "other")]
+    });
+    await Send();
+    Assert.That(_journal.Read("other", "output").Items, Has.Count.EqualTo(1), "Retries must not block another branch.");
+    await WaitUntil(() => _journal.Read("http", "delivery").Items.Count == 1);
+    var delivery = _journal.Read("http", "delivery").Items.Single();
+    Assert.That(count, Is.EqualTo(attempts));
+    Assert.That(delivery.Status, Is.EqualTo("Failed"));
+    Assert.That(delivery.Detail, Does.Contain($"HTTP {status}").And.Contain($"{attempts} attempt"));
+    var input = _journal.Read("http", "input").Items.Single();
+    Volatile.Write(ref healthy, true);
+    var state = _runtime.Snapshot();
+    await _runtime.ReplayAsync("http", new(state.SessionId, state.Revision, Guid.NewGuid(), [input.Id], "in"), retry: true);
+    await WaitUntil(() => _journal.Read("http", "delivery").Items.Count == 2);
+    Assert.That(_journal.Read("http", "delivery").Items.Last().Status, Is.EqualTo("Accepted"));
+    Assert.That(count, Is.EqualTo(attempts + 1));
+    Assert.That(_journal.Read("other", "output").Items, Has.Count.EqualTo(1));
+  }
+
+  [Test]
+  public async Task HttpRetries_RespectRetryAfterBeforeRecovering()
+  {
+    var count = 0;
+    var elapsed = new System.Diagnostics.Stopwatch();
+    await using var server = new LocalHttp(context =>
+    {
+      if (Interlocked.Increment(ref count) == 1)
+      {
+        elapsed.Start();
+        context.Response.StatusCode = 429;
+        context.Response.Headers["Retry-After"] = "1";
+      }
+      else elapsed.Stop();
+      return Task.FromResult("Ok");
+    });
+    await using var module = HttpDeliveryModule.Http(new() { Url = server.Url });
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var result = await module.SendAsync(Event(), timeout.Token);
+    Assert.That(result.Status, Is.EqualTo("Accepted"));
+    Assert.That(count, Is.EqualTo(2));
+    Assert.That(elapsed.Elapsed, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(950)));
+  }
+
+  [TestCase(false)]
+  [TestCase(true)]
+  public async Task HttpRetries_CancelDuringRetryAfter_WithoutSendingAgain(bool useDate)
+  {
+    var arrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var count = 0;
+    await using var server = new LocalHttp(context =>
+    {
+      Interlocked.Increment(ref count);
+      context.Response.StatusCode = 503;
+      context.Response.Headers["Retry-After"] = useDate ? DateTimeOffset.UtcNow.AddMinutes(1).ToString("r") : "60";
+      arrived.TrySetResult();
+      return Task.FromResult("Busy");
+    });
+    await using var module = HttpDeliveryModule.Http(new() { Url = server.Url });
+    using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var send = module.SendAsync(Event(), cancellation.Token).AsTask();
+    await arrived.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    // Let the response be consumed and enter the backoff before cancelling.
+    await Task.Delay(100);
+    await cancellation.CancelAsync();
+    Assert.CatchAsync<OperationCanceledException>(async () => await send.WaitAsync(TimeSpan.FromSeconds(2)));
+    Assert.That(count, Is.EqualTo(1));
+  }
+
+  [Test]
+  public async Task HttpRetries_LongRetryAfter_StillRespectsTheDeliveryDeadline()
+  {
+    var count = 0;
+    await using var server = new LocalHttp(context =>
+    {
+      Interlocked.Increment(ref count);
+      context.Response.StatusCode = 503;
+      context.Response.Headers["Retry-After"] = "60";
+      return Task.FromResult("Busy");
+    });
+    await Apply(new()
+    {
+      Nodes = [Node("manual", "source.manual"), Node("http", "target.http", new HttpSettings { Url = server.Url })],
+      Edges = [Edge("send", "manual", "http")]
+    });
+    await Send();
+    await WaitUntil(() => _journal.Read("http", "delivery").Items.Count == 1);
+    var delivery = _journal.Read("http", "delivery").Items.Single();
+    Assert.That(delivery.Status, Is.EqualTo("Failed"));
+    Assert.That(delivery.Detail, Does.Contain("five-second deadline"));
+    Assert.That(count, Is.EqualTo(1));
+  }
+
+  [Test]
+  public async Task HttpRetries_MissingOribosAcknowledgement_IsNotRetried()
+  {
+    var count = 0;
+    await using var server = new LocalHttp(_ => { Interlocked.Increment(ref count); return Task.FromResult("Rejected"); });
+    await using var module = HttpDeliveryModule.Oribos(new() { Host = server.Url });
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var result = await module.SendAsync(Event(), timeout.Token);
+    Assert.That(result.Status, Is.EqualTo("Failed"));
+    Assert.That(result.Detail, Does.Contain("did not acknowledge"));
+    Assert.That(count, Is.EqualTo(1));
+  }
+
+  [Test]
+  public async Task HttpRetries_ConnectionRefused_StopsAfterFourAttempts()
+  {
+    using var listener = new TcpListener(IPAddress.Loopback, 0);
+    listener.Start();
+    var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+    listener.Stop();
+    await using var module = HttpDeliveryModule.Http(new() { Url = $"http://127.0.0.1:{port}/" });
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+    var result = await module.SendAsync(Event(), timeout.Token);
+    Assert.That(result.Status, Is.EqualTo("Failed"));
+    Assert.That(result.Detail, Does.Contain("HTTP transport error").And.Contain("4 attempts"));
   }
 
   // Each handler is tracked and joined; no external service or credentials are needed.

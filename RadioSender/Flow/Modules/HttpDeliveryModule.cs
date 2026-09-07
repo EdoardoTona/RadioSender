@@ -27,17 +27,49 @@ public sealed record OribosTargetSettings
 public sealed class HttpDeliveryModule(Func<Punch, HttpRequestMessage?> request,
   bool oribosResponse = false) : FlowModule
 {
+  private const int MaxAttempts = 4;
   private readonly HttpClient _client = new() { Timeout = Timeout.InfiniteTimeSpan, MaxResponseContentBufferSize = 1024 * 1024 };
   public override async ValueTask<DeliveryResult> SendAsync(Punch punch, CancellationToken ct)
   {
-    using var message = request(punch);
-    if (message == null) return new("Suppressed", "This protocol cannot represent the event or identifier.");
-    using var response = await _client.SendAsync(message, ct);
-    if (!response.IsSuccessStatusCode) return new("Failed", $"HTTP {(int)response.StatusCode}.");
-    if (oribosResponse && !(await response.Content.ReadAsStringAsync(ct)).Contains("Ok", StringComparison.Ordinal))
-      return new("Failed", "Oribos did not acknowledge the event.");
-    return new("Accepted", $"HTTP {(int)response.StatusCode}.");
+    for (var attempt = 1; ; attempt++)
+    {
+      ct.ThrowIfCancellationRequested();
+      var delay = TimeSpan.FromMilliseconds(250 * (1 << (attempt - 1)));
+      string failure;
+      try
+      {
+        // Requests and their content can only be sent once; recreate both for each attempt.
+        using var message = request(punch);
+        if (message == null) return new("Suppressed", "This protocol cannot represent the event or identifier.");
+        using var response = await _client.SendAsync(message, ct);
+        var status = (int)response.StatusCode;
+        if (response.IsSuccessStatusCode)
+        {
+          if (oribosResponse && !(await response.Content.ReadAsStringAsync(ct)).Contains("Ok", StringComparison.Ordinal))
+            return new("Failed", "Oribos did not acknowledge the event.");
+          return new("Accepted", $"HTTP {status}. Completed after {Attempts(attempt)}.");
+        }
+        failure = $"HTTP {status}";
+        if (status is not (408 or 429) && status < 500)
+          return Failed(failure, attempt);
+
+        // Respect server throttling without extending the target queue's delivery deadline.
+        var retryAfter = response.Headers.RetryAfter;
+        var requestedDelay = retryAfter?.Delta ?? retryAfter?.Date - DateTimeOffset.UtcNow;
+        if (requestedDelay > delay) delay = requestedDelay.Value;
+      }
+      catch (HttpRequestException e)
+      {
+        failure = $"HTTP transport error ({e.HttpRequestError})";
+      }
+      if (attempt == MaxAttempts) return Failed(failure, attempt);
+      Logger.Warning("HTTP delivery attempt {Attempt}/{MaxAttempts} failed ({Reason}); retrying in {DelayMs} ms.",
+        attempt, MaxAttempts, failure, delay.TotalMilliseconds);
+      await Task.Delay(delay, ct);
+    }
   }
+  private static string Attempts(int count) => $"{count} attempt{(count == 1 ? "" : "s")}";
+  private static DeliveryResult Failed(string reason, int attempts) => new("Failed", $"{reason}. Failed after {Attempts(attempts)}.");
   public override ValueTask DisposeAsync() { _client.Dispose(); return ValueTask.CompletedTask; }
 
   public static HttpDeliveryModule Http(HttpSettings settings) => new(punch =>
