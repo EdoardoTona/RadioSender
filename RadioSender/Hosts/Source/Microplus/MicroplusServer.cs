@@ -15,13 +15,13 @@ namespace RadioSender.Hosts.Source.Microplus;
 
 public class MicroplusServer(
   FilterService filterService,
-  DispatcherService dispatcherService,
+  IDispatchSink dispatcherService,
   MicroplusServerConfiguration configuration)
   : UdpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IRadioSenderHost
 {
   public Task StartAsync(CancellationToken cancellationToken)
   {
-    Start();
+    if (!Start()) throw new System.IO.IOException("Unable to bind the Microplus UDP listener.");
     return Task.CompletedTask;
   }
 
@@ -34,13 +34,13 @@ public class MicroplusServer(
   protected override void OnStarted()
   {
     // Start receive datagrams
-    Log.Information($"Microplus started on port {Port}");
+    dispatcherService.Logger.Information($"Microplus started on port {Port}");
     ReceiveAsync();
   }
 
   protected override void OnError(SocketError error)
   {
-    Log.Warning("Microplus server socket error {error}", error);
+    dispatcherService.Logger.Warning("Microplus server socket error {error}", error);
   }
 
   protected override void OnReceived(EndPoint endpoint, byte[] buffer, long offset, long size)
@@ -57,7 +57,7 @@ public class MicroplusServer(
 
       if (start != '$')
       {
-        Log.Warning($"Invalid start character. Received: {text} - {textHex}");
+        dispatcherService.Logger.Warning($"Invalid start character. Received: {text} - {textHex}");
         return;
       }
 
@@ -68,7 +68,7 @@ public class MicroplusServer(
 
       if (!int.TryParse(text.AsSpan(7, 3), out var bib))
       {
-        Log.Warning($"Bib missing. Ignored. Received: {text} - {textHex}");
+        dispatcherService.Logger.Warning($"Bib missing. Ignored. Received: {text} - {textHex}");
         return;
       }
 
@@ -112,7 +112,7 @@ public class MicroplusServer(
       {
         if (configuration.IgnoreCommands.Any(c => c == cmd.ToString()))
         {
-          Log.Information("Cmd {cmd} ignored. Received: {@punch}", cmd, punch);
+          dispatcherService.Logger.Information("Cmd {cmd} ignored. Received: {@punch}", cmd, punch);
           return;
         }
       }
@@ -122,11 +122,11 @@ public class MicroplusServer(
     }
     catch (Exception e)
     {
-      Log.Error(e, $"Error Microplus OnReceived. Received: {text} - {textHex}");
+      dispatcherService.Logger.Error(e, $"Error Microplus OnReceived. Received: {text} - {textHex}");
     }
     finally
     {
-      ReceiveAsync();
+      if (IsStarted) ReceiveAsync();
     }
   }
 

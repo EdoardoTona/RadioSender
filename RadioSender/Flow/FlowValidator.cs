@@ -19,6 +19,13 @@ public sealed class FlowValidator(ModuleRegistry registry)
       if (definition == null) issues.Add(new(node.Id, "type", "This module is not available."));
       else if (node.Enabled) issues.AddRange(definition.Validate(node));
     }
+    foreach (var node in document.Nodes.Where(n => n.Enabled && n.Type == "processor.enrichment"))
+    {
+      var providerId = node.Settings["providerId"]?.ToString();
+      if (providerId == null || !nodes.TryGetValue(providerId, out var provider) ||
+          !provider.Enabled || provider.Type != "provider.oribos")
+        issues.Add(new(node.Id, "settings.providerId", "Select an enabled Oribos provider from this document."));
+    }
     foreach (var edge in document.Edges)
     {
       if (!nodes.TryGetValue(edge.From.Node, out var source) || !nodes.TryGetValue(edge.To.Node, out var target))
@@ -65,11 +72,17 @@ public sealed class FlowValidator(ModuleRegistry registry)
     }
     if (visited != nodes.Count) issues.Add(new("", "edges", "Cycles are not supported. Remove a connection to break the loop."));
     if (paths.Values.Any(p => p > 4096)) issues.Add(new("", "edges", "The graph has too many converging paths."));
-    var listeners = document.Nodes.Where(n => n.Enabled && n.Type is "source.tcp" or "target.tcp")
-      .Where(n => !issues.Any(i => i.ElementId == n.Id)).Select(n => (Node: n, Settings: registry.Find(n.Type)!.Normalize(n.Settings)))
-      .Where(x => x.Settings["asServer"]!.GetValue<bool>()).GroupBy(x => x.Settings["port"]!.GetValue<int>());
+    var configurations = document.Nodes.Where(n => n.Enabled && !issues.Any(i => i.ElementId == n.Id) && registry.Find(n.Type) != null)
+      .Select(n => (Node: n, Settings: registry.Find(n.Type)!.Normalize(n.Settings))).ToArray();
+    var listeners = configurations.Where(x => x.Node.Type is "source.sirap" or "source.obr" or "source.microplus" ||
+      x.Node.Type is "source.tcp" or "target.tcp" && x.Settings["asServer"]!.GetValue<bool>())
+      .GroupBy(x => (Transport: x.Node.Type is "source.obr" or "source.microplus" ? "UDP" : "TCP", Port: x.Settings["port"]!.GetValue<int>()));
     foreach (var group in listeners.Where(g => g.Count() > 1))
-      foreach (var item in group) issues.Add(new(item.Node.Id, "settings.port", "Another TCP listener uses this port."));
+      foreach (var item in group) issues.Add(new(item.Node.Id, "settings.port", $"Another {group.Key.Transport} listener uses this port."));
+    var serialPorts = configurations.Where(x => !string.IsNullOrWhiteSpace(x.Settings["portName"]?.ToString()))
+      .GroupBy(x => x.Settings["portName"]!.ToString(), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    foreach (var group in serialPorts.Where(g => g.Count() > 1))
+      foreach (var item in group) issues.Add(new(item.Node.Id, "settings.portName", "Another node uses this serial port."));
     return issues;
   }
 }

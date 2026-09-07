@@ -1,9 +1,10 @@
+export type SettingValue = string | number | boolean | null | (string | number)[]
 export interface FlowNode {
   id: string
   type: string
   name: string
   enabled: boolean
-  settings: Record<string, string | number | boolean>
+  settings: Record<string, SettingValue>
 }
 export interface EdgeFilter {
   enabled: boolean
@@ -51,6 +52,8 @@ export interface ModuleField {
   required: boolean
   min: number | null
   max: number | null
+  choices?: string[] | null
+  itemKind?: string | null
   help: string | null
 }
 export interface ModuleDescriptor {
@@ -99,6 +102,7 @@ export interface Punch {
   receivedAt: string
   competitorStatus: string
   cancellation: boolean
+  competitor?: Record<string, string | null> | null
   netTime: boolean
 }
 export interface Observation {

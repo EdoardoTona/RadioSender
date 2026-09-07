@@ -14,13 +14,16 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
   private readonly object _sendLock = new();
   private readonly MicrogateMessageProcessor _messageProcessor;
   private bool _disposed;
+  private readonly IDispatchSink _sink;
 
   protected MicrogateSource(
     FilterService filterService,
-    DispatcherService dispatcherService,
+    IDispatchSink dispatcherService,
     MicrogateSourceConfiguration configuration,
     string endpoint)
   {
+    _sink = dispatcherService;
+    Logger = dispatcherService.Logger;
     Configuration = configuration;
     Endpoint = endpoint;
     _messageProcessor = new MicrogateMessageProcessor(
@@ -30,6 +33,8 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
       endpoint);
   }
 
+  protected ILogger Logger { get; }
+  protected void SetState(string status, string? detail = null) => _sink.SetSourceState(status, detail);
   protected MicrogateSourceConfiguration Configuration { get; }
   protected string Endpoint { get; }
   protected CancellationToken LifetimeToken => _lifetime.Token;
@@ -50,6 +55,7 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
 
   protected void OnTransportConnected()
   {
+    SetState("Connected", Endpoint);
     _messageProcessor.Reset();
 
     ObserveRequestFailure(AskSerialNumber(), nameof(AskSerialNumber));
@@ -120,10 +126,10 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
       SendCore(data);
   }
 
-  private static void ObserveRequestFailure(Task request, string requestName)
+  private void ObserveRequestFailure(Task request, string requestName)
   {
     _ = request.ContinueWith(
-      task => Log.Warning("MicrogateSource {request} failed: {error}",
+      task => Logger.Warning("MicrogateSource {request} failed: {error}",
         requestName, task.Exception?.GetBaseException().Message),
       TaskContinuationOptions.OnlyOnFaulted);
   }

@@ -15,7 +15,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 {
   public sealed class SportidentSerialPort(
     FilterService filterService,
-    DispatcherService dispatcherService,
+    IDispatchSink dispatcherService,
     Port configuration) : ISource, IRadioSenderHost, IAsyncDisposable
   {
 #pragma warning disable IDE0051 // Rimuovi i membri privati inutilizzati
@@ -40,6 +40,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
     private SportidentProduct? _stationInfo;
     private Task? _readTask;
+    private bool _stopped;
 
     public async Task StartAsync(CancellationToken st)
     {
@@ -49,7 +50,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           _port.Close();
 
         _port.PortName = configuration.PortName;
-        _port.BaudRate = 38400;
+        _port.BaudRate = configuration.Baudrate;
         //_port.RtsEnable = true;
         _port.DtrEnable = true;
         _port.Parity = Parity.None;
@@ -71,29 +72,31 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           {
             // BSM3/4/6 at 4800 baud with old protocol (unsupported)
             unknownStation = true;
-            Log.Warning("SI Port {port}: unable to get station info", configuration.PortName);
+            dispatcherService.Logger.Warning("SI Port {port}: unable to get station info", configuration.PortName);
           }
         }
 
         if (!unknownStation)
         {
           _stationInfo = await GetStationInfo();
-          Log.Information("SI Port {port} baudrate {baudrate} device: {info}", configuration.PortName, _port.BaudRate, _stationInfo);
+          dispatcherService.Logger.Information("SI Port {port} baudrate {baudrate} device: {info}", configuration.PortName, _port.BaudRate, _stationInfo);
         }
         else
         {
-          Log.Information("SI Port {port} baudrate {baudrate} device unknown", configuration.PortName, _port.BaudRate);
+          dispatcherService.Logger.Information("SI Port {port} baudrate {baudrate} device unknown", configuration.PortName, _port.BaudRate);
         }
 
-        _readTask = ReadData();
+        _readTask = Task.Run(ReadData, CancellationToken.None);
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Error("SI Port {port} occupied by another program", configuration.PortName);
+        dispatcherService.Logger.Error("SI Port {port} occupied by another program", configuration.PortName);
+        throw;
       }
       catch (FileNotFoundException)
       {
-        Log.Error("SI Port {port} doesn't exist", configuration.PortName);
+        dispatcherService.Logger.Error("SI Port {port} doesn't exist", configuration.PortName);
+        throw;
       }
       catch (IOException)
       {
@@ -101,28 +104,22 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       }
       catch (Exception e)
       {
-        Log.Error(e, "Error starting port {port}", configuration.PortName);
+        dispatcherService.Logger.Error(e, "Error starting port {port}", configuration.PortName);
+        throw;
       }
     }
 
     public async Task StopAsync(CancellationToken st)
     {
+      if (_stopped) return;
+      _stopped = true;
       _cts.Cancel();
-
-      if (_port == null)
-        return;
-
-      _port.DtrEnable = false;
-
-      if (_port.IsOpen)
-        _port.Close();
-
-      if (_readTask != null)
-        await _readTask;
-
+      if (_port.IsOpen) { _port.DtrEnable = false; _port.Close(); }
+      if (_readTask != null) await _readTask;
       _port.Dispose();
-
+      _cts.Dispose();
     }
+
 
     public async ValueTask DisposeAsync()
     {
@@ -159,7 +156,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
         if (!myCrc.SequenceEqual(crc))
         {
-          Log.Warning("CRC Error");
+          dispatcherService.Logger.Warning("CRC Error");
           return null;
         }
 
@@ -167,7 +164,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
 
         if (etx != ETX)
         {
-          Log.Warning("Invalid ETX byte");
+          dispatcherService.Logger.Warning("Invalid ETX byte");
           return null;
         }
 
@@ -215,7 +212,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         }
         catch (Exception e)
         {
-          Log.Error(e, "Exeption reading data from serial port");
+          dispatcherService.Logger.Error(e, "Exeption reading data from serial port");
         }
       }
 
@@ -237,7 +234,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
           ms.Write(crc);
           ms.WriteByte(ETX);
           var data = ms.ToArray();
-          Log.Verbose("SEND: " + BitConverter.ToString(data));
+          dispatcherService.Logger.Verbose("SEND: " + BitConverter.ToString(data));
           _port.Write(data, 0, data.Length);
         }
 
@@ -247,7 +244,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
         {
           var buffer = new byte[_port.BytesToRead];
           _port.Read(buffer, 0, buffer.Length);
-          Log.Verbose("RECEIVED: " + BitConverter.ToString(buffer));
+          dispatcherService.Logger.Verbose("RECEIVED: " + BitConverter.ToString(buffer));
           return buffer;
         }
       }
@@ -261,7 +258,7 @@ namespace RadioSender.Hosts.Source.SportidentSerial
       }
       catch (Exception e)
       {
-        Log.Error("Error sending command SportidentSerial {msg}", e.Message);
+        dispatcherService.Logger.Error("Error sending command SportidentSerial {msg}", e.Message);
       }
       return null;
     }

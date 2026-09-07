@@ -5,6 +5,7 @@ using RadioSender.Hosts.Common.Filters;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,14 +16,16 @@ namespace RadioSender.Hosts.Source.SIRAP
 {
   public sealed class SirapServer(
     FilterService filterService,
-    DispatcherService dispatcherService,
+    IDispatchSink dispatcherService,
     SirapServerConfiguration configuration)
     : TcpServer(IPAddress.Any, configuration.Port ?? throw new ArgumentNullException(nameof(configuration))), ISource, IRadioSenderHost, IDisposable
   {
 
+    internal ILogger Logger => dispatcherService.Logger;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
-      Start();
+      if (!Start()) throw new IOException("Unable to bind the SIRAP TCP listener.");
       return Task.CompletedTask;
     }
 
@@ -42,7 +45,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
     protected override void OnError(SocketError error)
     {
-      Log.Warning("Sirap server socket error {error}", error);
+      dispatcherService.Logger.Warning("Sirap server socket error {error}", error);
     }
 
     internal void OnReceived(TcpSirapSession session, SirapFrame frame)
@@ -60,7 +63,7 @@ namespace RadioSender.Hosts.Source.SIRAP
       }
       catch (Exception e)
       {
-        Log.Error(e, "Error Sirap OnReceived");
+        dispatcherService.Logger.Error(e, "Error Sirap OnReceived");
       }
     }
 
@@ -347,7 +350,7 @@ namespace RadioSender.Hosts.Source.SIRAP
         if (_name == null)
         {
           _name = value;
-          Log.Information("Sirap client {id} is {name}", Id, Name);
+          ((SirapServer)Server).Logger.Information("Sirap client {id} is {name}", Id, Name);
         }
       }
     }
@@ -360,7 +363,7 @@ namespace RadioSender.Hosts.Source.SIRAP
       try
       {
         remoteEndpoint = Socket.RemoteEndPoint?.ToString();
-        Log.Information("Sirap client {endpoint} connected", remoteEndpoint);
+        ((SirapServer)Server).Logger.Information("Sirap client {endpoint} connected", remoteEndpoint);
       }
       catch { }
     }
@@ -370,9 +373,9 @@ namespace RadioSender.Hosts.Source.SIRAP
       try
       {
         if (string.IsNullOrEmpty(Name))
-          Log.Information("Sirap client {endpoint} disconnected", remoteEndpoint);
+          ((SirapServer)Server).Logger.Information("Sirap client {endpoint} disconnected", remoteEndpoint);
         else
-          Log.Information("Sirap client {endpoint} (Name: {name}) disconnected", remoteEndpoint, Name);
+          ((SirapServer)Server).Logger.Information("Sirap client {endpoint} (Name: {name}) disconnected", remoteEndpoint, Name);
       }
       catch { }
     }
@@ -389,7 +392,7 @@ namespace RadioSender.Hosts.Source.SIRAP
           _lastBufferUpdate != DateTime.MinValue &&
           (now - _lastBufferUpdate).TotalSeconds > BufferTimeoutSeconds)
       {
-        Log.Warning("Sirap client {endpoint} buffer content is older than {timeout} seconds, clearing buffer",
+        ((SirapServer)Server).Logger.Warning("Sirap client {endpoint} buffer content is older than {timeout} seconds, clearing buffer",
           remoteEndpoint,
           BufferTimeoutSeconds);
         ClearReceiveBuffer();
@@ -400,7 +403,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
       if (_receiveBuffer.Count > MaxBufferSize)
       {
-        Log.Warning("Sirap client {endpoint} buffer exceeded maximum size of {maxSize} bytes, clearing buffer",
+        ((SirapServer)Server).Logger.Warning("Sirap client {endpoint} buffer exceeded maximum size of {maxSize} bytes, clearing buffer",
           remoteEndpoint,
           MaxBufferSize);
         ClearReceiveBuffer();
@@ -411,7 +414,7 @@ namespace RadioSender.Hosts.Source.SIRAP
       {
         var hasFrame = SirapFrameReader.TryTakeFrame(_receiveBuffer, ref _protocolVersion, out var frame, out var discardedBytes);
         if (discardedBytes > 0)
-          Log.Warning("Sirap client {endpoint} discarded {count} invalid frame byte(s)", remoteEndpoint, discardedBytes);
+          ((SirapServer)Server).Logger.Warning("Sirap client {endpoint} discarded {count} invalid frame byte(s)", remoteEndpoint, discardedBytes);
 
         if (!hasFrame)
           break;
@@ -425,7 +428,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 
     protected override void OnError(SocketError error)
     {
-      Log.Warning("Sirap client {endpoint} socket error {error}", remoteEndpoint, error);
+      ((SirapServer)Server).Logger.Warning("Sirap client {endpoint} socket error {error}", remoteEndpoint, error);
     }
 
     private void ClearReceiveBuffer()

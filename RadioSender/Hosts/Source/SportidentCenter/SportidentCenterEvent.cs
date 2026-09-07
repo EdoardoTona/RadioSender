@@ -23,7 +23,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
   public class SportidentCenterEvent(
     FilterService filterService,
     IHttpClientFactory clientFactory,
-    DispatcherService dispatcherService,
+    IDispatchSink dispatcherService,
     Event configuration) : IRadioSenderHost, ISource, IDisposable
   {
     public const string HTTPCLIENT_NAME = "sportident";
@@ -60,11 +60,11 @@ namespace RadioSender.Hosts.Source.SportidentCenter
     {
       await Task.Yield();
 
-      Log.Information("Sportident center listening event {event}. Frequency {frequency}", configuration.EventId, configuration.RefreshMs);
+      dispatcherService.Logger.Information("Sportident center listening event {event}. Frequency {frequency}", configuration.EventId, configuration.RefreshMs);
 
       if (configuration.EventId == 0 || configuration.EventId == null || string.IsNullOrEmpty(configuration.ApiKey))
       {
-        Log.Error("Sportident center: EventId/ApiKey missing");
+        dispatcherService.Logger.Error("Sportident center: EventId/ApiKey missing");
       }
 
       while (!ct.IsCancellationRequested)
@@ -80,7 +80,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         }
         catch (Exception e)
         {
-          Log.Error("Error getting data from SportidentCenter: {message}", e.Message);
+          dispatcherService.Logger.Error("Error getting data from SportidentCenter: {message}", e.Message);
         }
       }
     }
@@ -93,14 +93,14 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         {
           return;
         }
-        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/rest/v1/public/events/{configuration.EventId}/punches?projection=simple&afterId={_lastReceivedId}");
 
         request.Headers.Add("apikey", configuration.ApiKey);
         request.Headers.Accept.Add(MediaTypeWithQualityHeaderValue.Parse("text/csv"));
 
         var sw = new Stopwatch();
         sw.Start();
-        var response = await _httpClient.SendAsync(request, ct);
+        using var response = await _httpClient.SendAsync(request, ct);
         sw.Stop();
 
         try
@@ -108,7 +108,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
           diagnosticTimes.Add(sw.ElapsedMilliseconds);
           if (DateTimeOffset.UtcNow - lastDiagnosticReport > TimeSpan.FromMinutes(2))
           {
-            Log.Information("SportidentCenter diagnostic report for event {event}: count {count}, avg {avg:0}ms, min {min}ms, max {max}ms",
+            dispatcherService.Logger.Information("SportidentCenter diagnostic report for event {event}: count {count}, avg {avg:0}ms, min {min}ms, max {max}ms",
               configuration.EventId, diagnosticTimes.Count, diagnosticTimes.Average(), diagnosticTimes.Min(), diagnosticTimes.Max());
 
             lastDiagnosticReport = DateTimeOffset.UtcNow;
@@ -117,9 +117,10 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         }
         catch
         {
-          Log.Warning("Error writing diagnostic report for SportidentCenter event {event}", configuration.EventId);
+          dispatcherService.Logger.Warning("Error writing diagnostic report for SportidentCenter event {event}", configuration.EventId);
         }
 
+        dispatcherService.SetSourceState(response.IsSuccessStatusCode ? "Connected" : "Disconnected", $"HTTP {(int)response.StatusCode}");
         if (response.IsSuccessStatusCode)
         {
           using var responseStream = await response.Content.ReadAsStreamAsync(ct);
@@ -130,7 +131,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 
           if (wasError)
           {
-            Log.Information("SportidentCenter event {event} recovered", configuration.EventId);
+            dispatcherService.Logger.Information("SportidentCenter event {event} recovered", configuration.EventId);
             wasError = false;
           }
 
@@ -168,7 +169,7 @@ namespace RadioSender.Hosts.Source.SportidentCenter
         else
         {
           wasError = true;
-          Log.Error("Error getting data from SportidentCenter (event {event}): response code {code}", configuration.EventId, response.StatusCode);
+          dispatcherService.Logger.Error("Error getting data from SportidentCenter (event {event}): response code {code}", configuration.EventId, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -177,8 +178,9 @@ namespace RadioSender.Hosts.Source.SportidentCenter
       }
       catch (Exception e)
       {
+        dispatcherService.SetSourceState("Disconnected", "Polling failed; retrying.");
         wasError = true;
-        Log.Error("Error getting data from SportidentCenter (event {event}): {message}", configuration.EventId, e.Message);
+        dispatcherService.Logger.Error("Error getting data from SportidentCenter (event {event}): {message}", configuration.EventId, e.Message);
       }
     }
 

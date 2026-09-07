@@ -74,6 +74,8 @@ namespace RadioSender.Hosts.Target.OResults
       return Task.CompletedTask;
     }
 
+    public static OResultsPunch? Encode(Punch punch, bool useUtc, bool ignoreCompetitorIdType) => ToRecord(punch, useUtc, ignoreCompetitorIdType);
+
     private static OResultsPunch? ToRecord(Punch punch, bool useUtc, bool ignoreCompetitorIdType)
     {
       // OResults does not support cancellations

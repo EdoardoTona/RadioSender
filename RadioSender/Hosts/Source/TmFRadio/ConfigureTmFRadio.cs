@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
@@ -10,8 +11,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
   public record Gateway : FilterableConfiguration
   {
     public bool Enable { get; init; } = true;
+    [Required]
     public string? PortName { get; init; }
+    [Range(1, 4000000)]
     public int Baudrate { get; init; } = 19200;
+    [Range(2, 3600)]
     public int StatusCheck { get; init; } = 60; // seconds
   }
 

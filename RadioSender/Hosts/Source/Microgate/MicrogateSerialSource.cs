@@ -16,7 +16,7 @@ public sealed class MicrogateSerialSource : MicrogateSource
 
   public MicrogateSerialSource(
     FilterService filterService,
-    DispatcherService dispatcherService,
+    IDispatchSink dispatcherService,
     MicrogateSourceConfiguration configuration)
     : base(filterService, dispatcherService, configuration, GetEndpoint(configuration))
   {
@@ -24,7 +24,7 @@ public sealed class MicrogateSerialSource : MicrogateSource
 
   public override Task StartAsync(CancellationToken cancellationToken)
   {
-    Log.Information("MicrogateSource opening serial port {port} at {baudrate} baud",
+    Logger.Information("MicrogateSource opening serial port {port} at {baudrate} baud",
       Endpoint, Configuration.Baudrate);
     _readTask = Task.Run(() => RunAsync(LifetimeToken), CancellationToken.None);
     return Task.CompletedTask;
@@ -71,7 +71,7 @@ public sealed class MicrogateSerialSource : MicrogateSource
         port.Open();
         _port = port;
 
-        Log.Information(
+        Logger.Information(
           "MicrogateSource serial port {port} connected at {baudrate} baud (DTR: {dtr}, RTS: {rts})",
           Endpoint, Configuration.Baudrate, Configuration.DtrEnable, Configuration.RtsEnable);
         OnTransportConnected();
@@ -89,11 +89,13 @@ public sealed class MicrogateSerialSource : MicrogateSource
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Warning("MicrogateSource serial port {port} is occupied by another program; retrying", Endpoint);
+        SetState("Disconnected", "Retrying serial connection.");
+        Logger.Warning("MicrogateSource serial port {port} is occupied by another program; retrying", Endpoint);
       }
       catch (Exception)
       {
-        Log.Warning("MicrogateSource serial port {port} disconnected or unavailable; retrying", Endpoint);
+        SetState("Disconnected", "Retrying serial connection.");
+        Logger.Warning("MicrogateSource serial port {port} disconnected or unavailable; retrying", Endpoint);
       }
       finally
       {
@@ -171,7 +173,7 @@ public sealed class MicrogateSerialSource : MicrogateSource
     }
     catch (Exception e)
     {
-      Log.Debug(e, "MicrogateSource error while closing serial port {port}", Endpoint);
+      Logger.Debug(e, "MicrogateSource error while closing serial port {port}", Endpoint);
     }
   }
 

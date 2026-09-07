@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
@@ -9,6 +10,7 @@ namespace RadioSender.Hosts.Source.SIRAP
 {
   public record SirapServerConfiguration : FilterableConfiguration
   {
+    [Required, Range(1, 65535)]
     public int? Port { get; init; }
   }
 

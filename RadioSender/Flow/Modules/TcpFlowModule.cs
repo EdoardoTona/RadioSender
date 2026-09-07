@@ -25,7 +25,7 @@ public sealed record TcpSettings
   public string Format { get; init; } = "{CompetitorId};{Control};{Time:HH:mm:ss,fff}{CRLF}";
 }
 
-public sealed class TcpFlowModule(TcpSettings settings, ModuleContext context, bool source) : FlowModule
+public sealed class TcpFlowModule(TcpSettings settings, ModuleContext context, bool source, Func<Punch, byte[]?>? encoder = null) : FlowModule
 {
   private readonly CancellationTokenSource _lifetime = new();
   private readonly ConcurrentDictionary<Guid, TcpClient> _clients = new();
@@ -155,7 +155,8 @@ public sealed class TcpFlowModule(TcpSettings settings, ModuleContext context, b
 
   public override async ValueTask<DeliveryResult> SendAsync(Punch punch, CancellationToken ct)
   {
-    var bytes = FormattedOutput.Encode(punch, settings.Format, true, out var reason);
+    string? reason = "This protocol cannot represent the event.";
+    var bytes = encoder == null ? FormattedOutput.Encode(punch, settings.Format, true, out reason) : encoder(punch);
     if (bytes == null) return new("Suppressed", reason);
     var clients = _clients.Values.ToArray();
     if (clients.Length == 0) throw new IOException("No TCP receiver is connected. Retry the event after connecting.");

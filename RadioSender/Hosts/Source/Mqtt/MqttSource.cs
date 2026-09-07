@@ -15,7 +15,7 @@ namespace RadioSender.Hosts.Source.Mqtt;
 
 public sealed class MqttSource(
   FilterService filterService,
-  DispatcherService dispatcherService,
+  IDispatchSink dispatcherService,
   MqttSourceConfiguration configuration) : ISource, IRadioSenderHost, IAsyncDisposable
 {
   private readonly CancellationTokenSource _cts = new();
@@ -31,19 +31,19 @@ public sealed class MqttSource(
   {
     if (string.IsNullOrWhiteSpace(configuration.Host))
     {
-      Log.Warning("MQTT source ignored: Host is empty");
+      dispatcherService.Logger.Warning("MQTT source ignored: Host is empty");
       return Task.CompletedTask;
     }
 
     if (!configuration.Topics.Any(t => !string.IsNullOrWhiteSpace(t)))
     {
-      Log.Warning("MQTT source {source} ignored: no topic configured", SourceId);
+      dispatcherService.Logger.Warning("MQTT source {source} ignored: no topic configured", SourceId);
       return Task.CompletedTask;
     }
 
     if (configuration.Protocols.Length == 0)
     {
-      Log.Warning("MQTT source {source} ignored: no protocol configured", SourceId);
+      dispatcherService.Logger.Warning("MQTT source {source} ignored: no protocol configured", SourceId);
       return Task.CompletedTask;
     }
 
@@ -69,14 +69,16 @@ public sealed class MqttSource(
       }
       catch (Exception e)
       {
-        Log.Warning(e, "Error disconnecting MQTT source {source}", SourceId);
+        dispatcherService.Logger.Warning(e, "Error disconnecting MQTT source {source}", SourceId);
       }
     }
 
     if (_connectionTask != null)
       await _connectionTask;
 
+    _client.ApplicationMessageReceivedAsync -= OnApplicationMessageReceived;
     _client.Dispose();
+    _cts.Dispose();
   }
 
   public async ValueTask DisposeAsync()
@@ -92,13 +94,15 @@ public sealed class MqttSource(
       {
         if (!_client.IsConnected)
         {
+          dispatcherService.SetSourceState("Connecting");
           using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
           timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, configuration.TimeoutSeconds)));
 
           await _client.ConnectAsync(BuildOptions(), timeoutCts.Token);
           await SubscribeAsync(timeoutCts.Token);
+          dispatcherService.SetSourceState("Connected");
 
-          Log.Information("MQTT source {source} connected to {host}:{port}", SourceId, configuration.Host, configuration.Port);
+          dispatcherService.Logger.Information("MQTT source {source} connected to {host}:{port}", SourceId, configuration.Host, configuration.Port);
         }
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
@@ -109,12 +113,14 @@ public sealed class MqttSource(
       }
       catch (OperationCanceledException)
       {
-        Log.Warning("MQTT source {source} connection timeout", SourceId);
+        dispatcherService.Logger.Warning("MQTT source {source} connection timeout", SourceId);
+        dispatcherService.SetSourceState("Disconnected", "Retrying broker connection.");
         await DelayReconnect(cancellationToken);
       }
       catch (Exception e)
       {
-        Log.Warning(e, "MQTT source {source} connection error", SourceId);
+        dispatcherService.Logger.Warning(e, "MQTT source {source} connection error", SourceId);
+        dispatcherService.SetSourceState("Disconnected", "Retrying broker connection.");
         await DelayReconnect(cancellationToken);
       }
     }
@@ -183,7 +189,7 @@ public sealed class MqttSource(
     }
 
     await _client.SubscribeAsync(builder.Build(), cancellationToken);
-    Log.Information("MQTT source {source} subscribed to {topics}", SourceId, string.Join(", ", configuration.Topics));
+    dispatcherService.Logger.Information("MQTT source {source} subscribed to {topics}", SourceId, string.Join(", ", configuration.Topics));
   }
 
   private Task OnApplicationMessageReceived(MqttApplicationMessageReceivedEventArgs args)
@@ -207,11 +213,11 @@ public sealed class MqttSource(
         return Task.CompletedTask;
       }
 
-      Log.Warning("MQTT source {source} received unrecognized payload on {topic}: {hex}", SourceId, args.ApplicationMessage.Topic, Convert.ToHexString(payload));
+      dispatcherService.Logger.Warning("MQTT source {source} received unrecognized payload on {topic}: {hex}", SourceId, args.ApplicationMessage.Topic, Convert.ToHexString(payload));
     }
     catch (Exception e)
     {
-      Log.Error(e, "MQTT source {source} error parsing message on {topic}", SourceId, args.ApplicationMessage.Topic);
+      dispatcherService.Logger.Error(e, "MQTT source {source} error parsing message on {topic}", SourceId, args.ApplicationMessage.Topic);
     }
 
     return Task.CompletedTask;
@@ -257,9 +263,9 @@ public sealed class MqttSource(
     var dispatch = TmFProtocol.MessageToDispatch(payload, out var message, out var serialText, out var error);
 
     if (error != null)
-      Log.Verbose("MQTT source {source} ignored invalid TmF payload on {topic}: {error}", SourceId, topic, error);
+      dispatcherService.Logger.Verbose("MQTT source {source} ignored invalid TmF payload on {topic}: {error}", SourceId, topic, error);
     else if (message is RxData packet && dispatch?.Punches == null && serialText != null)
-      Log.Information("MQTT source {source} TmF source {tmfSource} says: {ascii}", SourceId, packet.Header.OrigID, serialText);
+      dispatcherService.Logger.Information("MQTT source {source} TmF source {tmfSource} says: {ascii}", SourceId, packet.Header.OrigID, serialText);
 
     return dispatch;
   }

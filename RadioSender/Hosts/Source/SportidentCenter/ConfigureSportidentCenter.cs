@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common;
@@ -11,8 +12,11 @@ namespace RadioSender.Hosts.Source.SportidentCenter
 {
   public record Event : FilterableConfiguration
   {
+    [Required, Range(1, int.MaxValue)]
     public int? EventId { get; init; }
+    [Required]
     public string? ApiKey { get; init; }
+    [Range(100, 3600000)]
     public int RefreshMs { get; init; } = 1000;
   }
 

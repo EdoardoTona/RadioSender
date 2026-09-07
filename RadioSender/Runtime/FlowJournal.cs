@@ -22,7 +22,9 @@ public sealed class FlowJournal
   private long _bytes;
   private static string Key(string node, string direction) => node + ":" + direction;
   private static long Estimate(FlowObservation observation) => 768L + 2L *
-    (observation.Punch.CompetitorId.Length + observation.Punch.SourceId.Length + (observation.Detail?.Length ?? 0));
+    (observation.Punch.CompetitorId.Length + observation.Punch.SourceId.Length + (observation.Detail?.Length ?? 0) + CompetitorLength(observation.Punch.Competitor));
+  private static long CompetitorLength(Competitor? c) => c == null ? 0 :
+    new[] { c.Bib, c.Card, c.Card2, c.Name, c.Class, c.Nation, c.ClubId, c.ClubName, c.ClubNation }.Sum(s => (long)(s?.Length ?? 0));
 
   public FlowObservation Add(Guid eventId, Guid executionId, long? replayOf, string nodeId, string direction,
     string? edgeId, long revision, Punch punch, string status = "Accepted", string? detail = null)

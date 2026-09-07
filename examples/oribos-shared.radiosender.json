@@ -1,0 +1,230 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": "manual",
+      "type": "source.manual",
+      "name": "Manual card input",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "id": "provider",
+      "type": "provider.oribos",
+      "name": "Race data",
+      "enabled": true,
+      "settings": {
+        "host": "http://127.0.0.1:8080",
+        "merged": false,
+        "emitStatusChanges": true
+      }
+    },
+    {
+      "id": "dedup",
+      "type": "processor.deduplicate",
+      "name": "dedup",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "id": "cards",
+      "type": "processor.enrichment",
+      "name": "Card lookup",
+      "enabled": true,
+      "settings": {
+        "providerId": "provider"
+      }
+    },
+    {
+      "id": "status",
+      "type": "processor.enrichment",
+      "name": "Status lookup",
+      "enabled": true,
+      "settings": {
+        "providerId": "provider"
+      }
+    },
+    {
+      "id": "archive",
+      "type": "target.file",
+      "name": "Enriched archive",
+      "enabled": true,
+      "settings": {
+        "path": "enriched.csv",
+        "format": "{CompetitorId};{Bib};{Name};{Control};{Status};{Cancellation}{CRLF}"
+      }
+    },
+    {
+      "id": "status-archive",
+      "type": "target.file",
+      "name": "Status archive",
+      "enabled": true,
+      "settings": {
+        "path": "status.csv",
+        "format": "{Bib};{Name};{Status};{Time:HH:mm:ss}{CRLF}"
+      }
+    },
+    {
+      "id": "sirap",
+      "type": "target.sirap",
+      "name": "SIRAP receiver",
+      "enabled": false,
+      "settings": {
+        "address": "127.0.0.1",
+        "port": 12002,
+        "version": 2,
+        "zeroTime": "00:00:00"
+      }
+    },
+    {
+      "id": "obr",
+      "type": "source.obr",
+      "name": "OBR receiver",
+      "enabled": false,
+      "settings": {
+        "port": 12003
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "manual",
+      "enabled": true,
+      "from": {
+        "node": "manual",
+        "port": "out"
+      },
+      "to": {
+        "node": "dedup",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "obr",
+      "enabled": true,
+      "from": {
+        "node": "obr",
+        "port": "out"
+      },
+      "to": {
+        "node": "dedup",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "lookup",
+      "enabled": true,
+      "from": {
+        "node": "dedup",
+        "port": "out"
+      },
+      "to": {
+        "node": "cards",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "archive",
+      "enabled": true,
+      "from": {
+        "node": "cards",
+        "port": "out"
+      },
+      "to": {
+        "node": "archive",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "sirap",
+      "enabled": true,
+      "from": {
+        "node": "cards",
+        "port": "out"
+      },
+      "to": {
+        "node": "sirap",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "status",
+      "enabled": true,
+      "from": {
+        "node": "provider",
+        "port": "out"
+      },
+      "to": {
+        "node": "status",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "status-archive",
+      "enabled": true,
+      "from": {
+        "node": "status",
+        "port": "out"
+      },
+      "to": {
+        "node": "status-archive",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    }
+  ],
+  "filters": [],
+  "editor": {
+    "positions": {
+      "manual": {
+        "x": 20,
+        "y": 40
+      },
+      "obr": {
+        "x": 20,
+        "y": 180
+      },
+      "dedup": {
+        "x": 280,
+        "y": 40
+      },
+      "cards": {
+        "x": 540,
+        "y": 40
+      },
+      "archive": {
+        "x": 800,
+        "y": 40
+      },
+      "sirap": {
+        "x": 800,
+        "y": 200
+      },
+      "provider": {
+        "x": 20,
+        "y": 390
+      },
+      "status": {
+        "x": 540,
+        "y": 390
+      },
+      "status-archive": {
+        "x": 800,
+        "y": 390
+      }
+    }
+  }
+}

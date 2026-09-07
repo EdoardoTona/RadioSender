@@ -1,6 +1,6 @@
 # Proposta: configurazione a nodi e modifica a runtime
 
-Stato: passi 1–3 implementati, con aggiornamenti da `note.txt`: Flow separato da Editor, Vuetify, filtri nominati riutilizzabili, delay sugli edge e log per nodo. La [guida operativa](flow-editor.md) descrive il comportamento effettivo e i limiti; le sezioni su enrichment, deduplicazione e altri protocolli restano obiettivi dei passi successivi.
+Stato: passi 1–4 implementati, inclusi deduplicazione, provider Oribos condiviso, adapter dei protocolli, nuovi form tipizzati e vista operativa del modulo TmF. La [guida operativa](flow-editor.md) descrive comportamento effettivo, esempi e limiti. Restano al passo 5 la rimozione delle pagine/programmi legacy e il consolidamento dei pacchetti Windows/macOS.
 
 L'obiettivo è rendere configurabili dalla UI sorgenti, destinazioni, trasformazioni e collegamenti, applicando le modifiche senza riavviare RadioSender. Il documento JSON resta il formato portabile della configurazione. La modularità dei protocolli rimane il criterio principale del progetto.
 
@@ -70,7 +70,7 @@ flowchart LR
 
 Le linee tratteggiate rappresentano dipendenze da risorse, non trasferimenti di punzonature. Nel JSON sono riferimenti espliciti, ad esempio `providerId`; la UI può mostrarli come collegamenti distinti senza duplicarli negli `edges` dei flussi.
 
-**Oribos richiede entrambe le capacità.** Il servizio attuale arricchisce tramite lookup e, con `EmitStatusChanges`, pubblica anche eventi. Una sola istanza/provider deve alimentare i processori che lo referenziano e la propria uscita `status`. Duplicare il nodo di trasformazione non deve duplicare il long polling. Le capacità opzionali evitano di imporre che ogni modulo appartenga a una sola categoria.
+**Oribos richiede entrambe le capacità.** Il servizio attuale arricchisce tramite lookup e, con `EmitStatusChanges`, pubblica anche eventi. Una sola istanza/provider deve alimentare i processori che lo referenziano e la propria uscita di eventi di stato (`out` nella prima implementazione). Duplicare il nodo di trasformazione non deve duplicare il long polling. Le capacità opzionali evitano di imporre che ogni modulo appartenga a una sola categoria.
 
 I filtri sono definiti una sola volta nella lista `filters`, con `id`, `name` e `rules` basate su `Filter.Transform`. Ogni edge può selezionare un `filterId`; il nome appare sul collegamento. La UI mostra quante connessioni usano il filtro perché modificarlo cambia tutte quelle connessioni alla successiva Apply. Il filtro si esegue prima del ritardo opzionale del ramo, espresso da `delayMs`. Code separate mantengono indipendenti i rami ritardati.
 

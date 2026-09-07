@@ -184,3 +184,138 @@ test('mutating APIs reject cross-origin and headerless requests', async ({ reque
   })
   expect(foreignOrigin.status()).toBe(403)
 })
+
+test('configure protocol lists and a shared provider without editing JSON', async ({
+  page,
+  request,
+}) => {
+  const directory = await mkdtemp(join(tmpdir(), 'radiosender-modules-'))
+  const documentPath = join(directory, 'modules.radiosender.json')
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  try {
+    await page.goto('/flows/index.html')
+    await page.getByRole('button', { name: 'New', exact: true }).click()
+    await page.getByLabel('Full JSON file path').fill(documentPath)
+    await page.getByRole('button', { name: 'Save file', exact: true }).click()
+    await page.locator('.library-module').filter({ hasText: /^MQTT/ }).click()
+    await page.getByLabel('Host', { exact: true }).fill('broker.example')
+    const topics = page
+      .locator('fieldset')
+      .filter({ has: page.locator('legend', { hasText: 'Topics' }) })
+    await topics.getByRole('button', { name: 'Add item' }).click()
+    await page.getByLabel('Topics 1', { exact: true }).fill('race/punches')
+    await topics.getByRole('button', { name: 'Add item' }).click()
+    await page.getByLabel('Topics 2', { exact: true }).fill('race/radio')
+    await page.getByLabel('Password', { exact: true }).fill('example-password')
+    await expect(page.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'password')
+    await page.getByLabel('Enabled', { exact: true }).uncheck()
+    await page.locator('.library-module').filter({ hasText: 'Oribos data' }).click()
+    await page.getByLabel('Name', { exact: true }).fill('Shared race data')
+    await page
+      .locator('.library-module')
+      .filter({ hasText: /^Enrichment/ })
+      .click()
+    await page.locator('.settings-form .v-select').click()
+    await page.getByRole('option', { name: 'Shared race data' }).click()
+    await expect
+      .poll(async () => {
+        const graph = JSON.parse(await readFile(documentPath, 'utf8'))
+        return graph.nodes.find((n: { type: string }) => n.type === 'processor.enrichment')
+          ?.settings.providerId
+      })
+      .toBeTruthy()
+    const graph = JSON.parse(await readFile(documentPath, 'utf8'))
+    const provider = graph.nodes.find((n: { type: string }) => n.type === 'provider.oribos')
+    const enrichment = graph.nodes.find((n: { type: string }) => n.type === 'processor.enrichment')
+    const mqtt = graph.nodes.find((n: { type: string }) => n.type === 'source.mqtt')
+    expect(enrichment.settings.providerId).toBe(provider.id)
+    expect(mqtt.settings.topics).toEqual(['race/punches', 'race/radio'])
+    expect(mqtt.settings.protocols).toEqual(['Sportident'])
+    expect(mqtt.enabled).toBe(false)
+    expect(errors).toEqual([])
+  } finally {
+    await request.post('/api/flow/runtime/stop', { headers })
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('radio module view shows its gateway snapshot and addresses ping to that instance', async ({
+  page,
+}, testInfo) => {
+  // Stub the runtime boundary: this view test does not require a physical serial gateway.
+  const sessionId = '11111111-1111-1111-1111-111111111111'
+  const documentId = '22222222-2222-2222-2222-222222222222'
+  const document = {
+    schemaVersion: 1,
+    filters: [],
+    edges: [],
+    nodes: [
+      {
+        id: 'gateway',
+        name: 'Finish gateway',
+        type: 'source.tmf',
+        enabled: true,
+        settings: { portName: 'COM4' },
+      },
+    ],
+    editor: { positions: { gateway: { x: 100, y: 100 } } },
+  }
+  const state = {
+    sessionId,
+    documentId,
+    path: '/tmp/radio-view.json',
+    revision: 3,
+    running: true,
+    error: null,
+    nodes: [
+      {
+        id: 'gateway',
+        name: 'Finish gateway',
+        type: 'source.tmf',
+        status: 'Running',
+        detail: null,
+        pending: 0,
+      },
+    ],
+    edges: [],
+  }
+  await page.route('**/flowHub/**', (route) => route.fulfill({ status: 503 }))
+  await page.route('**/api/flow/runtime', (route) => route.fulfill({ json: state }))
+  await page.route('**/api/flow/runtime/graph', (route) =>
+    route.fulfill({ json: { documentId, path: state.path, revision: 3, document } }),
+  )
+  await page.route(`**/api/flow/documents/${documentId}`, (route) =>
+    route.fulfill({ json: { id: documentId, path: state.path, revision: 3, document } }),
+  )
+  await page.route('**/api/flow/nodes/gateway/view?*', (route) =>
+    route.fulfill({
+      json: {
+        nodes: [
+          { id: 'local', name: 'Gateway', latencyMs: 0, signalStength: 100 },
+          { id: 'remote', name: 'Finish radio', latencyMs: 24, signalStength: 81 },
+        ],
+        hops: [
+          { id: 'local-remote', from: 'local', to: 'remote', latencyMs: 24, signalStength: 81 },
+        ],
+      },
+    }),
+  )
+  let command: unknown
+  await page.route('**/api/flow/nodes/gateway/commands/ping', (route) => {
+    command = route.request().postDataJSON()
+    return route.fulfill({ json: { message: 'Radio status and path requested.' } })
+  })
+  await page.goto('/flows/index.html')
+  await page.locator('.vue-flow__node').filter({ hasText: 'Finish gateway' }).click()
+  await page.getByRole('button', { name: 'Radio network (2)', exact: true }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.locator('tbody tr')).toHaveCount(2)
+  await expect(dialog.locator('.vue-flow__edge')).toHaveCount(1)
+  await expect(dialog.locator('tbody')).toContainText('24 ms')
+  await dialog.getByRole('button', { name: 'Ping radios', exact: true }).click()
+  await expect.poll(() => command).toEqual({ sessionId, revision: 3, arguments: {} })
+  await page.screenshot({ path: testInfo.outputPath('radio-network.png'), fullPage: true })
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect(page.locator('.module-commands')).toContainText('Radio status and path requested.')
+})

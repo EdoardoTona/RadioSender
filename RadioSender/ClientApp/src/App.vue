@@ -641,7 +641,9 @@ onBeforeUnmount(() => {
             <h2>Module library</h2>
           </div>
           <v-text-field v-model="librarySearch" label="Search modules" class="library-search" />
-          <template v-for="category in ['Source', 'Processor', 'Target']" :key="category"
+          <template
+            v-for="category in ['Source', 'Processor', 'Provider', 'Target']"
+            :key="category"
             ><h3 class="category-heading">
               {{ category === 'Processor' ? 'Processing' : category + 's' }}
             </h3>
@@ -750,10 +752,14 @@ onBeforeUnmount(() => {
                 v-if="definition"
                 :node="node"
                 :definition="definition"
+                :nodes="document.nodes"
                 @update="(key, value) => (node!.settings[key] = value)"
               />
-              <p v-if="definition?.category === 'Processor'" class="hint">
-                Passes events through unchanged. Use it as a named inspection or branching point.
+              <p
+                v-if="definition?.category === 'Processor' || definition?.category === 'Provider'"
+                class="hint"
+              >
+                {{ definition.description }}
               </p>
               <p v-if="definition?.view === 'manual-input'" class="hint">
                 Manual entry controls are available on the Flow screen after applying.

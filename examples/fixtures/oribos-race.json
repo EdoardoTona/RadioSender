@@ -1,0 +1,18 @@
+{
+  "update": "2026-09-06T10:00:00Z",
+  "race": {
+    "startutc": "2026-09-06T08:00:00Z"
+  },
+  "competitors": [
+    {
+      "bib": 101,
+      "card": 1234,
+      "card2": 5678,
+      "name": "Alex",
+      "surname": "Runner",
+      "class": "Open",
+      "status": "GA"
+    }
+  ],
+  "clubs": []
+}

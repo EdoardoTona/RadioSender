@@ -21,7 +21,7 @@ public record DeliveryResult(string Status, string? Detail = null);
 public record ModuleState(string Status, string? Detail = null);
 public record CommandResult(string Message, IReadOnlyList<Punch>? Output = null);
 public record ModuleCommand(string Id, string Label);
-public record ModuleField(string Key, string Label, string Kind, bool Required, double? Min, double? Max, string? Help);
+public record ModuleField(string Key, string Label, string Kind, bool Required, double? Min, double? Max, string? Help, string[]? Choices = null, string? ItemKind = null);
 public record ModuleDescriptor(string Type, string Name, string Category, string Description,
   string[] Inputs, string[] Outputs, JsonObject Defaults, IReadOnlyList<ModuleField> Fields,
   IReadOnlyList<ModuleCommand> Commands, string? View = null);
@@ -40,6 +40,8 @@ public abstract class FlowModule : IRadioSenderHost, IAsyncDisposable
     if (status is "Error" or "Disconnected" or "Input warning") _logger.Warning("{Status}: {Detail}", status, detail);
     else _logger.Information("{Status}: {Detail}", status, detail);
   }
+  public virtual Punch? Process(Punch punch, bool replay) => punch;
+  public virtual object? ViewData() => null;
   public virtual Task StartAsync(CancellationToken ct) { SetState("Running"); return Task.CompletedTask; }
   public virtual Task StopAsync(CancellationToken ct) { SetState("Stopped"); return Task.CompletedTask; }
   public virtual ValueTask<DeliveryResult> SendAsync(Punch punch, CancellationToken ct) =>
@@ -50,7 +52,7 @@ public abstract class FlowModule : IRadioSenderHost, IAsyncDisposable
   public virtual ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
-public sealed record ModuleContext(string NodeId, string Directory, IFlowOutput Output);
+public sealed record ModuleContext(string NodeId, string Directory, IFlowOutput Output, Func<string, FlowModule?>? Resolve = null);
 
 public abstract class ModuleDefinition
 {
@@ -66,21 +68,38 @@ public sealed class ModuleDefinition<TSettings>(string type, string name, string
   ModuleCommand[]? commands = null, string? view = null) : ModuleDefinition where TSettings : new()
 {
   public override ModuleDescriptor Descriptor { get; } = new(type, name, category, description,
-    category == "Source" ? [] : ["in"], category == "Target" ? [] : ["out"],
-    JsonSerializer.SerializeToNode(new TSettings(), FlowJson.Options)!.AsObject(), GetFields(), commands ?? [], view);
+    category is "Source" or "Provider" ? [] : ["in"], category == "Target" ? [] : ["out"],
+    ToJson(new TSettings()), GetFields(), commands ?? [], view);
 
-  private static IReadOnlyList<ModuleField> GetFields() => typeof(TSettings).GetProperties().Select(p =>
+  private static IEnumerable<PropertyInfo> Properties => typeof(TSettings).GetProperties()
+    .Where(p => p.Name is not ("Filter" or "Enable") && !p.IsDefined(typeof(ObsoleteAttribute)));
+  private static JsonObject ToJson(TSettings settings)
+  {
+    var json = JsonSerializer.SerializeToNode(settings, FlowJson.Options)!.AsObject();
+    var keys = Properties.Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name)).ToHashSet();
+    foreach (var key in json.Select(x => x.Key).Where(k => !keys.Contains(k)).ToArray()) json.Remove(key);
+    return json;
+  }
+  private static IReadOnlyList<ModuleField> GetFields() => Properties.Select(p =>
   {
     var display = p.GetCustomAttribute<DisplayAttribute>();
     var range = p.GetCustomAttribute<RangeAttribute>();
-    return new ModuleField(JsonNamingPolicy.CamelCase.ConvertName(p.Name), display?.Name ?? p.Name,
-      p.PropertyType == typeof(bool) ? "boolean" : p.PropertyType == typeof(int) ? "number" : "text",
+    var valueType = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+    var itemType = valueType.IsArray ? valueType.GetElementType() :
+      valueType.IsGenericType && valueType.GetGenericTypeDefinition() == typeof(IEnumerable<>) ? valueType.GetGenericArguments()[0] : null;
+    var choicesType = itemType ?? valueType;
+    var kind = itemType != null ? "list" : valueType.IsEnum ? "select" : valueType == typeof(bool) ? "boolean" :
+      valueType == typeof(int) ? "number" : p.Name == "ProviderId" ? "provider" :
+      p.Name is "Password" or "ApiKey" ? "password" : "text";
+    return new ModuleField(JsonNamingPolicy.CamelCase.ConvertName(p.Name), display?.Name ??
+      System.Text.RegularExpressions.Regex.Replace(p.Name, "([a-z])([A-Z])", "$1 $2"), kind,
       p.IsDefined(typeof(RequiredAttribute)), range == null ? null : Convert.ToDouble(range.Minimum),
-      range == null ? null : Convert.ToDouble(range.Maximum), display?.Description);
+      range == null ? null : Convert.ToDouble(range.Maximum), display?.Description,
+      choicesType.IsEnum ? Enum.GetNames(choicesType) : null, itemType == typeof(int) ? "number" : "text");
   }).ToList();
 
   private static TSettings Read(JsonObject settings) => settings.Deserialize<TSettings>(FlowJson.Options) ?? new();
-  public override JsonObject Normalize(JsonObject settings) => JsonSerializer.SerializeToNode(Read(settings), FlowJson.Options)!.AsObject();
+  public override JsonObject Normalize(JsonObject settings) => ToJson(Read(settings));
   public override FlowModule Create(JsonObject settings, ModuleContext context) => factory(Read(settings), context);
   public override IEnumerable<FlowIssue> Validate(FlowNode node)
   {
@@ -93,6 +112,10 @@ public sealed class ModuleDefinition<TSettings>(string type, string name, string
       var settings = Read(node.Settings);
       var results = new List<ValidationResult>();
       Validator.TryValidateObject(settings!, new ValidationContext(settings!), results, true);
+      foreach (var property in Properties.Where(p => p.IsDefined(typeof(UrlAttribute))))
+        if (property.GetValue(settings) is string url &&
+            (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")))
+          results.Add(new("Use an HTTP(S) server address.", [property.Name]));
       if (validate != null) results.AddRange(validate(settings));
       issues.AddRange(results.Select(r => new FlowIssue(node.Id,
         "settings." + JsonNamingPolicy.CamelCase.ConvertName(r.MemberNames.FirstOrDefault() ?? ""), r.ErrorMessage ?? "Invalid setting.")));

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,6 +9,7 @@ namespace RadioSender.Hosts.Target.PosPrinter;
 
 public record PrinterTargetConfiguration : FilterableConfiguration
 {
+  [Required]
   public string? PrinterName { get; set; }
   public string? Format { get; set; }
   public int[]? ColumnWidths { get; set; }

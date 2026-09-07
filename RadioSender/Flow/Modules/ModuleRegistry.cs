@@ -24,7 +24,8 @@ public sealed class ModuleRegistry
     new ModuleDefinition<TcpSettings>("target.tcp", "TCP output", "Target", "Send formatted events as a TCP client or server.",
       (s, c) => new TcpFlowModule(s, c, false), s => ValidateTcp(s, false)),
     new ModuleDefinition<FileSettings>("target.file", "File output", "Target", "Append formatted events to a file.",
-      (s, c) => new FileFlowModule(s, c), s => ValidateFormat(s.Format))
+      (s, c) => new FileFlowModule(s, c), s => ValidateFormat(s.Format)),
+    .. ProtocolModules.Definitions
   ]);
 
   private static IEnumerable<ValidationResult> ValidateTcp(TcpSettings settings, bool source)

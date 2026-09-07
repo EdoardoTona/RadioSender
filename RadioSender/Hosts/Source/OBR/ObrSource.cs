@@ -12,7 +12,7 @@ namespace RadioSender.Hosts.Source.OBR;
 
 public sealed class ObrSource(
   FilterService filterService,
-  DispatcherService dispatcherService,
+  IDispatchSink dispatcherService,
   ObrSourceConfiguration configuration) : ISource, IRadioSenderHost, IDisposable
 {
   private readonly CancellationTokenSource _cts = new();
@@ -35,11 +35,11 @@ public sealed class ObrSource(
     }
     catch (Exception e)
     {
-      Log.Error(e, "OBR source unable to bind UDP port {port}", port);
-      return Task.CompletedTask;
+      dispatcherService.Logger.Error(e, "OBR source unable to bind UDP port {port}", port);
+      throw;
     }
 
-    Log.Information("OBR source listening on UDP port {port}{filter}",
+    dispatcherService.Logger.Information("OBR source listening on UDP port {port}{filter}",
       port,
       string.IsNullOrWhiteSpace(configuration.AllowedIp) ? "" : $" (only from {configuration.AllowedIp})");
 
@@ -61,7 +61,7 @@ public sealed class ObrSource(
     {
       try { await _receiveTask; }
       catch (OperationCanceledException) { }
-      catch (Exception e) { Log.Warning(e, "OBR source error while stopping"); }
+      catch (Exception e) { dispatcherService.Logger.Warning(e, "OBR source error while stopping"); }
     }
 
     _udp?.Dispose();
@@ -95,7 +95,7 @@ public sealed class ObrSource(
       }
       catch (Exception e)
       {
-        Log.Warning(e, "OBR source receive error");
+        dispatcherService.Logger.Warning(e, "OBR source receive error");
         continue;
       }
 
@@ -111,7 +111,7 @@ public sealed class ObrSource(
       }
       catch
       {
-        Log.Warning("OBR source received non-UTF8 data from {ip}", senderIp);
+        dispatcherService.Logger.Warning("OBR source received non-UTF8 data from {ip}", senderIp);
         continue;
       }
 
@@ -125,7 +125,7 @@ public sealed class ObrSource(
       }
       else
       {
-        Log.Debug("OBR source unknown message from {ip}: {msg}", senderIp, msg.Length > 60 ? msg[..60] : msg);
+        dispatcherService.Logger.Debug("OBR source unknown message from {ip}: {msg}", senderIp, msg.Length > 60 ? msg[..60] : msg);
       }
     }
   }
@@ -151,13 +151,13 @@ public sealed class ObrSource(
 
       if (string.IsNullOrEmpty(cardStr) || string.IsNullOrEmpty(cpStr))
       {
-        Log.Warning("OBR malformed punch from {ip}: {msg}", senderIp, msg);
+        dispatcherService.Logger.Warning("OBR malformed punch from {ip}: {msg}", senderIp, msg);
         return;
       }
 
       if (!int.TryParse(cardStr, out var card) || !int.TryParse(cpStr, out var cp))
       {
-        Log.Warning("OBR non-numeric card/CP from {ip}: card='{card}' cp='{cp}'", senderIp, cardStr, cpStr);
+        dispatcherService.Logger.Warning("OBR non-numeric card/CP from {ip}: card='{card}' cp='{cp}'", senderIp, cardStr, cpStr);
         return;
       }
 
@@ -182,12 +182,12 @@ public sealed class ObrSource(
       }
       else
       {
-        Log.Debug("OBR punch filtered out card={card} cp={cp} tm={tm} from {ip}", card, cp, tmStr ?? "(now)", senderIp);
+        dispatcherService.Logger.Debug("OBR punch filtered out card={card} cp={cp} tm={tm} from {ip}", card, cp, tmStr ?? "(now)", senderIp);
       }
     }
     catch (Exception e)
     {
-      Log.Error(e, "OBR error parsing punch '{msg}'", msg);
+      dispatcherService.Logger.Error(e, "OBR error parsing punch '{msg}'", msg);
     }
   }
 
@@ -229,11 +229,11 @@ public sealed class ObrSource(
           battery = val.Replace("%", "");
       }
 
-      Log.Debug("OBR call-home node={name} battery={battery}% ip={ip}", name, battery ?? "?", senderIp);
+      dispatcherService.Logger.Debug("OBR call-home node={name} battery={battery}% ip={ip}", name, battery ?? "?", senderIp);
     }
     catch (Exception e)
     {
-      Log.Warning(e, "OBR error parsing call-home '{msg}'", msg);
+      dispatcherService.Logger.Warning(e, "OBR error parsing call-home '{msg}'", msg);
     }
   }
 }

@@ -13,7 +13,7 @@ const items = ref<Observation[]>([]),
   selected = ref<number[]>([]),
   cursor = ref(0),
   expired = ref(false)
-const direction = ref(props.category === 'Source' ? 'output' : 'input'),
+const direction = ref(['Source', 'Provider'].includes(props.category) ? 'output' : 'input'),
   paused = ref(false),
   query = ref(''),
   error = ref(''),
@@ -139,7 +139,7 @@ async function replay() {
       <strong>{{ name }}</strong>
       <div class="segmented">
         <v-btn
-          v-if="category !== 'Source'"
+          v-if="!['Source', 'Provider'].includes(category)"
           :variant="direction === 'input' ? 'tonal' : 'text'"
           @click="direction = 'input'"
           >Input</v-btn
@@ -155,6 +155,12 @@ async function replay() {
           :variant="direction === 'delivery' ? 'tonal' : 'text'"
           @click="direction = 'delivery'"
           >Delivery</v-btn
+        >
+        <v-btn
+          v-if="category === 'Processor'"
+          :variant="direction === 'processing' ? 'tonal' : 'text'"
+          @click="direction = 'processing'"
+          >Processing</v-btn
         >
       </div>
       <v-text-field
@@ -208,6 +214,17 @@ async function replay() {
           <td>{{ new Date(item.observedAt).toLocaleTimeString() }}</td>
           <td>
             <strong>{{ item.punch.competitorId }}</strong>
+            <details v-if="item.punch.competitor">
+              <summary>{{ item.punch.competitor.name ?? 'Competitor details' }}</summary>
+              <dl>
+                <template v-for="(value, key) in item.punch.competitor" :key="key"
+                  ><template v-if="value != null"
+                    ><dt>{{ key }}</dt>
+                    <dd>{{ value }}</dd></template
+                  ></template
+                >
+              </dl>
+            </details>
           </td>
           <td>{{ item.punch.competitorIdType }}</td>
           <td>{{ item.punch.control }}</td>

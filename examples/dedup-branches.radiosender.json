@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": "manual",
+      "type": "source.manual",
+      "name": "Manual input",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "id": "dedup",
+      "type": "processor.deduplicate",
+      "name": "Unique events",
+      "enabled": true,
+      "settings": {
+        "capacity": 10000,
+        "retentionSeconds": 0
+      }
+    },
+    {
+      "id": "mapped",
+      "type": "processor.passthrough",
+      "name": "After mapping",
+      "enabled": true,
+      "settings": {}
+    },
+    {
+      "id": "finish",
+      "type": "target.file",
+      "name": "Finish archive",
+      "enabled": true,
+      "settings": {
+        "path": "finish.csv",
+        "format": "{CompetitorId};{Control};{Cancellation}{CRLF}"
+      }
+    },
+    {
+      "id": "raw",
+      "type": "target.file",
+      "name": "Raw archive",
+      "enabled": true,
+      "settings": {
+        "path": "raw.csv",
+        "format": "{CompetitorId};{Control};{Cancellation}{CRLF}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "dedup",
+      "enabled": true,
+      "from": {
+        "node": "manual",
+        "port": "out"
+      },
+      "to": {
+        "node": "dedup",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "mapping",
+      "enabled": true,
+      "from": {
+        "node": "dedup",
+        "port": "out"
+      },
+      "to": {
+        "node": "mapped",
+        "port": "in"
+      },
+      "filterId": "finish-map",
+      "delayMs": 100
+    },
+    {
+      "id": "finish",
+      "enabled": true,
+      "from": {
+        "node": "mapped",
+        "port": "out"
+      },
+      "to": {
+        "node": "finish",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    },
+    {
+      "id": "raw",
+      "enabled": true,
+      "from": {
+        "node": "manual",
+        "port": "out"
+      },
+      "to": {
+        "node": "raw",
+        "port": "in"
+      },
+      "filterId": null,
+      "delayMs": 0
+    }
+  ],
+  "filters": [
+    {
+      "id": "finish-map",
+      "name": "Finish code",
+      "rules": {
+        "enabled": true,
+        "mapControls": {
+          "35": 1
+        },
+        "mapCompetitorIds": {},
+        "includeOnlyControls": [],
+        "includeOnlyCompetitorIds": [],
+        "typeFromCode": {},
+        "overrideCompetitorIdType": null,
+        "ignoreOlderThanSeconds": 0
+      }
+    }
+  ],
+  "editor": {
+    "positions": {
+      "manual": {
+        "x": 40,
+        "y": 100
+      },
+      "dedup": {
+        "x": 300,
+        "y": 100
+      },
+      "mapped": {
+        "x": 560,
+        "y": 100
+      },
+      "finish": {
+        "x": 820,
+        "y": 100
+      },
+      "raw": {
+        "x": 300,
+        "y": 300
+      }
+    }
+  }
+}

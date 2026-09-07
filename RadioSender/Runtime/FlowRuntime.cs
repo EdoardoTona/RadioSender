@@ -168,7 +168,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
         {
           var generation = Guid.NewGuid();
           var instance = new Instance(node, settings, signature, generation,
-            definition.Create(settings, new(node.Id, directory, new Output(this, node.Id, generation))));
+            definition.Create(settings, new(node.Id, directory, new Output(this, node.Id, generation), ResolveModule)));
           next[node.Id] = instance; fresh.Add(instance);
         }
       }
@@ -194,7 +194,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
             var generation = Guid.NewGuid();
             old.Generation = generation;
             old.Module = registry.Find(old.Node.Type)!.Create(old.Settings,
-              new(old.Node.Id, Path.GetDirectoryName(_path!)!, new Output(this, old.Node.Id, generation)));
+              new(old.Node.Id, Path.GetDirectoryName(_path!)!, new Output(this, old.Node.Id, generation), ResolveModule));
             old.Target = null;
             await StartInstanceAsync(old, _sessionId);
           }
@@ -232,6 +232,8 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
     }, ct);
     return result!;
   }
+
+  private FlowModule? ResolveModule(string id) => _instances.GetValueOrDefault(id)?.Module;
 
   private async Task StartInstanceAsync(Instance instance, Guid sessionId)
   {
@@ -278,7 +280,19 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
     var target = _instances[state.Edge.To.Node];
     journal.Add(item.EventId, item.ExecutionId, item.ReplayOf, target.Node.Id, "input", state.Edge.Id, _revision, item.Punch);
     if (target.Target != null) await target.Target.EnqueueAsync(item, state.Edge.Id, _revision);
-    else await RouteOutputAsync(target.Node.Id, item);
+    else
+    {
+      Punch? processed;
+      try { processed = target.Module.Process(item.Punch, item.ReplayOf != null); }
+      catch (Exception e)
+      {
+        journal.Add(item.EventId, item.ExecutionId, item.ReplayOf, target.Node.Id, "processing", state.Edge.Id, _revision, item.Punch, "Failed", e.Message);
+        Log.ForContext("NodeId", target.Node.Id).ForContext("SessionId", _sessionId).Warning("Processing failed: {Reason}", e.Message);
+        return;
+      }
+      if (processed != null) await RouteOutputAsync(target.Node.Id, item with { Punch = processed });
+      else journal.Add(item.EventId, item.ExecutionId, item.ReplayOf, target.Node.Id, "processing", state.Edge.Id, _revision, item.Punch, "Suppressed", "Duplicate event.");
+    }
   }
 
   private async Task DrainAsync(CancellationToken ct)
@@ -308,6 +322,19 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
         .Information("Command {Command}: {Message}", command, result.Message);
     }, ct);
     return result! with { Output = null };
+  }
+
+  public async Task<object?> ViewAsync(Guid sessionId, long revision, string nodeId, CancellationToken ct = default)
+  {
+    object? result = null;
+    await ExecuteAsync(() =>
+    {
+      CheckSession(sessionId, revision);
+      if (!_instances.TryGetValue(nodeId, out var instance)) throw new FlowException("This node is not running.", 409);
+      result = instance.Module.ViewData();
+      return Task.CompletedTask;
+    }, ct);
+    return result;
   }
 
   private void CheckSession(Guid session, long revision)

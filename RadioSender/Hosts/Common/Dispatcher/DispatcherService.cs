@@ -16,7 +16,7 @@ public sealed class DispatcherService(
   FilterService filterService,
   IEnumerable<ITarget> targets,
   DispatcherConfiguration configuration
-    ) : IDisposable
+    ) : IDispatchSink, IDisposable
 {
   private readonly ConcurrentDictionary<string, Punch> _punches = [];
   private readonly List<string> _punchOrder = [];

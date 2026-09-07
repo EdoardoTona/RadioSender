@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,6 +10,7 @@ namespace RadioSender.Hosts.Source.OBR;
 
 public record ObrSourceConfiguration : FilterableConfiguration
 {
+  [Required, Range(1, 65535)]
   public int? Port { get; init; }
   public string? AllowedIp { get; init; }
   public string? SourceId { get; init; }

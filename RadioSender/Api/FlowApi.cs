@@ -94,6 +94,7 @@ public static class FlowApi
       return await runtime.ApplyAsync(snapshot.Id, snapshot.Path, snapshot.Revision, snapshot.Document, ct);
     });
     api.MapPost("/runtime/stop", async (FlowRuntime runtime, CancellationToken ct) => { await runtime.StopFlowAsync(ct); return Results.Ok(); });
+    api.MapGet("/nodes/{id}/view", (string id, Guid sessionId, long revision, FlowRuntime runtime, CancellationToken ct) => runtime.ViewAsync(sessionId, revision, id, ct));
     api.MapGet("/nodes/{id}/observations", (string id, string direction, long? after, FlowJournal journal) => journal.Read(id, direction, after ?? 0));
     api.MapPost("/nodes/{id}/replay", (string id, ReplayRequest request, FlowRuntime runtime, CancellationToken ct) => runtime.ReplayAsync(id, request, ct: ct));
     api.MapPost("/nodes/{id}/retry", (string id, ReplayRequest request, FlowRuntime runtime, CancellationToken ct) => runtime.ReplayAsync(id, request, true, ct));

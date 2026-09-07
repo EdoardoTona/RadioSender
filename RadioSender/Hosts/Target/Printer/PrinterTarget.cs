@@ -157,7 +157,9 @@ public class PrinterTarget : ITarget, IDisposable
     printer.UnderlineMode(PrinterModeState.Off);
   }
 
-  private string FormatColumns(Punch punch, string format)
+  private string FormatColumns(Punch punch, string format) => FormatPunch(punch, format, _configuration.ColumnWidths);
+
+  public static string FormatPunch(Punch punch, string format, int[]? columnWidths)
   {
     var columns = format
         .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -173,7 +175,7 @@ public class PrinterTarget : ITarget, IDisposable
       if (index == columns.Length - 1)
         return column.Value.TrimEnd();
 
-      var width = GetColumnWidth(column.Format, index);
+      var width = GetColumnWidth(column.Format, index, columnWidths);
       var value = FitColumn(column.Value, width);
       var paddedValue = IsCompetitorIdColumn(column.Format)
           ? value.PadLeft(width)
@@ -183,12 +185,12 @@ public class PrinterTarget : ITarget, IDisposable
     })).TrimEnd();
   }
 
-  private int GetColumnWidth(string columnFormat, int index)
+  private static int GetColumnWidth(string columnFormat, int index, int[]? columnWidths)
   {
-    if (_configuration.ColumnWidths != null &&
-        index < _configuration.ColumnWidths.Length &&
-        _configuration.ColumnWidths[index] > 0)
-      return _configuration.ColumnWidths[index];
+    if (columnWidths != null &&
+        index < columnWidths.Length &&
+        columnWidths[index] > 0)
+      return columnWidths[index];
 
     if (ContainsAny(columnFormat, "CompetitorId", "Card", "Bib"))
       return 7;

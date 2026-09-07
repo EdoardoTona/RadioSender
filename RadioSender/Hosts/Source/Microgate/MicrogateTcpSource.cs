@@ -16,7 +16,7 @@ public sealed class MicrogateTcpSource : MicrogateSource
 
   public MicrogateTcpSource(
     FilterService filterService,
-    DispatcherService dispatcherService,
+    IDispatchSink dispatcherService,
     MicrogateSourceConfiguration configuration)
     : base(filterService, dispatcherService, configuration, GetEndpoint(configuration))
   {
@@ -25,7 +25,8 @@ public sealed class MicrogateTcpSource : MicrogateSource
 
   public override Task StartAsync(CancellationToken cancellationToken)
   {
-    Log.Information("MicrogateSource connecting to {endpoint}", Endpoint);
+    Logger.Information("MicrogateSource connecting to {endpoint}", Endpoint);
+    SetState("Connecting", Endpoint);
     _client.ConnectAsync();
     return Task.CompletedTask;
   }
@@ -53,7 +54,7 @@ public sealed class MicrogateTcpSource : MicrogateSource
 
   private void Connected()
   {
-    Log.Information("MicrogateSource {endpoint} TCP connected", Endpoint);
+    Logger.Information("MicrogateSource {endpoint} TCP connected", Endpoint);
     OnTransportConnected();
   }
 
@@ -62,7 +63,8 @@ public sealed class MicrogateTcpSource : MicrogateSource
     if (IsStopping)
       return;
 
-    Log.Warning("MicrogateSource {endpoint} disconnected or unavailable; retrying", Endpoint);
+    SetState("Disconnected", "Retrying connection.");
+    Logger.Warning("MicrogateSource {endpoint} disconnected or unavailable; retrying", Endpoint);
     _ = ReconnectAsync();
   }
 
@@ -80,7 +82,7 @@ public sealed class MicrogateTcpSource : MicrogateSource
     }
     catch (Exception e)
     {
-      Log.Error("MicrogateSource reconnect error: {error}", e.Message);
+      Logger.Error("MicrogateSource reconnect error: {error}", e.Message);
     }
   }
 
@@ -113,6 +115,6 @@ public sealed class MicrogateTcpSource : MicrogateSource
     protected override void OnConnected() => _source.Connected();
     protected override void OnDisconnected() => _source.Disconnected();
     protected override void OnReceived(byte[] buffer, long offset, long size) => _source.OnReceived(buffer, offset, size);
-    protected override void OnError(SocketError error) => Log.Warning("MicrogateSource socket error {error}", error);
+    protected override void OnError(SocketError error) => _source.Logger.Warning("MicrogateSource socket error {error}", error);
   }
 }

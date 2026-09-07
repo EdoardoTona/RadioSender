@@ -1,0 +1,26 @@
+{
+  "competitorId": "1234",
+  "competitorIdType": "PunchingCard",
+  "control": 35,
+  "controlType": "Control",
+  "time": "2026-09-06T12:30:00",
+  "cancellations": [
+    false,
+    false,
+    true,
+    true,
+    false
+  ],
+  "expectedFinish": [
+    "1234;1;",
+    "1234;1;ANN",
+    "1234;1;"
+  ],
+  "expectedRaw": [
+    "1234;35;",
+    "1234;35;",
+    "1234;35;ANN",
+    "1234;35;ANN",
+    "1234;35;"
+  ]
+}

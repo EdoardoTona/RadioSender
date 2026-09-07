@@ -18,7 +18,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
   {
     public const uint BROADCAST = 0xffffffff;
 
-    private readonly DispatcherService _dispatcherService;
+    private readonly IDispatchSink _dispatcherService;
     private readonly FilterService _filterService;
     private readonly Gateway _configuration;
     private readonly SerialPortStream _port;
@@ -27,14 +27,13 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     private Task? _readTask;
     private byte _commandId;
-    private Timer? _timer_path;
-    private Timer? _timer_status;
+    private Task? _pollTask;
 
     private bool disposed;
 
     public TmFRadioGateway(
       FilterService filterService,
-      DispatcherService dispatcherService,
+      IDispatchSink dispatcherService,
       Gateway configuration)
     {
       _filterService = filterService;
@@ -49,6 +48,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
         //_port.Handshake = Handshake.None;
         //_port.DataBits = 8;
         WriteTimeout = 500,
+        ReadTimeout = 500,
         RtsEnable = true,
         DtrEnable = true
       };
@@ -59,11 +59,11 @@ namespace RadioSender.Hosts.Source.TmFRadio
       _dispatcherService.RequestPing += DispatcherService_RequestPing;
     }
 
-    private void DispatcherService_RequestPing(object? sender, EventArgs e)
+    private async void DispatcherService_RequestPing(object? sender, EventArgs e)
     {
       try
       {
-        _ = CheckPathAndStatus(delay: false);
+        await CheckPathAndStatus(delay: false);
       }
       catch
       {
@@ -73,11 +73,27 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-      Log.Verbose("Initialized " + _configuration.PortName);
+      _dispatcherService.Logger.Verbose("Initialized " + _configuration.PortName);
       await OpenSerialPort();
-      _readTask = ReadData();
-      _timer_status = new Timer((state) => _ = CheckStatus(), null, _configuration.StatusCheck * 1000, _configuration.StatusCheck * 1000);
-      _timer_path = new Timer((state) => _ = CheckPath(), null, (_configuration.StatusCheck / 2) * 1000, _configuration.StatusCheck * 1000);
+      if (!_port.IsOpen) throw new IOException("Unable to open the TmF serial port.");
+      _readTask = Task.Run(ReadData, CancellationToken.None);
+      _pollTask = PollStatusAsync();
+    }
+
+    private async Task PollStatusAsync()
+    {
+      try
+      {
+        while (!_cts.IsCancellationRequested)
+        {
+          await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _configuration.StatusCheck / 2)), _cts.Token);
+          await CheckStatus();
+          await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, _configuration.StatusCheck / 2)), _cts.Token);
+          await CheckPath();
+        }
+      }
+      catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+      catch (Exception e) { _dispatcherService.Logger.Warning(e, "Radio status polling stopped."); }
     }
 
     private Task OpenSerialPort()
@@ -88,32 +104,32 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
         _port.OpenDirect();
 
-        _ = CheckPathAndStatus(delay: true);
 
-        Log.Information("Tmf Radio port {port} connected", _configuration.PortName);
+
+        _dispatcherService.Logger.Information("Tmf Radio port {port} connected", _configuration.PortName);
       }
       catch (UnauthorizedAccessException)
       {
-        Log.Error("Tmf Radio port {port} occupied by another program", _configuration.PortName);
+        _dispatcherService.Logger.Error("Tmf Radio port {port} occupied by another program", _configuration.PortName);
       }
       catch (FileNotFoundException)
       {
-        Log.Error("Tmf Radio port {port} not found", _configuration.PortName);
+        _dispatcherService.Logger.Error("Tmf Radio port {port} not found", _configuration.PortName);
       }
       catch (IOException e)
       {
         if (e.Message.Contains("Port not found"))
         {
-          Log.Error("Tmf Radio port {port} not found", _configuration.PortName);
+          _dispatcherService.Logger.Error("Tmf Radio port {port} not found", _configuration.PortName);
         }
         else
         {
-          Log.Error(e, "Tmf Radio error opening the serial port {port}", _configuration.PortName);
+          _dispatcherService.Logger.Error(e, "Tmf Radio error opening the serial port {port}", _configuration.PortName);
         }
       }
       catch (Exception e)
       {
-        Log.Error(e, "Tmf Radio error starting port {port}", _configuration.PortName);
+        _dispatcherService.Logger.Error(e, "Tmf Radio error starting port {port}", _configuration.PortName);
       }
 
       return Task.CompletedTask;
@@ -128,19 +144,17 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
       disposed = true;
 
-      _timer_path?.Dispose();
-      _timer_status?.Dispose();
-      _cts?.Cancel();
+      _dispatcherService.RequestPing -= DispatcherService_RequestPing;
+      _cts.Cancel();
 
-      _port.DtrEnable = false;
-
-      if (_port.IsOpen)
-        _port.Close();
+      if (_port.IsOpen) { _port.DtrEnable = false; _port.Close(); }
 
       if (_readTask != null)
         await _readTask;
 
+      if (_pollTask != null) await _pollTask;
       _port.Dispose();
+      _cts.Dispose();
     }
 
     public async ValueTask DisposeAsync()
@@ -148,48 +162,18 @@ namespace RadioSender.Hosts.Source.TmFRadio
       await StopAsync(default);
     }
 
-    public async Task CheckPathAndStatus(bool delay = false)
+    public async Task CheckPathAndStatus(bool delay = false, CancellationToken ct = default)
     {
-      try
-      {
-        if (delay)
-          await Task.Delay(2000, _cts.Token);
-
-        await CheckStatus();
-        await Task.Delay(2000, _cts.Token);
-        await CheckPath();
-      }
-      catch (Exception e)
-      {
-        Log.Error(e, "{port} Check status and path exception", _configuration.PortName);
-      }
+      if (!_port.IsOpen) throw new IOException("The TmF gateway is not connected.");
+      using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _cts.Token);
+      if (delay) await Task.Delay(2000, linked.Token);
+      await SendData(GenerateCommand(TmFCommand.GetStatus), linked.Token);
+      await Task.Delay(2000, linked.Token);
+      await SendData(GenerateCommand(TmFCommand.GetPacketPath), linked.Token);
     }
 
-    public async Task CheckStatus()
-    {
-      try
-      {
-        Log.Verbose("{port} Check status requested", _configuration.PortName);
-        await SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
-      }
-      catch (Exception e)
-      {
-        Log.Error(e, "{port} Check Status Exception", _configuration.PortName);
-      }
-    }
-
-    public async Task CheckPath()
-    {
-      try
-      {
-        Log.Verbose("{port} Check path requested", _configuration.PortName);
-        await SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
-      }
-      catch (Exception e)
-      {
-        Log.Error(e, "{port} Check Path Exception", _configuration.PortName);
-      }
-    }
+    public Task CheckStatus() => SendData(GenerateCommand(TmFCommand.GetStatus), _cts.Token);
+    public Task CheckPath() => SendData(GenerateCommand(TmFCommand.GetPacketPath), _cts.Token);
 
     public ReadOnlyMemory<byte> GenerateCommand(TmFCommand command, uint address = BROADCAST, byte arg0 = 0x00, byte arg1 = 0x00)
     {
@@ -211,24 +195,16 @@ namespace RadioSender.Hosts.Source.TmFRadio
       return data;
     }
 
+    private readonly SemaphoreSlim _writeGate = new(1, 1);
     public async Task SendData(ReadOnlyMemory<byte> data, CancellationToken ct)
     {
-      if (!_port.IsOpen)
-        return;
-
+      await _writeGate.WaitAsync(ct);
       try
       {
-        //await _port.BaseStream.WriteAsync(data, ct);
+        if (!_port.IsOpen) throw new IOException("The TmF gateway is not connected.");
         await _port.WriteAsync(data, ct);
       }
-      catch (TimeoutException)
-      {
-        // quiet
-      }
-      catch (Exception e)
-      {
-        Log.Error("{port} Error sending command SportidentSerial {msg}", _configuration.PortName, e.Message);
-      }
+      finally { _writeGate.Release(); }
     }
 
     private async Task ReadData()
@@ -258,7 +234,7 @@ namespace RadioSender.Hosts.Source.TmFRadio
               if (_port.BytesToRead < length - 1)
               {
                 length = (byte)_port.BytesToRead;
-                Log.Warning("{port} Expected {length} bytes, reading {bytesToRead}", _configuration.PortName, length - 1, _port.BytesToRead);
+                _dispatcherService.Logger.Warning("{port} Expected {length} bytes, reading {bytesToRead}", _configuration.PortName, length - 1, _port.BytesToRead);
               }
             }
 
@@ -272,13 +248,14 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
             ProcessReceivedMessage(data);
           }
+          catch (TimeoutException) { }
           catch (OperationCanceledException)
           {
-            Log.Warning("{port} Connection lost from the serial port", _configuration.PortName);
+            _dispatcherService.Logger.Warning("{port} Connection lost from the serial port", _configuration.PortName);
           }
           catch (Exception e)
           {
-            Log.Error(e, "{port} Exeption reading data from serial port", _configuration.PortName);
+            _dispatcherService.Logger.Error(e, "{port} Exeption reading data from serial port", _configuration.PortName);
           }
         }
       }
@@ -294,20 +271,20 @@ namespace RadioSender.Hosts.Source.TmFRadio
 
       if (error != null)
       {
-        Log.Error("{port} {error}: {hex}", _configuration.PortName, error, BitConverter.ToString(data));
+        _dispatcherService.Logger.Error("{port} {error}: {hex}", _configuration.PortName, error, BitConverter.ToString(data));
         return;
       }
 
       switch (message)
       {
         case RxGetStatus packet:
-          Log.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, packet.Header.OrigID, packet.EventDetailString, packet.Header.RSSI_Percent, packet.Header.Latency, packet.Temperat_C, packet.Voltage_V);
+          _dispatcherService.Logger.Verbose("{port} Source {source} {msg}: signal {rssi:0}% ({latency:0}ms), {temperature:0}°, {voltage:0.00}V", _configuration.PortName, packet.Header.OrigID, packet.EventDetailString, packet.Header.RSSI_Percent, packet.Header.Latency, packet.Temperat_C, packet.Voltage_V);
           break;
 
         case RxGetPath packet:
         {
           var nodes = dispatch?.Nodes ?? Array.Empty<NodeNew>();
-          Log.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, packet.Header.OrigID, packet.Jumps.Count, string.Join('-', nodes.Select(n => n.Id)));
+          _dispatcherService.Logger.Verbose("{port} Source {source} has {hops} hops (nodes: {nodes})", _configuration.PortName, packet.Header.OrigID, packet.Jumps.Count, string.Join('-', nodes.Select(n => n.Id)));
           break;
         }
 
@@ -317,9 +294,9 @@ namespace RadioSender.Hosts.Source.TmFRadio
             return;
 
           if (TmFProtocol.HasNotPrintableChars(packet.RxSerData))
-            Log.Verbose("{port} Source {source} says: {ascii} [HEX: {hex}]", _configuration.PortName, packet.Header.OrigID, serialText, BitConverter.ToString(data));
+            _dispatcherService.Logger.Verbose("{port} Source {source} says: {ascii} [HEX: {hex}]", _configuration.PortName, packet.Header.OrigID, serialText, BitConverter.ToString(data));
           else
-            Log.Information("{port} Source {source} says: {ascii}", _configuration.PortName, packet.Header.OrigID, serialText);
+            _dispatcherService.Logger.Information("{port} Source {source} says: {ascii}", _configuration.PortName, packet.Header.OrigID, serialText);
 
           return;
         }

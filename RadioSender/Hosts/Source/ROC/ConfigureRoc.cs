@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -12,10 +13,14 @@ namespace RadioSender.Hosts.Source.ROC
 {
   public record Event : FilterableConfiguration
   {
+    [Required, Range(1, int.MaxValue)]
     public int? EventId { get; init; }
     public bool Enable { get; init; } = true;
+    [Range(100, 3600000)]
     public int RefreshMs { get; init; } = 2000;
+    [Required, Url]
     public string Host { get; init; } = "https://roc.olresultat.se/";
+    [Required]
     public string Path { get; init; } = "/getpunches.asp?unitId={EventId}&lastId={LastId}";
   }
 

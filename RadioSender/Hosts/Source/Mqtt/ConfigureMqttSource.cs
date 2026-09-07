@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,7 +17,9 @@ public enum MqttPayloadProtocol
 
 public record MqttSourceConfiguration : FilterableConfiguration
 {
+  [Required]
   public string? Host { get; init; }
+  [Range(1, 65535)]
   public int? Port { get; init; }
   public bool UseWebSocket { get; init; }
   public bool UseTls { get; init; }
@@ -28,10 +31,14 @@ public record MqttSourceConfiguration : FilterableConfiguration
   public string? Username { get; init; }
   public string? Password { get; init; }
   public MqttProtocolVersion ProtocolVersion { get; init; } = MqttProtocolVersion.V500;
+  [Range(1, 120)]
   public int TimeoutSeconds { get; init; } = 10;
+  [Range(1, 3600)]
   public int KeepAliveSeconds { get; init; } = 15;
+  [Range(1, 300)]
   public int ReconnectDelaySeconds { get; init; } = 1;
   public bool CleanSession { get; init; } = true;
+  [Range(0, 2)]
   public int QualityOfService { get; init; } = 1;
 }
 

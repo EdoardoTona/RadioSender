@@ -65,6 +65,8 @@ namespace RadioSender.Hosts.Target.SIRAP
       return Task.CompletedTask;
     }
 
+    public static byte[]? Encode(Punch punch, int version, TimeSpan zeroTime) => GetBytes(punch, version, zeroTime);
+
     private static byte[]? GetBytes(Punch punch, int version, TimeSpan zeroTime)
     {
       // SIRAP does not support cancellations

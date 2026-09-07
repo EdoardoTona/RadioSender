@@ -24,7 +24,7 @@ namespace RadioSender.Hosts.Source.ROC
   {
     public const string HTTPCLIENT_NAME = "roc";
     private readonly HttpClient _httpClient;
-    private readonly DispatcherService _dispatcherService;
+    private readonly IDispatchSink _dispatcherService;
     private readonly FilterService _filterService;
     private readonly int _eventId;
 
@@ -43,7 +43,7 @@ namespace RadioSender.Hosts.Source.ROC
 
     public ROCEvent(
       IHttpClientFactory clientFactory,
-      DispatcherService dispatcherService,
+      IDispatchSink dispatcherService,
       FilterService filterService,
       Event configuration,
       int eventId)
@@ -78,7 +78,7 @@ namespace RadioSender.Hosts.Source.ROC
     {
       await Task.Yield();
 
-      Log.Information("ROC center listening event {event} on {server}. Frequency {frequency}", _configuration?.EventId, _configuration?.Host, _configuration?.RefreshMs);
+      _dispatcherService.Logger.Information("ROC center listening event {event} on {server}. Frequency {frequency}", _configuration?.EventId, _configuration?.Host, _configuration?.RefreshMs);
 
       while (!ct.IsCancellationRequested)
       {
@@ -93,7 +93,7 @@ namespace RadioSender.Hosts.Source.ROC
         }
         catch (Exception e)
         {
-          Log.Error("Error getting data from ROC: {message}", e.Message);
+          _dispatcherService.Logger.Error("Error getting data from ROC: {message}", e.Message);
         }
       }
     }
@@ -104,7 +104,7 @@ namespace RadioSender.Hosts.Source.ROC
       {
         if (_configuration == null || _configuration.EventId == null)
         {
-          Log.Error("No EventId");
+          _dispatcherService.Logger.Error("No EventId");
           return;
         }
 
@@ -113,10 +113,10 @@ namespace RadioSender.Hosts.Source.ROC
 
         var path = _configuration.Path.Replace("{EventId}", _configuration.EventId.ToString()).Replace("{LastId}", _lastReceivedId.ToString());
 
-        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
         var sw = new Stopwatch();
         sw.Start();
-        var response = await _httpClient.SendAsync(request, ct);
+        using var response = await _httpClient.SendAsync(request, ct);
         sw.Stop();
 
         try
@@ -124,7 +124,7 @@ namespace RadioSender.Hosts.Source.ROC
           diagnosticTimes.Add(sw.ElapsedMilliseconds);
           if (DateTimeOffset.UtcNow - lastDiagnosticReport > TimeSpan.FromMinutes(2))
           {
-            Log.Information("ROC diagnostic report for event {event}: count {count}, avg {avg:0}ms, min {min}ms, max {max}ms",
+            _dispatcherService.Logger.Information("ROC diagnostic report for event {event}: count {count}, avg {avg:0}ms, min {min}ms, max {max}ms",
               _configuration.EventId, diagnosticTimes.Count, diagnosticTimes.Average(), diagnosticTimes.Min(), diagnosticTimes.Max());
 
             lastDiagnosticReport = DateTimeOffset.UtcNow;
@@ -133,8 +133,9 @@ namespace RadioSender.Hosts.Source.ROC
         }
         catch
         {
-          Log.Warning("Error writing diagnostic report for ROC event {event}", _configuration.EventId);
+          _dispatcherService.Logger.Warning("Error writing diagnostic report for ROC event {event}", _configuration.EventId);
         }
+        _dispatcherService.SetSourceState(response.IsSuccessStatusCode ? "Connected" : "Disconnected", $"HTTP {(int)response.StatusCode}");
         if (response.IsSuccessStatusCode)
         {
 
@@ -145,7 +146,7 @@ namespace RadioSender.Hosts.Source.ROC
 
           if (wasError)
           {
-            Log.Information("ROC event {event} recovered", _configuration.EventId);
+            _dispatcherService.Logger.Information("ROC event {event} recovered", _configuration.EventId);
             wasError = false;
           }
 
@@ -183,7 +184,7 @@ namespace RadioSender.Hosts.Source.ROC
         else
         {
           wasError = true;
-          Log.Error("Error getting data from ROC (event {event}): response code {code}", _configuration.EventId, response.StatusCode);
+          _dispatcherService.Logger.Error("Error getting data from ROC (event {event}): response code {code}", _configuration.EventId, response.StatusCode);
         }
       }
       catch (OperationCanceledException)
@@ -192,8 +193,9 @@ namespace RadioSender.Hosts.Source.ROC
       }
       catch (Exception e)
       {
+        _dispatcherService.SetSourceState("Disconnected", "Polling failed; retrying.");
         wasError = true;
-        Log.Error("Error getting data from ROC (event {event}): {message}", _configuration, e.Message);
+        _dispatcherService.Logger.Error("Error getting data from ROC (event {event}): {message}", _configuration, e.Message);
       }
     }
 

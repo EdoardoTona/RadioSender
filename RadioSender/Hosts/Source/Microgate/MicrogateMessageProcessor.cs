@@ -10,7 +10,7 @@ namespace RadioSender.Hosts.Source.Microplus;
 
 internal sealed class MicrogateMessageProcessor(
   FilterService filterService,
-  DispatcherService dispatcherService,
+  IDispatchSink dispatcherService,
   MicrogateSourceConfiguration configuration,
   string endpoint)
 {
@@ -40,7 +40,7 @@ internal sealed class MicrogateMessageProcessor(
       if (_receiveBuffer.Count > 0 && _lastBufferUpdate != DateTime.MinValue &&
           (now - _lastBufferUpdate).TotalSeconds > BUFFER_TIMEOUT_SECONDS)
       {
-        Log.Warning("MicrogateSource buffer content is older than {timeout} seconds, clearing buffer", BUFFER_TIMEOUT_SECONDS);
+        dispatcherService.Logger.Warning("MicrogateSource buffer content is older than {timeout} seconds, clearing buffer", BUFFER_TIMEOUT_SECONDS);
         _receiveBuffer.Clear();
         _lastBufferUpdate = DateTime.MinValue;
       }
@@ -50,7 +50,7 @@ internal sealed class MicrogateMessageProcessor(
 
       if (_receiveBuffer.Count > MAX_BUFFER_SIZE)
       {
-        Log.Warning("MicrogateSource buffer exceeded maximum size of {maxSize} bytes, clearing buffer", MAX_BUFFER_SIZE);
+        dispatcherService.Logger.Warning("MicrogateSource buffer exceeded maximum size of {maxSize} bytes, clearing buffer", MAX_BUFFER_SIZE);
         _receiveBuffer.Clear();
         _lastBufferUpdate = DateTime.MinValue;
         return;
@@ -60,7 +60,7 @@ internal sealed class MicrogateMessageProcessor(
     }
     catch (Exception e)
     {
-      Log.Warning("MicrogateSource receive error {error} on {buffer}",
+      dispatcherService.Logger.Warning("MicrogateSource receive error {error} on {buffer}",
         e.Message, Convert.ToBase64String(data));
     }
   }
@@ -127,7 +127,7 @@ internal sealed class MicrogateMessageProcessor(
   {
     if (message.Length < Rei2StatusReply.LENGTH)
     {
-      Log.Information("MicrogateSource {endpoint} (simulator) connected", endpoint);
+      dispatcherService.Logger.Information("MicrogateSource {endpoint} (simulator) connected", endpoint);
       return;
     }
 
@@ -140,7 +140,7 @@ internal sealed class MicrogateMessageProcessor(
         return;
 
       _serialNumber = serialNumber;
-      Log.Information("MicrogateSource {endpoint} (serial number {sn}) connected", endpoint, serialNumber);
+      dispatcherService.Logger.Information("MicrogateSource {endpoint} (serial number {sn}) connected", endpoint, serialNumber);
       return;
     }
 
@@ -159,7 +159,7 @@ internal sealed class MicrogateMessageProcessor(
 
     var rounding = (char)data.DataRaw[1];
     var cuttingOff = (char)data.DataRaw[2] == '1';
-    Log.Information("MicrogateSource {sn}: precision {p}, rounding {r}, cutting off {c}",
+    dispatcherService.Logger.Information("MicrogateSource {sn}: precision {p}, rounding {r}, cutting off {c}",
       _serialNumber?.ToString() ?? "simulator", precision, rounding, cuttingOff);
   }
 

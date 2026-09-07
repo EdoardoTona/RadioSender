@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RadioSender.Hosts.Common.Filters;
@@ -9,8 +10,11 @@ namespace RadioSender.Hosts.Target.SIRAP
 {
   public record SirapClientConfiguration : FilterableConfiguration
   {
+    [Required]
     public string? Address { get; init; }
+    [Required, Range(1, 65535)]
     public int? Port { get; init; }
+    [Range(1, 2)]
     public int Version { get; init; } = 2;
     public TimeSpan ZeroTime { get; init; } = TimeSpan.Zero;
   }
