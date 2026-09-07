@@ -4,6 +4,7 @@ using RadioSender.Hosts.Enrichment.Oribos;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -42,6 +43,8 @@ public sealed class OribosProviderModule(OribosProviderSettings settings, Module
   private Task? _poll, _refresh;
   private bool _disposed, _initialized;
   private Dictionary<string, string> _statuses = [];
+  private Dictionary<string, string>? _cardBibs;
+  private readonly HashSet<string> _warnedKeys = [];
   private string? _update;
   private DateTimeOffset _lastFetch;
   public string Name => context.NodeId;
@@ -81,25 +84,44 @@ public sealed class OribosProviderModule(OribosProviderSettings settings, Module
     await _fetchGate.WaitAsync(ct);
     try
     {
-      using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetime.Token);
-      timeout.CancelAfter(TimeSpan.FromSeconds(10));
-      var data = await ReadAsync<OrServer>(settings.Host.TrimEnd('/') + $"/ORServer.fullweb.jsp?courses=true&merged={settings.Merged.ToString().ToLowerInvariant()}", timeout.Token)
-        ?? throw new FlowException("Oribos returned an empty response.");
-      var (cards, bibs, _) = OribosService.BuildLookups(data);
+      OrServer data;
+      using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetime.Token))
+      {
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        data = await ReadAsync<OrServer>(settings.Host.TrimEnd('/') + $"/ORServer.fullweb.jsp?courses=true&merged={settings.Merged.ToString().ToLowerInvariant()}", timeout.Token)
+          ?? throw new FlowException("Oribos returned an empty response.");
+      }
+      var (cards, bibs, _) = OribosService.BuildLookups(data, _warnedKeys);
       Volatile.Write(ref _lookup, new(cards, bibs));
-      _lastFetch = DateTimeOffset.UtcNow;
+      LogMappingChanges(cards);
       var (snapshot, changes) = OribosService.ComputeStatusChanges(bibs, _statuses, _initialized);
-      _statuses = snapshot; _initialized = true;
       if (settings.EmitStatusChanges)
         foreach (var (entry, status, finish) in changes)
         {
           var punch = new Punch(entry.Bib, finish ? entry.FinishTime!.Value : data.Update.LocalDateTime, 10, context.NodeId, DateTimeOffset.UtcNow,
             CompetitorIdType.BibNumber, finish ? PunchControlType.Finish : PunchControlType.Unknown, status);
-          await context.Output.PublishAsync(Enrich(punch), timeout.Token);
+          await context.Output.PublishAsync(Enrich(punch), ct);
         }
+      _statuses = snapshot; _initialized = true;
+      _lastFetch = DateTimeOffset.UtcNow;
       SetState("Running", $"{bibs.Count} competitors, {cards.Count} cards. Updated {_lastFetch:HH:mm:ss}.");
     }
     finally { _fetchGate.Release(); }
+  }
+  private void LogMappingChanges(IReadOnlyDictionary<string, OribosEntry> cards)
+  {
+    var current = cards.ToDictionary(x => x.Key, x => x.Value.Bib);
+    if (_cardBibs != null)
+    {
+      foreach (var (card, bib) in current)
+        if (!_cardBibs.TryGetValue(card, out var old))
+          Logger.Information("Oribos card {Card} mapped to bib {Bib}.", card, bib);
+        else if (old != bib)
+          Logger.Information("Oribos card {Card} remapped from bib {OldBib} to bib {Bib}.", card, old, bib);
+      foreach (var (card, bib) in _cardBibs.Where(x => !current.ContainsKey(x.Key)))
+        Logger.Information("Oribos card {Card} unmapped from bib {Bib}.", card, bib);
+    }
+    _cardBibs = current;
   }
   public override object? ViewData() => new { Competitors = _lookup.Bibs.Count, Cards = _lookup.Cards.Count, UpdatedAt = _lastFetch };
   public override async ValueTask<CommandResult> ExecuteCommandAsync(string command, JsonObject arguments, CancellationToken ct)

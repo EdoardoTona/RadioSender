@@ -207,6 +207,19 @@ public class TestFlowRuntime : IAsyncDisposable
   }
 
   [Test]
+  public void GraphValidation_RejectsFileTargetsWithTheSameResolvedPath()
+  {
+    var graph = new FlowDocument
+    {
+      Nodes = [Node("one", "target.file", new FileSettings { Path = "out.csv" }),
+        Node("two", "target.file", new FileSettings { Path = Path.Combine(_directory, ".", "out.csv") })]
+    };
+    var issues = new FlowValidator(ModuleRegistry.CreateDefault()).Validate(graph, _directory);
+    Assert.That(issues.Where(i => i.Field == "settings.path").Select(i => i.ElementId),
+      Is.EquivalentTo(new[] { "one", "two" }));
+  }
+
+  [Test]
   public async Task DelayedBranch_DoesNotBlockOtherBranchOrMultiplyLatencyAcrossEvents()
   {
     var graph = Branches();

@@ -1,13 +1,14 @@
 using RadioSender.Flow.Modules;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace RadioSender.Flow;
 
 public sealed class FlowValidator(ModuleRegistry registry)
 {
-  public IReadOnlyList<FlowIssue> Validate(FlowDocument document)
+  public IReadOnlyList<FlowIssue> Validate(FlowDocument document, string? directory = null)
   {
     FlowJson.CheckStructure(document);
     var issues = new List<FlowIssue>();
@@ -83,6 +84,11 @@ public sealed class FlowValidator(ModuleRegistry registry)
       .GroupBy(x => x.Settings["portName"]!.ToString(), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     foreach (var group in serialPorts.Where(g => g.Count() > 1))
       foreach (var item in group) issues.Add(new(item.Node.Id, "settings.portName", "Another node uses this serial port."));
+    var files = configurations.Where(x => x.Node.Type == "target.file")
+      .GroupBy(x => Path.GetFullPath(x.Settings["path"]!.GetValue<string>(), directory ?? Directory.GetCurrentDirectory()),
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    foreach (var group in files.Where(g => g.Count() > 1))
+      foreach (var item in group) issues.Add(new(item.Node.Id, "settings.path", "Another file target uses this path."));
     return issues;
   }
 }

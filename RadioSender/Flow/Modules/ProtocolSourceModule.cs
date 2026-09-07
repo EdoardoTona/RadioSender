@@ -18,19 +18,41 @@ public sealed class ProtocolSourceModule(ModuleContext context,
   private readonly Channel<Punch> _input = Channel.CreateBounded<Punch>(256);
   private readonly CancellationTokenSource _lifetime = new();
   private IRadioSenderHost? _host;
-  private Task? _pump;
+  private Task? _pump, _start, _ping;
   private bool _stopped, _disposed;
   private readonly RadioNetwork _network = new();
   ILogger IDispatchSink.Logger => Logger;
   void IDispatchSink.SetSourceState(string status, string? detail) { if (!_stopped) SetState(status, detail); }
 
-  public override async Task StartAsync(CancellationToken ct)
+  public override Task StartAsync(CancellationToken ct)
   {
     _pump = PumpAsync();
-    _host = factory(this);
     SetState("Starting");
-    await _host.StartAsync(ct);
-    if (State.Status == "Starting") SetState("Running");
+    _start = StartHostAsync();
+    return Task.CompletedTask;
+  }
+  private async Task StartHostAsync()
+  {
+    while (!_lifetime.IsCancellationRequested)
+    {
+      try
+      {
+        _host = factory(this);
+        await _host.StartAsync(_lifetime.Token);
+        if (State.Status is "Starting" or "Disconnected") SetState("Running");
+        return;
+      }
+      catch (Exception e) when (!_lifetime.IsCancellationRequested)
+      {
+        SetState("Disconnected", $"{e.Message} Retrying.");
+        if (_host is IAsyncDisposable asyncDisposable) await asyncDisposable.DisposeAsync();
+        else if (_host is IDisposable disposable) disposable.Dispose();
+        _host = null;
+        try { await Task.Delay(2000, _lifetime.Token); }
+        catch (OperationCanceledException) { return; }
+      }
+      catch (Exception) when (_lifetime.IsCancellationRequested) { return; }
+    }
   }
   public void PushDispatch(PunchDispatch dispatch)
   {
@@ -50,7 +72,16 @@ public sealed class ProtocolSourceModule(ModuleContext context,
   public override async ValueTask<CommandResult> ExecuteCommandAsync(string command, JsonObject arguments, CancellationToken ct)
   {
     if (command == "ping" && _host is Hosts.Source.TmFRadio.TmFRadioGateway gateway)
-    { await gateway.CheckPathAndStatus(ct: ct); return new("Radio status and path requested."); }
+    {
+      if (_ping == null || _ping.IsCompleted)
+        _ping = Task.Run(async () =>
+        {
+          try { await gateway.CheckPathAndStatus(ct: _lifetime.Token); }
+          catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+          catch (Exception e) { Logger.Warning(e, "Unable to request radio status and path."); }
+        }, CancellationToken.None);
+      return new("Radio status and path requested.");
+    }
     return await base.ExecuteCommandAsync(command, arguments, ct);
   }
   public override async Task StopAsync(CancellationToken ct)
@@ -59,10 +90,15 @@ public sealed class ProtocolSourceModule(ModuleContext context,
     _stopped = true;
     await _lifetime.CancelAsync();
     _input.Writer.TryComplete();
-    try { if (_host != null) await _host.StopAsync(ct); }
+    try
+    {
+      if (_start != null) await _start;
+      if (_host != null) await _host.StopAsync(ct);
+    }
     finally
     {
       if (_pump != null) await _pump;
+      if (_ping != null) await _ping;
       if (_host is IAsyncDisposable asyncDisposable) await asyncDisposable.DisposeAsync();
       else if (_host is IDisposable disposable) disposable.Dispose();
       SetState("Stopped");

@@ -77,7 +77,8 @@ public static class FlowApi
     api.MapPut("/documents/{id:guid}", (Guid id, SaveRequest request, FlowDocuments documents, CancellationToken ct) => documents.SaveAsync(id, request.Revision, request.Document, ct: ct));
     api.MapPost("/documents/{id:guid}/save", (Guid id, SaveRequest request, FlowDocuments documents, CancellationToken ct) => documents.SaveAsync(id, request.Revision, ct: ct));
     api.MapPost("/documents/{id:guid}/save-as", (Guid id, SaveRequest request, FlowDocuments documents, CancellationToken ct) => documents.SaveAsync(id, request.Revision, request.Document, request.Path ?? throw new FlowException("Choose a file path."), ct));
-    api.MapPost("/validate", (FlowDocument document, FlowValidator validator) => validator.Validate(document));
+    api.MapPost("/validate", async (FlowDocument document, Guid? documentId, FlowDocuments documents, FlowValidator validator, CancellationToken ct) =>
+      validator.Validate(document, documentId == null ? null : Path.GetDirectoryName((await documents.ReadAsync(documentId.Value, ct)).Path)));
     api.MapGet("/runtime", (FlowRuntime runtime) => runtime.Snapshot());
     api.MapGet("/runtime/graph", (FlowRuntime runtime) => runtime.Graph());
     api.MapGet("/logs", (string? scope, string? nodeId, string? sessionId, long? after, FlowLogs logs) =>

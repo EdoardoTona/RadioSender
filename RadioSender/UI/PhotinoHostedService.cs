@@ -154,6 +154,7 @@ namespace RadioSender.UI
         var kind = root.GetProperty("kind").GetString();
         if (kind == "flow-editor-ready") { _flowEditorReady = true; return; }
         if (kind == "flow-editor-leaving") { _flowEditorReady = false; return; }
+        if (kind == "close-cancel") { _closeRequested = false; return; }
         if (kind == "close-ready" && _closeRequested)
         { _isTerminating = true; window.Close(); return; }
         if (kind != "file-dialog") return;

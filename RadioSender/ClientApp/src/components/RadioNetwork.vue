@@ -52,7 +52,7 @@ const edges = computed(() =>
     })),
 )
 async function load() {
-  if (loading || disposed || props.disabled) return
+  if (loading || disposed || props.disabled || !open.value) return
   loading = true
   const current = generation
   try {
@@ -94,8 +94,8 @@ watch(
     network.value = { nodes: [], hops: [] }
     void load()
   },
-  { immediate: true },
 )
+watch(open, (value) => value && void load())
 const timer = window.setInterval(load, 1000)
 onBeforeUnmount(() => {
   disposed = true

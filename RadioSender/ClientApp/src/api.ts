@@ -59,3 +59,6 @@ export function chooseFile(mode: 'open' | 'save', path: string): Promise<string 
 export function finishDesktopClose() {
   bridge?.sendMessage?.(JSON.stringify({ kind: 'close-ready' }))
 }
+export function cancelDesktopClose() {
+  bridge?.sendMessage?.(JSON.stringify({ kind: 'close-cancel' }))
+}

@@ -125,7 +125,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
   public async Task<ApplyPreview> PreviewAsync(Guid documentId, string path, FlowDocument document, CancellationToken ct)
   {
     document = FlowJson.Clone(document);
-    var issues = validator.Validate(document);
+    var issues = validator.Validate(document, Path.GetDirectoryName(path)!);
     if (issues.Count > 0) throw new FlowException(string.Join("\n", issues.Select(i => i.Message)));
     ApplyPreview? result = null;
     await ExecuteAsync(() =>
@@ -144,7 +144,7 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
   public async Task<ApplyResult> ApplyAsync(Guid documentId, string path, long revision, FlowDocument document, CancellationToken ct = default)
   {
     document = FlowJson.Clone(document);
-    var issues = validator.Validate(document);
+    var issues = validator.Validate(document, Path.GetDirectoryName(path)!);
     if (issues.Count > 0) throw new FlowException(string.Join("\n", issues.Select(i => $"{i.ElementId}: {i.Message}")));
     ApplyResult? result = null;
     await ExecuteAsync(async () =>
@@ -173,7 +173,8 @@ public sealed class FlowRuntime(ModuleRegistry registry, FlowValidator validator
         }
       }
 
-      using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+      using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(
+        15000 + document.Edges.Where(e => e.Enabled).Select(e => e.DelayMs).DefaultIfEmpty().Max()));
       try { await DrainAsync(timeout.Token); }
       catch { foreach (var i in fresh) await i.Module.DisposeAsync(); throw new FlowException("Apply timed out while draining delayed events and target queues. The current flow is unchanged.", 409); }
       var retired = _instances.Values.Where(i => !kept.Contains(i.Node.Id)).ToArray();

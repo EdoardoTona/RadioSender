@@ -25,7 +25,7 @@ In Photino, Open/New/Save As use native dialogs. In a local browser, enter an ab
 
 A connection applies its filter before its delay. Delay is 0–60,000 ms, measured per accepted event; a burst of events does not accumulate one full delay per event. Each delayed edge has its own FIFO queue. Immediate branches continue independently. Target and delay queues are bounded to 256 waiting events, with a one-second acceptance timeout and explicit rejection. Target sends have a five-second cancellation deadline. TCP servers accept up to 64 simultaneous clients and input lines up to 8,192 characters.
 
-Apply waits up to 15 seconds for accepted delayed events and target deliveries before switching revisions. If draining times out, the current configuration remains active. Stop cancels events still waiting on delayed edges and records the cancellation in the originating node's logs. It gives target queues up to 15 seconds to drain, then cancels remaining sends with an explicit delivery record. A failed module start attempts to restore the previous graph; any restore failure is displayed explicitly.
+Apply waits up to 15 seconds plus the longest configured edge delay for accepted delayed events and target deliveries before switching revisions. If draining times out, the current configuration remains active. Stop cancels events still waiting on delayed edges and records the cancellation in the originating node's logs. It gives target queues up to 15 seconds to drain, then cancels remaining sends with an explicit delivery record. A failed module start attempts to restore the previous graph; any restore failure is displayed explicitly.
 
 ## Protocol modules
 

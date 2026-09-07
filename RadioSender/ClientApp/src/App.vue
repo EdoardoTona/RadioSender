@@ -11,7 +11,7 @@ import {
   mdiStop,
   mdiContentSaveOutline,
 } from '@mdi/js'
-import { api, chooseFile, finishDesktopClose, isDesktop } from './api'
+import { api, cancelDesktopClose, chooseFile, finishDesktopClose, isDesktop } from './api'
 import {
   copy,
   emptyDocument,
@@ -378,7 +378,11 @@ async function prepareApply() {
   busy.value = true
   try {
     await flushSave()
-    issues.value = await api<FlowIssue[]>('/validate', 'POST', document.value)
+    issues.value = await api<FlowIssue[]>(
+      snapshot.value ? `/validate?documentId=${snapshot.value.id}` : '/validate',
+      'POST',
+      document.value,
+    )
     if (!issues.value.length && snapshot.value) {
       applyPreview.value = await api('/runtime/preview', 'POST', {
         documentId: snapshot.value.id,
@@ -403,6 +407,7 @@ async function apply() {
       'POST',
       { documentId: snapshot.value.id, revision: snapshot.value.revision },
     )
+    snapshot.value.revision = result.revision
     await refreshRuntime()
     activeGraph.value = await api<RuntimeGraph>('/runtime/graph')
     applyDialog.value = false
@@ -450,6 +455,7 @@ async function desktopClosing() {
     finishDesktopClose()
   } catch {
     error.value = 'Saving failed. Retry Save or choose Save As before closing.'
+    cancelDesktopClose()
   }
 }
 onMounted(async () => {
