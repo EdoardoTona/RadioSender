@@ -33,6 +33,7 @@
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="Photino.NET" Version="4.0.16" />
 		<PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+		<PackageReference Include="Microgate.Protocol.Rei2" Version="1.0.1" />
 		<PackageReference Include="MQTTnet" Version="5.1.0.1559" />
 		<PackageReference Include="CsvHelper" Version="33.1.0" />
 		<PackageReference Include="Hangfire.AspNetCore" Version="1.8.23" />
@@ -54,12 +55,6 @@
 	<ItemGroup>
 		<EmbeddedResource Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
 		<EmbeddedResource Include="appsettings.json" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Reference Include="Microgate.Common.Protocol.Rei2">
-			<HintPath>Microgate.Common.Protocol.Rei2.dll</HintPath>
-		</Reference>
 	</ItemGroup>
 
 	<PropertyGroup>

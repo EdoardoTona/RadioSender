@@ -1,4 +1,4 @@
-using Microgate.Common.Protocol.Rei2;
+using Microgate.Protocol.Rei2;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
@@ -110,14 +110,14 @@ internal sealed class MicrogateMessageProcessor(
 
   private void ProcessMessage(Span<byte> message)
   {
-    var type = Rei2Msg.GetRei2MsgType(message);
+    var type = Rei2MessageClassifier.GetIncomingMessageType(message);
     switch (type)
     {
-      case Rei2MsgTypes.Rei2ExtData:
-      case Rei2MsgTypes.Rei2StaticData:
+      case Rei2MessageType.ExtendedData:
+      case Rei2MessageType.StaticData:
         ProcessData(type, message);
         break;
-      case Rei2MsgTypes.Rei2StatusReply:
+      case Rei2MessageType.StatusReply:
         ProcessStatusMessage(message);
         break;
     }
@@ -125,13 +125,7 @@ internal sealed class MicrogateMessageProcessor(
 
   private void ProcessStatusMessage(Span<byte> message)
   {
-    if (message.Length < Rei2StatusReply.LENGTH)
-    {
-      Log.Information("MicrogateSource {endpoint} (simulator) connected", endpoint);
-      return;
-    }
-
-    var data = new Rei2StatusReply(message);
+    var data = new Rei2StatusReplyView(message);
 
     if (data.StatusCode == 9999)
     {
@@ -163,7 +157,7 @@ internal sealed class MicrogateMessageProcessor(
       _serialNumber?.ToString() ?? "simulator", precision, rounding, cuttingOff);
   }
 
-  private void ProcessData(Rei2MsgTypes type, Span<byte> message)
+  private void ProcessData(Rei2MessageType type, Span<byte> message)
   {
     CompetitorStatus status;
     PunchControlType controlType;
@@ -172,31 +166,31 @@ internal sealed class MicrogateMessageProcessor(
     DateTime time;
     bool annulled;
 
-    if (type == Rei2MsgTypes.Rei2ExtData)
+    if (type == Rei2MessageType.ExtendedData)
     {
-      var data = new Rei2ExtData(message);
-      if (data.CompetitorNumber == null || data.Timestamp == null || data.IsNetTime)
+      var data = new Rei2ExtendedDataView(message);
+      if (data.CompetitorNumber == null || data.TimeOfDay == null || data.IsNetTime)
         return;
 
       status = GetCompetitorStatus(data.Info);
       controlType = GetControlType(data.LogicalChannel);
       competitorNumber = data.CompetitorNumber.Value.ToString();
       logicalChannel = data.LogicalChannel;
-      time = data.Timestamp.Value;
-      annulled = data.Info == InfoExtEnum.Annulled;
+      time = data.TimeOfDay.Value;
+      annulled = data.Info == Rei2InfoCode.Annulled;
     }
-    else if (type == Rei2MsgTypes.Rei2StaticData)
+    else if (type == Rei2MessageType.StaticData)
     {
-      var data = new Rei2StaticData(message);
-      if (data.CompetitorNumber == null || data.Timestamp == null)
+      var data = new Rei2StaticDataView(message);
+      if (data.CompetitorNumber == null || data.TimeOfDay == null)
         return;
 
       status = GetCompetitorStatus(data.Info);
       controlType = GetControlType(data.LogicalChannel);
       competitorNumber = data.CompetitorNumber.Value.ToString();
       logicalChannel = data.LogicalChannel;
-      time = data.Timestamp.Value;
-      annulled = data.Info == InfoExtEnum.Annulled;
+      time = data.TimeOfDay.Value;
+      annulled = data.Info == Rei2InfoCode.Annulled;
     }
     else
     {
@@ -220,11 +214,11 @@ internal sealed class MicrogateMessageProcessor(
       dispatcherService.PushDispatch(new PunchDispatch([punch]));
   }
 
-  private static CompetitorStatus GetCompetitorStatus(InfoExtEnum info) => info switch
+  private static CompetitorStatus GetCompetitorStatus(Rei2InfoCode info) => info switch
   {
-    InfoExtEnum.DSQ => CompetitorStatus.DSQ,
-    InfoExtEnum.DNS => CompetitorStatus.DNS,
-    InfoExtEnum.DNF => CompetitorStatus.DNF,
+    Rei2InfoCode.DSQ => CompetitorStatus.DSQ,
+    Rei2InfoCode.DNS => CompetitorStatus.DNS,
+    Rei2InfoCode.DNF => CompetitorStatus.DNF,
     _ => CompetitorStatus.Unknown
   };
 

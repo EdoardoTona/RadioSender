@@ -1,4 +1,4 @@
-using Microgate.Common.Protocol.Rei2;
+using Microgate.Protocol.Rei2;
 using RadioSender.Hosts.Common;
 using RadioSender.Hosts.Common.Filters;
 using Serilog;
@@ -83,15 +83,15 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
   {
     await Task.Delay(1500, LifetimeToken).ConfigureAwait(false);
 
-    Send(new Rei2StaticRequest
+    Send(new Rei2StaticRequestView
     {
       RequestingDevice = 'R',
       RequestId = 1,
       CompetitorNumber = 0,
-      Info = InfoExtEnum.TimeOfDay,
+      Filter = Rei2InfoCode.TimeOfDay,
       LogicalChannel = 251,
       Run = 1,
-      Output = OutputStaticEnum.S
+      Output = Rei2ReplyOutput.SameConnection
     }.Raw);
   }
 
@@ -99,14 +99,14 @@ public abstract class MicrogateSource : ISource, IRadioSenderHost, IDisposable
   {
     await Task.Delay(1000, LifetimeToken).ConfigureAwait(false);
 
-    Send(new Rei2StatusRequest
+    Send(new Rei2StatusRequestView
     {
       StatusCode = 9999,
       RequestingDevice = 'R',
       RequestId = 1
     }.Raw);
 
-    Send(new Rei2StatusRequest
+    Send(new Rei2StatusRequestView
     {
       StatusCode = 1000,
       RequestingDevice = 'R',
